@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/profefe/profefe/pkg/store"
+	"github.com/profefe/profefe/pkg/store/inmemory"
 )
 
 const addr = ":10100"
@@ -16,7 +17,9 @@ const addr = ":10100"
 func main() {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	s, err := store.NewStore()
+	sb := inmemory.NewRepo()
+
+	s, err := store.NewStore(sb)
 	if err != nil {
 		log.Fatalf("could not create new store: %v", err)
 	}

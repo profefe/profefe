@@ -29,8 +29,21 @@ type Profile struct {
 
 	Labels []Label // arbitrary set of key-value pairs
 
-	Hash string // sha1 of data stored in blobstore
-	Size int64  // size of data stored in blobstore
+	Digest string // currently, sha1 of data stored in blobstore
+	Size   int64  // size of data stored in blobstore
+}
+
+func NewProfile() *Profile {
+	return NewProfileWithMeta(nil)
+}
+
+func NewProfileWithMeta(meta map[string]string) *Profile {
+	p := &Profile{
+		Type:       UnknownProfile,
+		ReceivedAt: time.Now().UTC(),
+	}
+	parseProfileMeta(p, meta)
+	return p
 }
 
 func parseProfileMeta(p *Profile, meta map[string]string) {

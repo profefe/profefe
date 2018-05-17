@@ -27,14 +27,14 @@ func newFsBlobStore(dataRoot string) (*fsBlobStore, error) {
 	return fs, nil
 }
 
-func (fs *fsBlobStore) Get(ctx context.Context, hash string) (io.ReadCloser, error) {
-	uri := fs.resolveFromHash(hash)
+func (fs *fsBlobStore) Get(ctx context.Context, dgst string) (io.ReadCloser, error) {
+	uri := fs.resolvePath(dgst)
 	return os.Open(uri)
 }
 
-func (fs *fsBlobStore) Put(ctx context.Context, data []byte) (hash string, size int64, err error) {
+func (fs *fsBlobStore) Put(ctx context.Context, data []byte) (dgst string, size int64, err error) {
 	var uri string
-	hash, uri, err = fs.blobDescriptor(data)
+	dgst, uri, err = fs.blobDescriptor(data)
 	if err != nil {
 		return "", 0, fmt.Errorf("could calculate descriptor for data: %v", err)
 	}
@@ -66,25 +66,25 @@ func (fs *fsBlobStore) Put(ctx context.Context, data []byte) (hash string, size 
 		return "", 0, fmt.Errorf("could not flush file %q: %v", uri, err)
 	}
 
-	log.Printf("DEBUG put: hash %s, uri %s, size %d\n", hash, uri, size)
+	log.Printf("DEBUG put: dgst %s, uri %s, size %d\n", dgst, uri, size)
 
-	return hash, size, nil
+	return dgst, size, nil
 }
 
-func (fs *fsBlobStore) blobDescriptor(data []byte) (hash string, uri string, err error) {
+func (fs *fsBlobStore) blobDescriptor(data []byte) (dgst string, uri string, err error) {
 	h := sha1.New()
 	if _, err := h.Write(data); err != nil {
 		return "", "", err
 	}
-	hash = hex.EncodeToString(h.Sum(nil))
-	uri = fs.resolveFromHash(hash)
-	return hash, uri, nil
+	dgst = hex.EncodeToString(h.Sum(nil))
+	uri = fs.resolvePath(dgst)
+	return dgst, uri, nil
 }
 
-func (fs *fsBlobStore) resolveFromHash(dataHash string) string {
+func (fs *fsBlobStore) resolvePath(dgst string) string {
 	var group = "0000"
-	if len(dataHash) > 4 {
-		group = dataHash[:4]
+	if len(dgst) > 4 {
+		group = dgst[:4]
 	}
-	return filepath.Join(fs.dataRoot, group[2:], dataHash)
+	return filepath.Join(fs.dataRoot, group[:2], group[2:], dgst)
 }
