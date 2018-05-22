@@ -1,12 +1,16 @@
 package store
 
-import "context"
+import (
+	"context"
+
+	"github.com/profefe/profefe/pkg/profile"
+)
 
 type Repo interface {
-	Get(ctx context.Context, dgst string) (*Profile, error)
-	Create(ctx context.Context, p *Profile) error
+	Get(ctx context.Context, dgst string) (*profile.Profile, error)
+	Create(ctx context.Context, p *profile.Profile) error
 
-	ByName(ctx context.Context, name string, queries ...RepoQuery) ([]*Profile, error)
+	ByService(ctx context.Context, service string, queries ...RepoQuery) ([]*profile.Profile, error)
 }
 
-type RepoQuery func(p *Profile) bool
+type RepoQuery func(p *profile.Profile) bool

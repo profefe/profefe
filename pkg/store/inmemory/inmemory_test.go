@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/profefe/profefe/pkg/store"
+	"github.com/profefe/profefe/pkg/profile"
 )
 
 func TestRepo_ByName(t *testing.T) {
@@ -13,22 +13,22 @@ func TestRepo_ByName(t *testing.T) {
 
 	ctx := context.Background()
 
-	p := &store.Profile{
-		ID:     "t123",
-		Name:   "test",
-		Digest: "0xt123",
+	p := &profile.Profile{
+		Service: "test",
+		BuildID: "t123",
+		Digest:  "0xt123",
 	}
 	if err := repo.Create(ctx, p); err != nil {
 		t.Fatal(err)
 	}
 
-	gotP, err := repo.ByName(ctx, "test")
+	gotP, err := repo.ByService(ctx, "test")
 	if err != nil {
 		t.Fatal(err)
 	} else if len(gotP) != 1 {
-		t.Fatalf("ByName: got %d results", len(gotP))
+		t.Fatalf("ByService: got %d results", len(gotP))
 	}
 	if !reflect.DeepEqual(gotP[0], p) {
-		t.Errorf("ByName: got %+v, want +%v", gotP[0], p)
+		t.Errorf("ByService: got %+v, want +%v", gotP[0], p)
 	}
 }

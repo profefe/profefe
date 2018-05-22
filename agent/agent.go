@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/profefe/profefe/pkg/profile"
 )
 
 const (
@@ -66,13 +68,9 @@ func init() {
 
 type agent struct {
 	CPUProfile  bool
+	Duration    time.Duration
 	HeapProfile bool
 	MuxProfile  bool
-	Duration    time.Duration
-
-	service      string
-	buildID      string
-	buildVersion string
 
 	labels map[string]string
 
@@ -97,13 +95,13 @@ func newAgent(service string, opts ...AgentOptions) *agent {
 		stopping: make(chan struct{}),
 	}
 
-	a.service = service
-	a.buildID = calcBuildID()
-	a.buildVersion = strconv.FormatInt(rand.Int63(), 10)
-
 	for _, opt := range opts {
 		opt(a)
 	}
+
+	a.labels["service"] = service
+	a.labels["build_id"] = calcBuildID()
+	a.labels["build_version"] = strconv.FormatInt(rand.Int63(), 10)
 
 	a.wg.Add(1)
 	go a.collectAndSend()
@@ -125,18 +123,23 @@ func calcBuildID() string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (a *agent) collectProfiles(buf *bytes.Buffer) error {
-	switch {
-	case a.CPUProfile:
-		log.Println("collecting cpu profile...")
+func (a *agent) collectProfile(ptype profile.ProfileType, buf *bytes.Buffer) error {
+	switch ptype {
+	case profile.CPUProfile:
 		err := pprof.StartCPUProfile(buf)
 		if err != nil {
 			return fmt.Errorf("failed to start CPU profile: %v", err)
 		}
 		sleep(a.Duration, a.stopping)
 		pprof.StopCPUProfile()
-	case a.HeapProfile:
-	case a.MuxProfile:
+	case profile.HeapProfile:
+		fallthrough
+	case profile.BlockProfile:
+		fallthrough
+	case profile.MutexProfile:
+		fallthrough
+	default:
+		return fmt.Errorf("expected profile type %v", ptype)
 	}
 
 	return nil
@@ -146,39 +149,37 @@ type client interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+type profileReq struct {
+	Meta map[string]string
+	Data []byte
+}
+
 var bodyPool = sync.Pool{
 	New: func() interface{} {
 		return &bytes.Buffer{}
 	},
 }
 
-func (a *agent) sendProfiles(buf *bytes.Buffer) error {
-	log.Println("sending profiles...")
-
-	reqBody := struct {
-		Meta map[string]string
-		Data []byte
-	}{
-		Meta: map[string]string{
-			"name":    a.service,
-			"id":      a.buildID,
-			"version": a.buildVersion,
-			"time":    strconv.FormatInt(time.Now().UTC().UnixNano(), 10),
-		},
+func (a *agent) sendProfile(ptype profile.ProfileType, buf *bytes.Buffer) error {
+	preq := &profileReq{
+		Meta: make(map[string]string, len(a.labels)),
 		Data: buf.Bytes(),
 	}
 
 	for k, v := range a.labels {
-		if _, ok := reqBody.Meta[k]; !ok {
-			reqBody.Meta[k] = v
+		if _, ok := preq.Meta[k]; !ok {
+			preq.Meta[k] = v
 		}
 	}
+
+	preq.Meta["type"] = strconv.FormatInt(int64(ptype), 10)
+	preq.Meta["time"] = strconv.FormatInt(time.Now().UTC().UnixNano(), 10)
 
 	body := bodyPool.Get().(*bytes.Buffer)
 	body.Reset()
 	defer bodyPool.Put(body)
 
-	if err := json.NewEncoder(body).Encode(reqBody); err != nil {
+	if err := json.NewEncoder(body).Encode(preq); err != nil {
 		return err
 	}
 
@@ -212,9 +213,11 @@ func (a *agent) collectAndSend() {
 			}
 			return
 		case <-timer.C:
-			if err := a.collectProfiles(&buf); err != nil {
+			ptype := profile.CPUProfile // hardcoded for now
+
+			if err := a.collectProfile(ptype, &buf); err != nil {
 				log.Printf("failed to collect profiles: %v\n", err)
-			} else if err := a.sendProfiles(&buf); err != nil {
+			} else if err := a.sendProfile(ptype, &buf); err != nil {
 				log.Printf("failed to send profiles to collector: %v\n", err)
 			}
 
