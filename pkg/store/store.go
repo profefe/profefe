@@ -40,6 +40,7 @@ func (s *Store) Get(ctx context.Context, dgst string) (*profile.Profile, io.Read
 	if err != nil {
 		return nil, nil, err
 	}
+
 	return p, data, nil
 }
 

@@ -33,6 +33,24 @@ func (ptype ProfileType) String() string {
 	return fmt.Sprintf("%d", ptype)
 }
 
+func (ptype ProfileType) MarshalString() (s string, err error) {
+	return strconv.FormatInt(int64(ptype), 10), nil
+}
+
+func (ptype *ProfileType) UnmarshalString(s string) error {
+	pt, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	switch pt := ProfileType(pt); pt {
+	case CPUProfile, HeapProfile, BlockProfile, MutexProfile:
+		*ptype = pt
+	default:
+		*ptype = UnknownProfile
+	}
+	return nil
+}
+
 type Label struct {
 	Key, Value string
 }
@@ -40,7 +58,7 @@ type Label struct {
 type Profile struct {
 	Service      string // adjust_server, callback_worker, etc
 	BuildID      string // sha1 of the binary
-	BuildVersion int64  // binary execution version
+	BuildVersion string // binary version
 
 	Type       ProfileType
 	CreatedAt  time.Time
@@ -76,28 +94,16 @@ func parseProfileMeta(p *Profile, meta map[string]string) {
 		case "build_id":
 			p.BuildID = v
 		case "build_version":
-			ver, _ := strconv.ParseInt(v, 10, 64)
-			if ver > 0 {
-				p.BuildVersion = ver
-			}
+			p.BuildVersion = v
 		case "type":
-			p.Type = parseProfileType(v)
+			p.Type.UnmarshalString(v)
 		case "time":
-			sec, _ := strconv.ParseInt(v, 10, 64)
-			if sec > 0 {
-				p.CreatedAt = time.Unix(0, sec) // FIXME(narqo): this gives a local time, not UTC!
+			tm, _ := time.Parse(time.RFC3339, v)
+			if !tm.IsZero() {
+				p.CreatedAt = tm
 			}
 		default:
 			p.Labels = append(p.Labels, Label{k, v})
 		}
 	}
-}
-
-func parseProfileType(rawtype string) ProfileType {
-	pt, _ := strconv.Atoi(rawtype)
-	switch ptype := ProfileType(pt); ptype {
-	case CPUProfile, HeapProfile, BlockProfile, MutexProfile:
-		return ptype
-	}
-	return UnknownProfile
 }

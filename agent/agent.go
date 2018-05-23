@@ -101,7 +101,7 @@ func newAgent(service string, opts ...AgentOptions) *agent {
 
 	a.labels["service"] = service
 	a.labels["build_id"] = calcBuildID()
-	a.labels["build_version"] = strconv.FormatInt(rand.Int63(), 10)
+	a.labels["build_version"] = calcBuildVersion()
 
 	a.wg.Add(1)
 	go a.collectAndSend()
@@ -112,15 +112,21 @@ func newAgent(service string, opts ...AgentOptions) *agent {
 func calcBuildID() string {
 	f, err := os.Open(os.Args[0])
 	if err != nil {
-		return "x0"
+		return "x1"
 	}
 	defer f.Close()
 
 	h := sha1.New()
 	if _, err := io.Copy(h, f); err != nil {
-		return "x0"
+		return "x2"
 	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+func calcBuildVersion() string {
+	now := time.Now().UTC()
+	tm := now.Unix()*1000 + int64(now.Nanosecond()/int(time.Millisecond))
+	return strconv.FormatUint(uint64(tm), 36)
 }
 
 func (a *agent) collectProfile(ptype profile.ProfileType, buf *bytes.Buffer) error {
@@ -172,8 +178,12 @@ func (a *agent) sendProfile(ptype profile.ProfileType, buf *bytes.Buffer) error 
 		}
 	}
 
-	preq.Meta["type"] = strconv.FormatInt(int64(ptype), 10)
-	preq.Meta["time"] = strconv.FormatInt(time.Now().UTC().UnixNano(), 10)
+	ptypeStr, err := ptype.MarshalString()
+	if err != nil {
+		return fmt.Errorf("could not marshal profile type %v: %v", ptype, err)
+	}
+	preq.Meta["type"] = ptypeStr
+	preq.Meta["time"] = time.Now().UTC().Format(time.RFC3339)
 
 	body := bodyPool.Get().(*bytes.Buffer)
 	body.Reset()
