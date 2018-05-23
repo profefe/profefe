@@ -1,20 +1,30 @@
 # TODO
 
+## General
+
+- testing
+- protobuf instead of json for rpc
+
 ## Agent
 
 - retries
 - logging
+- collect and send mem, mutex, etc profiles
 
 ## Collector
 
 - logging
 - persistent store
-  - tarantool? postgres?
+  tarantool? postgres?
 - profiles read
   - join profiles (based on label, based on creation time, etc)
   - single profile view
-- vacuum (auto remove expired profiles)
+- compress profiles
+  group string-/function-maps and store in persistent store
+- vacuum
+  auto-remove expired profiles
+- horizontal scaling
 
 ## UI
 
-See https://github.com/Netflix/flamescope
+- see https://github.com/Netflix/flamescope
