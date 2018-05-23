@@ -1,0 +1,20 @@
+# TODO
+
+## Agent
+
+- retries
+- logging
+
+## Collector
+
+- logging
+- persistent store
+  - tarantool? postgres?
+- profiles read
+  - join profiles (based on label, based on creation time, etc)
+  - single profile view
+- vacuum (auto remove expired profiles)
+
+## UI
+
+See https://github.com/Netflix/flamescope
