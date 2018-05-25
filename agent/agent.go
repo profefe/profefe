@@ -24,15 +24,15 @@ const (
 	CollectorAddr = "http://localhost:10100"
 )
 
-type AgentOptions func(a *agent)
+type Option func(a *agent)
 
-func WithCollector(addr string) AgentOptions {
+func WithCollector(addr string) Option {
 	return func(a *agent) {
 		a.collectorAddr = addr
 	}
 }
 
-func WithLabels(args ...string) AgentOptions {
+func WithLabels(args ...string) Option {
 	if len(args)%2 != 0 {
 		panic("agent.WithLabels: uneven number of arguments, expected key-value pairs")
 	}
@@ -43,13 +43,21 @@ func WithLabels(args ...string) AgentOptions {
 	}
 }
 
-var globalAgent *agent
+func WithClient(c *http.Client) Option {
+	return func(a *agent) {
+		a.rawClient = c
+	}
+}
 
-var globalAgentOnce sync.Once
+var (
+	globalAgent     *agent
+	globalAgentOnce sync.Once
+)
 
-func Start(name string, opts ...AgentOptions) Stopper {
+func Start(name string, opts ...Option) Stopper {
 	globalAgentOnce.Do(func() {
 		globalAgent = newAgent(name, opts...)
+		globalAgent.Start()
 	})
 	return globalAgent
 }
@@ -60,39 +68,47 @@ type Stopper interface {
 
 const (
 	defaultDuration = 20 * time.Second
+	backoffMinDelay = time.Minute
+	backoffMaxDelay = 30 * time.Minute
 )
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+type client interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 type agent struct {
-	CPUProfile  bool
-	Duration    time.Duration
-	HeapProfile bool
-	MuxProfile  bool
+	ProfileDuration time.Duration
+	CPUProfile      bool
+	HeapProfile     bool
+	MuxProfile      bool
 
 	labels map[string]string
 
+	backoff       *backoff
 	rawClient     client
 	collectorAddr string
 
-	wg       sync.WaitGroup
-	tick     time.Duration
-	stopping chan struct{}
+	tick time.Duration
+	wg   sync.WaitGroup
+	stop chan struct{}
 }
 
-func newAgent(service string, opts ...AgentOptions) *agent {
+func newAgent(service string, opts ...Option) *agent {
 	a := &agent{
-		CPUProfile: true,
-		Duration:   defaultDuration,
+		ProfileDuration: defaultDuration,
+		CPUProfile:      true,
 
 		labels: make(map[string]string),
 
+		backoff:   newBackoff(backoffMinDelay, backoffMaxDelay, 0),
 		rawClient: http.DefaultClient,
 
-		tick:     10 * time.Second,
-		stopping: make(chan struct{}),
+		tick: 10 * time.Second,
+		stop: make(chan struct{}),
 	}
 
 	for _, opt := range opts {
@@ -102,9 +118,6 @@ func newAgent(service string, opts ...AgentOptions) *agent {
 	a.labels["service"] = service
 	a.labels["build_id"] = calcBuildID()
 	a.labels["build_version"] = calcBuildVersion()
-
-	a.wg.Add(1)
-	go a.collectAndSend()
 
 	return a
 }
@@ -129,6 +142,17 @@ func calcBuildVersion() string {
 	return strconv.FormatUint(uint64(tm), 36)
 }
 
+func (a *agent) Start() {
+	a.wg.Add(1)
+	go a.collectAndSend()
+}
+
+func (a *agent) Stop() error {
+	close(a.stop)
+	a.wg.Wait()
+	return nil
+}
+
 func (a *agent) collectProfile(ptype profile.ProfileType, buf *bytes.Buffer) error {
 	switch ptype {
 	case profile.CPUProfile:
@@ -136,7 +160,7 @@ func (a *agent) collectProfile(ptype profile.ProfileType, buf *bytes.Buffer) err
 		if err != nil {
 			return fmt.Errorf("failed to start CPU profile: %v", err)
 		}
-		sleep(a.Duration, a.stopping)
+		sleep(a.ProfileDuration, a.stop)
 		pprof.StopCPUProfile()
 	case profile.HeapProfile:
 		fallthrough
@@ -149,10 +173,6 @@ func (a *agent) collectProfile(ptype profile.ProfileType, buf *bytes.Buffer) err
 	}
 
 	return nil
-}
-
-type client interface {
-	Do(req *http.Request) (*http.Response, error)
 }
 
 type profileReq struct {
@@ -199,14 +219,27 @@ func (a *agent) sendProfile(ptype profile.ProfileType, buf *bytes.Buffer) error 
 		return err
 	}
 
-	resp, err := a.rawClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+	return a.backoff.Do(func() error {
+		resp, err := a.rawClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
 
-	_, err = io.Copy(ioutil.Discard, resp.Body)
-	return err
+		if resp.StatusCode >= 500 {
+			respBody, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return fmt.Errorf("unexpected respose %s: %v", resp.Status, err)
+			}
+			return fmt.Errorf("unexpected respose from collector %s: %q", resp.Status, respBody)
+		} else if resp.StatusCode >= 400 {
+			return Cancel(fmt.Errorf("bad client request: collector respond with %s", resp.Status))
+		}
+
+		_, err = io.Copy(ioutil.Discard, resp.Body)
+
+		return err
+	})
 }
 
 func (a *agent) collectAndSend() {
@@ -217,7 +250,7 @@ func (a *agent) collectAndSend() {
 	var buf bytes.Buffer
 	for {
 		select {
-		case <-a.stopping:
+		case <-a.stop:
 			if !timer.Stop() {
 				<-timer.C
 			}
@@ -235,12 +268,6 @@ func (a *agent) collectAndSend() {
 			timer.Reset(a.tick)
 		}
 	}
-}
-
-func (a *agent) Stop() error {
-	close(a.stopping)
-	a.wg.Wait()
-	return nil
 }
 
 var timersPool = sync.Pool{}
