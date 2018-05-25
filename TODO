@@ -9,7 +9,7 @@
 
 - retries
 - logging
-- collect and send mem, mutex, etc profiles
+- collect and send mem, mutex, and other profiles
 
 ## Collector
 
