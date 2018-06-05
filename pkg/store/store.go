@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -9,6 +10,10 @@ import (
 )
 
 const defaultDataRoot = "/tmp/profefe"
+
+var (
+	ErrNotFound = errors.New("not found")
+)
 
 type Store struct {
 	repo Repo
@@ -44,7 +49,7 @@ func (s *Store) Get(ctx context.Context, dgst string) (*profile.Profile, io.Read
 	return p, data, nil
 }
 
-func (s *Store) Save(ctx context.Context, meta map[string]string, data []byte) (*profile.Profile, error) {
+func (s *Store) Create(ctx context.Context, meta map[string]string, data []byte) (*profile.Profile, error) {
 	dgst, size, err := s.blobstore.Put(ctx, data)
 	if err != nil {
 		return nil, err
@@ -59,4 +64,47 @@ func (s *Store) Save(ctx context.Context, meta map[string]string, data []byte) (
 	}
 
 	return p, nil
+}
+
+func (s *Store) Find(ctx context.Context, meta map[string]string) (*profile.Profile, io.ReadCloser, error) {
+	p := profile.NewWithMeta(meta)
+	if p.Service == "" {
+		return nil, nil, fmt.Errorf("profile without service")
+	}
+
+	labelsCache := make(map[string]string, len(p.Labels))
+	for _, label := range p.Labels {
+		if label.Key != "" {
+			labelsCache[label.Key] = label.Value
+		}
+	}
+
+	pp, err := s.repo.Query(ctx, func(pq *profile.Profile) bool {
+		found := pq.Service == p.Service
+		if !found || len(labelsCache) == 0 {
+			return found
+		}
+
+		for _, label := range pq.Labels {
+			if _, ok := labelsCache[label.Key]; !ok {
+				return false
+			}
+		}
+
+		return true
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not find profile: %v", err)
+	}
+	if len(pp) == 0 {
+		return nil, nil, ErrNotFound
+	}
+
+	// XXX return first profile only for now
+	p = pp[0]
+	data, err := s.blobstore.Get(ctx, p.Digest)
+	if err != nil {
+		return nil, nil, err
+	}
+	return p, data, nil
 }
