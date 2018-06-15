@@ -18,10 +18,11 @@ import (
 	"time"
 
 	"github.com/profefe/profefe/pkg/profile"
+	"gitlab.corp.mail.ru/swa/totem/pkg/retry"
 )
 
 const (
-	CollectorAddr = "http://localhost:10100"
+	DefaultCollectorAddr = "http://localhost:10100"
 )
 
 type Option func(a *agent)
@@ -88,7 +89,7 @@ type agent struct {
 
 	labels map[string]string
 
-	backoff       *backoff
+	retry         *retry.Retry
 	rawClient     client
 	collectorAddr string
 
@@ -104,10 +105,10 @@ func newAgent(service string, opts ...Option) *agent {
 
 		labels: make(map[string]string),
 
-		backoff:   newBackoff(backoffMinDelay, backoffMaxDelay, 0),
+		retry:     retry.New(backoffMinDelay, backoffMaxDelay, 0),
 		rawClient: http.DefaultClient,
 
-		tick: 10 * time.Second,
+		tick: 5 * time.Second,
 		stop: make(chan struct{}),
 	}
 
@@ -115,9 +116,9 @@ func newAgent(service string, opts ...Option) *agent {
 		opt(a)
 	}
 
-	a.labels["service"] = service
-	a.labels["build_id"] = calcBuildID()
-	a.labels["build_version"] = calcBuildVersion()
+	a.labels[profile.LabelService] = service
+	a.labels[profile.LabelID] = calcBuildID()
+	a.labels[profile.LabelGeneration] = calcGeneration()
 
 	return a
 }
@@ -136,9 +137,9 @@ func calcBuildID() string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func calcBuildVersion() string {
+func calcGeneration() string {
 	now := time.Now().UTC()
-	tm := now.Unix()*1000 + int64(now.Nanosecond()/int(time.Millisecond))
+	tm := now.Unix()*1000 + int64(now.Nanosecond()/int(time.Millisecond)) + rand.Int63()
 	return strconv.FormatUint(uint64(tm), 36)
 }
 
@@ -176,8 +177,8 @@ func (a *agent) collectProfile(ptype profile.ProfileType, buf *bytes.Buffer) err
 }
 
 type profileReq struct {
-	Meta map[string]string
-	Data []byte
+	Meta map[string]string `json:"meta"`
+	Data []byte            `json:"data"`
 }
 
 var bodyPool = sync.Pool{
@@ -186,7 +187,7 @@ var bodyPool = sync.Pool{
 	},
 }
 
-func (a *agent) sendProfile(ptype profile.ProfileType, buf *bytes.Buffer) error {
+func (a *agent) sendProfile(ptype profile.ProfileType, ts time.Time, buf *bytes.Buffer) error {
 	preq := &profileReq{
 		Meta: make(map[string]string, len(a.labels)),
 		Data: buf.Bytes(),
@@ -198,12 +199,8 @@ func (a *agent) sendProfile(ptype profile.ProfileType, buf *bytes.Buffer) error 
 		}
 	}
 
-	ptypeStr, err := ptype.MarshalString()
-	if err != nil {
-		return fmt.Errorf("could not marshal profile type %v: %v", ptype, err)
-	}
-	preq.Meta["type"] = ptypeStr
-	preq.Meta["time"] = time.Now().UTC().Format(time.RFC3339)
+	preq.Meta[profile.LabelType] = ptype.MarshalString()
+	preq.Meta[profile.LabelTime] = ts.Format(time.RFC3339)
 
 	body := bodyPool.Get().(*bytes.Buffer)
 	body.Reset()
@@ -219,7 +216,7 @@ func (a *agent) sendProfile(ptype profile.ProfileType, buf *bytes.Buffer) error 
 		return err
 	}
 
-	return a.backoff.Do(func() error {
+	return a.retry.Do(func() error {
 		resp, err := a.rawClient.Do(req)
 		if err != nil {
 			return err
@@ -233,7 +230,7 @@ func (a *agent) sendProfile(ptype profile.ProfileType, buf *bytes.Buffer) error 
 			}
 			return fmt.Errorf("unexpected respose from collector %s: %q", resp.Status, respBody)
 		} else if resp.StatusCode >= 400 {
-			return Cancel(fmt.Errorf("bad client request: collector respond with %s", resp.Status))
+			return retry.Cancel(fmt.Errorf("bad client request: collector respond with %s", resp.Status))
 		}
 
 		_, err = io.Copy(ioutil.Discard, resp.Body)
@@ -257,10 +254,11 @@ func (a *agent) collectAndSend() {
 			return
 		case <-timer.C:
 			ptype := profile.CPUProfile // hardcoded for now
+			ts := time.Now().UTC()
 
 			if err := a.collectProfile(ptype, &buf); err != nil {
 				log.Printf("failed to collect profiles: %v\n", err)
-			} else if err := a.sendProfile(ptype, &buf); err != nil {
+			} else if err := a.sendProfile(ptype, ts, &buf); err != nil {
 				log.Printf("failed to send profiles to collector: %v\n", err)
 			}
 

@@ -1,4 +1,4 @@
-package store
+package filestore
 
 import (
 	"bytes"
@@ -10,29 +10,31 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/profefe/profefe/pkg/profile"
 )
 
-type fsBlobStore struct {
+type FileStore struct {
 	dataRoot string
 }
 
-func newFsBlobStore(dataRoot string) (*fsBlobStore, error) {
+func New(dataRoot string) (*FileStore, error) {
 	err := os.MkdirAll(dataRoot, 0755)
 	if err != nil {
 		return nil, fmt.Errorf("could not create data root %q: %v", dataRoot, err)
 	}
-	fs := &fsBlobStore{
+	fs := &FileStore{
 		dataRoot: dataRoot,
 	}
 	return fs, nil
 }
 
-func (fs *fsBlobStore) Get(ctx context.Context, dgst string) (io.ReadCloser, error) {
+func (fs *FileStore) Get(ctx context.Context, dgst profile.Digest) (io.ReadCloser, error) {
 	uri := fs.resolvePath(dgst)
 	return os.Open(uri)
 }
 
-func (fs *fsBlobStore) Put(ctx context.Context, data []byte) (dgst string, size int64, err error) {
+func (fs *FileStore) Put(ctx context.Context, data []byte) (dgst profile.Digest, size int64, err error) {
 	var uri string
 	dgst, uri, err = fs.blobDescriptor(data)
 	if err != nil {
@@ -71,20 +73,26 @@ func (fs *fsBlobStore) Put(ctx context.Context, data []byte) (dgst string, size 
 	return dgst, size, nil
 }
 
-func (fs *fsBlobStore) blobDescriptor(data []byte) (dgst string, uri string, err error) {
+func (fs *FileStore) Delete(ctx context.Context, dgst profile.Digest) error {
+	uri := fs.resolvePath(dgst)
+	return os.Remove(uri)
+}
+
+func (fs *FileStore) blobDescriptor(data []byte) (dgst profile.Digest, uri string, err error) {
 	h := sha1.New()
 	if _, err := h.Write(data); err != nil {
 		return "", "", err
 	}
-	dgst = hex.EncodeToString(h.Sum(nil))
+	dgstStr := hex.EncodeToString(h.Sum(nil))
+	dgst = profile.Digest(dgstStr)
 	uri = fs.resolvePath(dgst)
 	return dgst, uri, nil
 }
 
-func (fs *fsBlobStore) resolvePath(dgst string) string {
+func (fs *FileStore) resolvePath(dgst profile.Digest) string {
 	var group = "0000"
 	if len(dgst) > 4 {
-		group = dgst[:4]
+		group = string(dgst)[:4]
 	}
-	return filepath.Join(fs.dataRoot, group[:2], group[2:], dgst)
+	return filepath.Join(fs.dataRoot, group[:2], group[2:], string(dgst))
 }

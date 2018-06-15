@@ -2,7 +2,9 @@ package profile
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -16,6 +18,24 @@ const (
 	BlockProfile
 	MutexProfile
 )
+
+func (ptype ProfileType) MarshalString() (s string) {
+	return strconv.FormatInt(int64(ptype), 10)
+}
+
+func (ptype *ProfileType) UnmarshalString(s string) error {
+	pt, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	switch pt := ProfileType(pt); pt {
+	case CPUProfile, HeapProfile, BlockProfile, MutexProfile:
+		*ptype = pt
+	default:
+		*ptype = UnknownProfile
+	}
+	return nil
+}
 
 func (ptype ProfileType) String() string {
 	switch ptype {
@@ -33,48 +53,43 @@ func (ptype ProfileType) String() string {
 	return fmt.Sprintf("%d", ptype)
 }
 
-func (ptype ProfileType) MarshalString() (s string, err error) {
-	return strconv.FormatInt(int64(ptype), 10), nil
-}
-
-func (ptype *ProfileType) UnmarshalString(s string) error {
-	pt, err := strconv.Atoi(s)
-	if err != nil {
-		return err
-	}
-	switch pt := ProfileType(pt); pt {
-	case CPUProfile, HeapProfile, BlockProfile, MutexProfile:
-		*ptype = pt
+func ProfileTypeFromString(s string) ProfileType {
+	s = strings.TrimSpace(s)
+	switch s {
+	case "cpu":
+		return CPUProfile
+	case "heap":
+		return HeapProfile
+	case "block":
+		return BlockProfile
+	case "mutex":
+		return MutexProfile
 	default:
-		*ptype = UnknownProfile
+		return UnknownProfile
 	}
-	return nil
 }
 
-type Label struct {
-	Key, Value string
-}
+type Digest string
 
 type Profile struct {
-	Service      string // adjust_server, callback_worker, etc
-	BuildID      string // sha1 of the binary
-	BuildVersion string // binary version
-
+	Service    string // adjust_server, callback_worker, etc
+	BuildID    string // sha1 of the binary
+	Generation string // generation within binary's build id
 	Type       ProfileType
 	CreatedAt  time.Time
 	ReceivedAt time.Time
 
-	Labels []Label // arbitrary set of key-value pairs
+	Labels Labels // arbitrary set of key-value pairs
 
-	Digest string // currently, sha1 of data stored in blobstore
-	Size   int64  // size of data stored in blobstore
+	Digest Digest // as for now, sha1 of data stored in blob storage
+	Size   int64  // size of data stored in blob storage
 }
 
 func New() *Profile {
 	return NewWithMeta(nil)
 }
 
-func NewWithMeta(meta map[string]string) *Profile {
+func NewWithMeta(meta map[string]interface{}) *Profile {
 	p := &Profile{
 		Type:       UnknownProfile,
 		ReceivedAt: time.Now().UTC(),
@@ -83,27 +98,33 @@ func NewWithMeta(meta map[string]string) *Profile {
 	return p
 }
 
-func parseProfileMeta(p *Profile, meta map[string]string) {
+func parseProfileMeta(p *Profile, meta map[string]interface{}) {
 	if p.Labels == nil {
-		p.Labels = make([]Label, 0, len(meta))
+		p.Labels = make(Labels, 0, len(meta))
 	}
-	for k, v := range meta {
+
+	for k, rawVal := range meta {
+		val, _ := rawVal.(string)
 		switch k {
-		case "service":
-			p.Service = v
-		case "build_id":
-			p.BuildID = v
-		case "build_version":
-			p.BuildVersion = v
-		case "type":
-			p.Type.UnmarshalString(v)
-		case "time":
-			tm, _ := time.Parse(time.RFC3339, v)
+		case LabelService:
+			p.Service = val
+		case LabelID:
+			p.BuildID = val
+		case LabelGeneration:
+			p.Generation = val
+		case LabelType:
+			p.Type.UnmarshalString(val)
+		case LabelTime:
+			tm, _ := time.Parse(time.RFC3339, val)
 			if !tm.IsZero() {
 				p.CreatedAt = tm
 			}
 		default:
-			p.Labels = append(p.Labels, Label{k, v})
+			p.Labels = append(p.Labels, Label{k, val})
 		}
+	}
+
+	if len(p.Labels) > 0 {
+		sort.Sort(p.Labels)
 	}
 }

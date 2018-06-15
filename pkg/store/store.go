@@ -9,102 +9,77 @@ import (
 	"github.com/profefe/profefe/pkg/profile"
 )
 
-const defaultDataRoot = "/tmp/profefe"
-
 var (
 	ErrNotFound = errors.New("not found")
 )
 
 type Store struct {
-	repo Repo
+	repo profile.Repo
 
-	blobstore *fsBlobStore
+	Log func(string, ...interface{})
 }
 
-func NewStore(repo Repo) (*Store, error) {
-	s := &Store{
+func New(repo profile.Repo) *Store {
+	return &Store{
 		repo: repo,
+		Log:  func(_ string, _ ...interface{}) {},
 	}
-
-	blobstore, err := newFsBlobStore(defaultDataRoot)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create blobstore: %v", err)
-	}
-	s.blobstore = blobstore
-
-	return s, nil
 }
 
-func (s *Store) Get(ctx context.Context, dgst string) (*profile.Profile, io.ReadCloser, error) {
-	p, err := s.repo.Get(ctx, dgst)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not get profile: %v", err)
-	}
-
-	data, err := s.blobstore.Get(ctx, dgst)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return p, data, nil
-}
-
-func (s *Store) Create(ctx context.Context, meta map[string]string, data []byte) (*profile.Profile, error) {
-	dgst, size, err := s.blobstore.Put(ctx, data)
+func (s *Store) Create(ctx context.Context, meta map[string]interface{}, data []byte) (*profile.Profile, error) {
+	p, err := s.repo.Create(ctx, meta, data)
 	if err != nil {
 		return nil, err
 	}
-
-	p := profile.NewWithMeta(meta)
-	p.Digest = dgst
-	p.Size = size
-
-	if err := s.repo.Create(ctx, p); err != nil {
-		return nil, fmt.Errorf("could not create profile: %v", err)
-	}
-
+	s.Log("create: new profile %v", p)
 	return p, nil
 }
 
-func (s *Store) Find(ctx context.Context, meta map[string]string) (*profile.Profile, io.ReadCloser, error) {
-	p := profile.NewWithMeta(meta)
-	if p.Service == "" {
-		return nil, nil, fmt.Errorf("profile without service")
+func validateQueryRequest(q *profile.QueryRequest) error {
+	if q == nil {
+		return errors.New("nil query request")
 	}
 
-	labelsCache := make(map[string]string, len(p.Labels))
-	for _, label := range p.Labels {
-		if label.Key != "" {
-			labelsCache[label.Key] = label.Value
-		}
+	if q.Digest != "" {
+		return nil
 	}
 
-	pp, err := s.repo.Query(ctx, func(pq *profile.Profile) bool {
-		found := pq.Service == p.Service
-		if !found || len(labelsCache) == 0 {
-			return found
-		}
-
-		for _, label := range pq.Labels {
-			if _, ok := labelsCache[label.Key]; !ok {
-				return false
-			}
-		}
-
-		return true
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not find profile: %v", err)
+	if q.Service == "" {
+		return fmt.Errorf("no service: query %v", q)
 	}
-	if len(pp) == 0 {
-		return nil, nil, ErrNotFound
+	if q.Type == profile.UnknownProfile {
+		return fmt.Errorf("unknown profile type %s: query %v", q.Type, q)
+	}
+	if q.CreatedAtMin.IsZero() || q.CreatedAtMax.IsZero() {
+		return fmt.Errorf("createdAt time zero: query %v", q)
+	}
+	if q.CreatedAtMax.Before(q.CreatedAtMin) {
+		return fmt.Errorf("createdAt time min after max: query %v", q)
+	}
+	return nil
+}
+
+func (s *Store) Lookup(ctx context.Context, query *profile.QueryRequest) (*profile.Profile, io.ReadCloser, error) {
+	if err := validateQueryRequest(query); err != nil {
+		return nil, nil, err
 	}
 
-	// XXX return first profile only for now
-	p = pp[0]
-	data, err := s.blobstore.Get(ctx, p.Digest)
+	ps, err := s.repo.Query(ctx, query)
 	if err != nil {
 		return nil, nil, err
 	}
-	return p, data, nil
+
+	if len(ps) == 0 {
+		return nil, nil, ErrNotFound
+	} else if len(ps) > 1 {
+		s.Log("lookup: found %d profiles by query %v", len(ps), query)
+	}
+
+	p := ps[0]
+	pr, err := s.repo.Open(ctx, p.Digest)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not open profile %s: %v", p.Digest, err)
+	}
+
+	return p, pr, err
 }

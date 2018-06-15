@@ -1,24 +1,24 @@
-package agent
+package retry
 
 import (
 	"time"
 )
 
-type backoff struct {
+type Retry struct {
 	MinDelay    time.Duration
 	MaxDelay    time.Duration
 	MaxAttempts int
 }
 
-func newBackoff(minDelay, maxDelay time.Duration, attempts int) *backoff {
-	return &backoff{
+func New(minDelay, maxDelay time.Duration, attempts int) *Retry {
+	return &Retry{
 		MinDelay:    minDelay,
 		MaxDelay:    maxDelay,
 		MaxAttempts: attempts,
 	}
 }
 
-func (r *backoff) Do(fn func() error) (err error) {
+func (r *Retry) Do(fn func() error) (err error) {
 	ckeckOk, err := r.Check(fn())
 	if !ckeckOk {
 		return err
@@ -37,7 +37,7 @@ func (r *backoff) Do(fn func() error) (err error) {
 	return err
 }
 
-func (r *backoff) Check(err error) (bool, error) {
+func (r *Retry) Check(err error) (bool, error) {
 	if err == nil {
 		return false, nil
 	} else if sErr, ok := err.(*cancelRetryError); ok {
@@ -46,7 +46,7 @@ func (r *backoff) Check(err error) (bool, error) {
 	return true, err
 }
 
-func (r *backoff) backoff(attempt int) time.Duration {
+func (r *Retry) backoff(attempt int) time.Duration {
 	n := attempt * int(r.MinDelay)
 	delay := time.Duration(n)
 	if delay > r.MaxDelay {

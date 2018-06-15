@@ -10,7 +10,7 @@ import (
 func main() {
 	stopper := agent.Start(
 		"adjust_server",
-		agent.WithCollector(agent.CollectorAddr),
+		agent.WithCollector(agent.DefaultCollectorAddr),
 		agent.WithLabels("host", "localhost", "instance", "1", "zone", "fra", "version", "1.0"),
 	)
 	defer stopper.Stop()
