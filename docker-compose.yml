@@ -3,9 +3,12 @@ version: '3.6'
 services:
   postgres:
     build:
-      context: ./hack/postgres
+      context: .
+      dockerfile: Dockerfile.postgres
     restart: always
     environment:
+      POSTGRES_USER: 'postgres'
+      POSTGRES_PASSWORD: 'postgres'
       POSTGRES_DB: 'profiles'
     ports:
       - '5432:5432'

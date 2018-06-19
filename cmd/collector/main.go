@@ -22,10 +22,11 @@ import (
 const addr = ":10100"
 
 const (
-	defaultDataRoot = "/tmp/profefe"
-	postgresUser    = "postgres"
-	postgresHost    = "127.0.0.1"
-	postgresDB      = "profiles"
+	defaultDataRoot  = "/tmp/profefe"
+	postgresUser     = "postgres"
+	postgresPassword = "postgres"
+	postgresHost     = "127.0.0.1"
+	postgresDB       = "profiles"
 )
 
 func main() {
@@ -39,7 +40,7 @@ func main() {
 			log.Fatalf("could not create file store: %v", err)
 		}
 
-		dbURL := fmt.Sprintf("postgres://%s@%s/%s?sslmode=disable", postgresUser, postgresHost, postgresDB)
+		dbURL := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", postgresUser, postgresPassword, postgresHost, postgresDB)
 		db, err := sql.Open("postgres", dbURL)
 		if err != nil {
 			log.Fatalf("could not connect to db: %v", err)
