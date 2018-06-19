@@ -8,21 +8,26 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"runtime/pprof"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/profefe/profefe/pkg/profile"
-	"gitlab.corp.mail.ru/swa/totem/pkg/retry"
+	"github.com/profefe/profefe/pkg/retry"
+	"github.com/rs/xid"
 )
 
 const (
 	DefaultCollectorAddr = "http://localhost:10100"
+)
+
+const (
+	defaultDuration     = 20 * time.Second
+	defaultTickInterval = 5 * time.Second
+	backoffMinDelay     = time.Minute
+	backoffMaxDelay     = 30 * time.Minute
 )
 
 type Option func(a *agent)
@@ -44,9 +49,15 @@ func WithLabels(args ...string) Option {
 	}
 }
 
-func WithClient(c *http.Client) Option {
+func WithHTTPClient(c *http.Client) Option {
 	return func(a *agent) {
 		a.rawClient = c
+	}
+}
+
+func WithLogger(logf func(string, ...interface{})) Option {
+	return func(a *agent) {
+		a.logf = logf
 	}
 }
 
@@ -67,16 +78,6 @@ type Stopper interface {
 	Stop() error
 }
 
-const (
-	defaultDuration = 20 * time.Second
-	backoffMinDelay = time.Minute
-	backoffMaxDelay = 30 * time.Minute
-)
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 type client interface {
 	Do(req *http.Request) (*http.Response, error)
 }
@@ -89,13 +90,14 @@ type agent struct {
 
 	labels map[string]string
 
-	retry         *retry.Retry
 	rawClient     client
 	collectorAddr string
 
+	logf func(format string, v ...interface{})
+
 	tick time.Duration
-	wg   sync.WaitGroup
-	stop chan struct{}
+	stop chan struct{} // stop signals the beginning of stop
+	done chan struct{} // done is closed when stop is done
 }
 
 func newAgent(service string, opts ...Option) *agent {
@@ -103,13 +105,14 @@ func newAgent(service string, opts ...Option) *agent {
 		ProfileDuration: defaultDuration,
 		CPUProfile:      true,
 
-		labels: make(map[string]string),
-
-		retry:     retry.New(backoffMinDelay, backoffMaxDelay, 0),
+		labels:    make(map[string]string),
 		rawClient: http.DefaultClient,
 
-		tick: 5 * time.Second,
+		logf: func(format string, v ...interface{}) {},
+
+		tick: defaultTickInterval,
 		stop: make(chan struct{}),
+		done: make(chan struct{}),
 	}
 
 	for _, opt := range opts {
@@ -117,40 +120,41 @@ func newAgent(service string, opts ...Option) *agent {
 	}
 
 	a.labels[profile.LabelService] = service
-	a.labels[profile.LabelID] = calcBuildID()
+	a.labels[profile.LabelID] = calcBuildID(a)
 	a.labels[profile.LabelGeneration] = calcGeneration()
 
 	return a
 }
 
-func calcBuildID() string {
-	f, err := os.Open(os.Args[0])
+func calcBuildID(a *agent) string {
+	prog := os.Args[0]
+	f, err := os.Open(prog)
 	if err != nil {
+		a.logf("failed to read binary %s: %v", prog, err)
 		return "x1"
 	}
 	defer f.Close()
 
 	h := sha1.New()
 	if _, err := io.Copy(h, f); err != nil {
+		a.logf("failed to generate sha1 from binary %s: %v", prog, err)
 		return "x2"
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
 func calcGeneration() string {
-	now := time.Now().UTC()
-	tm := now.Unix()*1000 + int64(now.Nanosecond()/int(time.Millisecond)) + rand.Int63()
-	return strconv.FormatUint(uint64(tm), 36)
+	guid := xid.New()
+	return guid.String()
 }
 
 func (a *agent) Start() {
-	a.wg.Add(1)
 	go a.collectAndSend()
 }
 
 func (a *agent) Stop() error {
 	close(a.stop)
-	a.wg.Wait()
+	<-a.done
 	return nil
 }
 
@@ -216,7 +220,7 @@ func (a *agent) sendProfile(ptype profile.ProfileType, ts time.Time, buf *bytes.
 		return err
 	}
 
-	return a.retry.Do(func() error {
+	return retry.Do(backoffMinDelay, backoffMaxDelay, func() error {
 		resp, err := a.rawClient.Do(req)
 		if err != nil {
 			return err
@@ -240,7 +244,7 @@ func (a *agent) sendProfile(ptype profile.ProfileType, ts time.Time, buf *bytes.
 }
 
 func (a *agent) collectAndSend() {
-	defer a.wg.Done()
+	defer close(a.done)
 
 	timer := time.NewTimer(a.tick)
 
@@ -257,9 +261,9 @@ func (a *agent) collectAndSend() {
 			ts := time.Now().UTC()
 
 			if err := a.collectProfile(ptype, &buf); err != nil {
-				log.Printf("failed to collect profiles: %v\n", err)
+				a.logf("failed to collect profiles: %v", err)
 			} else if err := a.sendProfile(ptype, ts, &buf); err != nil {
-				log.Printf("failed to send profiles to collector: %v\n", err)
+				a.logf("failed to send profiles to collector: %v", err)
 			}
 
 			buf.Reset()
