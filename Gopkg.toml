@@ -6,3 +6,7 @@
 [[constraint]]
   branch = "master"
   name = "github.com/lib/pq"
+
+[[constraint]]
+  name = "github.com/rs/xid"
+  version = "^1.2.0"

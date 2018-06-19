@@ -11,9 +11,24 @@
   ]
   revision = "90697d60dd844d5ef6ff15135d0203f65d2f53b8"
 
+[[projects]]
+  name = "github.com/rs/xid"
+  packages = ["."]
+  revision = "2c7e97ce663ff82c49656bca3048df0fdd83c5f9"
+  version = "v1.2.0"
+
+[[projects]]
+  branch = "master"
+  name = "golang.org/x/sys"
+  packages = [
+    "unix",
+    "windows"
+  ]
+  revision = "fc8bd948cf46f9c7af0f07d34151ce25fe90e477"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "70e87828c37193664f2ffc291997ba41dec7c9865e4134ca29990954ad0bf43f"
+  inputs-digest = "85675245cfd679596130214be97dc9728ae0b09cd9ccdc566caacec82ef1a00c"
   solver-name = "gps-cdcl"
   solver-version = 1
