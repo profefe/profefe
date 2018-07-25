@@ -90,10 +90,14 @@ type agent struct {
 
 	labels map[string]string
 
+	logf func(format string, v ...interface{})
+
 	rawClient     client
 	collectorAddr string
-
-	logf func(format string, v ...interface{})
+	// mu protects reqBody which is used to encode JSON payload
+	mu      sync.Mutex
+	reqBody bytes.Buffer
+	enc     *json.Encoder
 
 	tick time.Duration
 	stop chan struct{} // stop signals the beginning of stop
@@ -122,6 +126,8 @@ func newAgent(service string, opts ...Option) *agent {
 	a.labels[profile.LabelService] = service
 	a.labels[profile.LabelID] = calcBuildID(a)
 	a.labels[profile.LabelGeneration] = calcGeneration()
+
+	a.enc = json.NewEncoder(&a.reqBody)
 
 	return a
 }
@@ -182,13 +188,7 @@ func (a *agent) collectProfile(ptype profile.ProfileType, buf *bytes.Buffer) err
 
 type profileReq struct {
 	Meta map[string]string `json:"meta"`
-	Data []byte            `json:"data"`
-}
-
-var bodyPool = sync.Pool{
-	New: func() interface{} {
-		return &bytes.Buffer{}
-	},
+	Data json.RawMessage   `json:"data"`
 }
 
 func (a *agent) sendProfile(ptype profile.ProfileType, ts time.Time, buf *bytes.Buffer) error {
@@ -206,16 +206,17 @@ func (a *agent) sendProfile(ptype profile.ProfileType, ts time.Time, buf *bytes.
 	preq.Meta[profile.LabelType] = ptype.MarshalString()
 	preq.Meta[profile.LabelTime] = ts.Format(time.RFC3339)
 
-	body := bodyPool.Get().(*bytes.Buffer)
-	body.Reset()
-	defer bodyPool.Put(body)
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
-	if err := json.NewEncoder(body).Encode(preq); err != nil {
+	a.reqBody.Reset()
+
+	if err := a.enc.Encode(preq); err != nil {
 		return err
 	}
 
 	surl := a.collectorAddr + "/api/v1/profile"
-	req, err := http.NewRequest(http.MethodPost, surl, body)
+	req, err := http.NewRequest(http.MethodPost, surl, &a.reqBody)
 	if err != nil {
 		return err
 	}
@@ -234,10 +235,8 @@ func (a *agent) sendProfile(ptype profile.ProfileType, ts time.Time, buf *bytes.
 			}
 			return fmt.Errorf("unexpected respose from collector %s: %q", resp.Status, respBody)
 		} else if resp.StatusCode >= 400 {
-			return retry.Cancel(fmt.Errorf("bad client request: collector respond with %s", resp.Status))
+			return retry.Cancel(fmt.Errorf("bad client request: collector responded with %s", resp.Status))
 		}
-
-		_, err = io.Copy(ioutil.Discard, resp.Body)
 
 		return err
 	})
