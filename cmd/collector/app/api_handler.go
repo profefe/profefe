@@ -66,7 +66,7 @@ func (api *APIHandler) handleProfiles(w http.ResponseWriter, r *http.Request) er
 }
 
 func (api *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Request) error {
-	createReq := new(createProfileRequest)
+	createReq := &createProfileRequest{}
 	if err := json.NewDecoder(r.Body).Decode(createReq); err != nil {
 		return StatusError(http.StatusBadRequest, "bad request", fmt.Errorf("could not parse request: %v", err))
 	}
@@ -108,7 +108,7 @@ func (api *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) 
 
 func readGetProfileRequest(in *getProfileRequest, r *http.Request) (err error) {
 	if in == nil {
-		in = new(getProfileRequest)
+		in = &getProfileRequest{}
 	}
 
 	q := r.URL.Query()
