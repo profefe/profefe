@@ -3,7 +3,7 @@ package app
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -43,7 +43,7 @@ func ReplyOK(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 
-	fmt.Fprint(w, `{"code":"200"}`)
+	io.WriteString(w, `{"code":"200"}`)
 }
 
 func ReplyError(w http.ResponseWriter, err error) {
@@ -67,7 +67,7 @@ func ReplyError(w http.ResponseWriter, err error) {
 		Error: err.Error(),
 	}
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		fmt.Fprint(w, `{"code":`+strconv.Itoa(http.StatusInternalServerError)+`,"error":"`+err.Error()+`"}`)
+		io.WriteString(w, `{"code":`+strconv.Itoa(http.StatusInternalServerError)+`,"error":"`+err.Error()+`"}`)
 	}
 
 	if origErr, _ := err.(causer); origErr != nil {
