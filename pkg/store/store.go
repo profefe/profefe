@@ -3,83 +3,44 @@ package store
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
+	"time"
 
 	"github.com/profefe/profefe/pkg/profile"
 )
 
-var (
-	ErrNotFound = errors.New("not found")
-)
+var ErrNotFound = errors.New("not found")
 
-type Store struct {
-	repo profile.Repo
-
-	Log func(string, ...interface{})
+type Creater interface {
+	Create(ctx context.Context, meta map[string]interface{}, data []byte) (*profile.Profile, error)
 }
 
-func New(repo profile.Repo) *Store {
-	return &Store{
-		repo: repo,
-		Log:  func(_ string, _ ...interface{}) {},
-	}
+type Opener interface {
+	Open(ctx context.Context, dgst profile.Digest) (io.ReadCloser, error)
 }
 
-func (s *Store) Create(ctx context.Context, meta map[string]interface{}, data []byte) (*profile.Profile, error) {
-	p, err := s.repo.Create(ctx, meta, data)
-	if err != nil {
-		return nil, err
-	}
-	s.Log("create: new profile %v", p)
-	return p, nil
+type Queryer interface {
+	Get(ctx context.Context, dgst profile.Digest) (*profile.Profile, error)
+	List(ctx context.Context, filter func(*profile.Profile) bool) ([]*profile.Profile, error)
+	Query(ctx context.Context, query *QueryRequest) ([]*profile.Profile, error)
 }
 
-func validateQueryRequest(q *profile.QueryRequest) error {
-	if q == nil {
-		return errors.New("nil query request")
-	}
-
-	if q.Digest != "" {
-		return nil
-	}
-
-	if q.Service == "" {
-		return fmt.Errorf("no service: query %v", q)
-	}
-	if q.Type == profile.UnknownProfile {
-		return fmt.Errorf("unknown profile type %s: query %v", q.Type, q)
-	}
-	if q.CreatedAtMin.IsZero() || q.CreatedAtMax.IsZero() {
-		return fmt.Errorf("createdAt time zero: query %v", q)
-	}
-	if q.CreatedAtMax.Before(q.CreatedAtMin) {
-		return fmt.Errorf("createdAt time min after max: query %v", q)
-	}
-	return nil
+type QueryRequest struct {
+	Service      string
+	Type         profile.ProfileType
+	Digest       profile.Digest
+	CreatedAtMin time.Time
+	CreatedAtMax time.Time
+	Limit        uint
 }
 
-func (s *Store) Lookup(ctx context.Context, query *profile.QueryRequest) (*profile.Profile, io.ReadCloser, error) {
-	if err := validateQueryRequest(query); err != nil {
-		return nil, nil, err
-	}
+type Deleter interface {
+	Delete(ctx context.Context, dgst profile.Digest) error
+}
 
-	ps, err := s.repo.Query(ctx, query)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if len(ps) == 0 {
-		return nil, nil, ErrNotFound
-	} else if len(ps) > 1 {
-		s.Log("lookup: found %d profiles by query %v", len(ps), query)
-	}
-
-	p := ps[0]
-	pr, err := s.repo.Open(ctx, p.Digest)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not open profile %s: %v", p.Digest, err)
-	}
-
-	return p, pr, err
+type Store interface {
+	Creater
+	Opener
+	Queryer
+	Deleter
 }

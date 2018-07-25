@@ -19,18 +19,18 @@ type repoItem struct {
 	data    []byte
 }
 
-type repo struct {
+type inMemStore struct {
 	mu      sync.RWMutex
 	storage map[profile.Digest]repoItem
 }
 
-func New() profile.Repo {
-	return &repo{
+func New() store.Store {
+	return &inMemStore{
 		storage: make(map[profile.Digest]repoItem),
 	}
 }
 
-func (r *repo) Create(ctx context.Context, meta map[string]interface{}, data []byte) (*profile.Profile, error) {
+func (s *inMemStore) Create(ctx context.Context, meta map[string]interface{}, data []byte) (*profile.Profile, error) {
 	dgst, err := getDigestFor(data)
 	if err != nil {
 		return nil, err
@@ -43,23 +43,23 @@ func (r *repo) Create(ctx context.Context, meta map[string]interface{}, data []b
 	dataCopy := make([]byte, len(data))
 	copy(dataCopy, data)
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	if _, ok := r.storage[p.Digest]; ok {
+	if _, ok := s.storage[p.Digest]; ok {
 		return nil, fmt.Errorf("duplicate profile: %v", p)
 	}
 
-	r.storage[p.Digest] = repoItem{p, dataCopy}
+	s.storage[p.Digest] = repoItem{p, dataCopy}
 
 	return p, nil
 }
 
-func (r *repo) Open(ctx context.Context, dgst profile.Digest) (io.ReadCloser, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (s *inMemStore) Open(ctx context.Context, dgst profile.Digest) (io.ReadCloser, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	p, err := r.byDigest(ctx, dgst)
+	p, err := s.byDigest(ctx, dgst)
 	if err != nil {
 		return nil, err
 	}
@@ -67,11 +67,11 @@ func (r *repo) Open(ctx context.Context, dgst profile.Digest) (io.ReadCloser, er
 	return ioutil.NopCloser(bytes.NewReader(p.data)), nil
 }
 
-func (r *repo) Get(ctx context.Context, dgst profile.Digest) (*profile.Profile, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+func (s *inMemStore) Get(ctx context.Context, dgst profile.Digest) (*profile.Profile, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	p, err := r.byDigest(ctx, dgst)
+	p, err := s.byDigest(ctx, dgst)
 	if err != nil {
 		return nil, err
 	}
@@ -79,20 +79,20 @@ func (r *repo) Get(ctx context.Context, dgst profile.Digest) (*profile.Profile, 
 	return p.profile, nil
 }
 
-func (r *repo) byDigest(_ context.Context, dgst profile.Digest) (p repoItem, err error) {
-	p, ok := r.storage[dgst]
+func (s *inMemStore) byDigest(_ context.Context, dgst profile.Digest) (p repoItem, err error) {
+	p, ok := s.storage[dgst]
 	if !ok {
 		err = store.ErrNotFound
 	}
 	return p, err
 }
 
-func (r *repo) List(ctx context.Context, filter func(*profile.Profile) bool) ([]*profile.Profile, error) {
+func (s *inMemStore) List(ctx context.Context, filter func(*profile.Profile) bool) ([]*profile.Profile, error) {
 	panic("implement me")
 }
 
-func (r *repo) Query(ctx context.Context, query *profile.QueryRequest) (ps []*profile.Profile, err error) {
-	for _, pit := range r.storage {
+func (s *inMemStore) Query(ctx context.Context, query *store.QueryRequest) (ps []*profile.Profile, err error) {
+	for _, pit := range s.storage {
 		p := pit.profile
 		if p.Service != query.Service {
 			continue
@@ -108,7 +108,7 @@ func (r *repo) Query(ctx context.Context, query *profile.QueryRequest) (ps []*pr
 	return ps, nil
 }
 
-func (r *repo) Delete(ctx context.Context, dgst profile.Digest) error {
+func (s *inMemStore) Delete(ctx context.Context, dgst profile.Digest) error {
 	panic("implement me")
 }
 

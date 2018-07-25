@@ -13,10 +13,9 @@ import (
 	"github.com/profefe/profefe/cmd/collector/app"
 	"github.com/profefe/profefe/cmd/collector/middleware"
 	"github.com/profefe/profefe/pkg/filestore"
-	"github.com/profefe/profefe/pkg/store"
-	pqstore "github.com/profefe/profefe/pkg/store/postgres"
 
 	_ "github.com/lib/pq"
+	pqstore "github.com/profefe/profefe/pkg/store/postgres"
 )
 
 const addr = ":10100"
@@ -40,7 +39,13 @@ func main() {
 			log.Fatalf("could not create file store: %v", err)
 		}
 
-		dbURL := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", postgresUser, postgresPassword, postgresHost, postgresDB)
+		dbURL := fmt.Sprintf(
+			"postgres://%s:%s@%s/%s?sslmode=disable",
+			postgresUser,
+			postgresPassword,
+			postgresHost,
+			postgresDB,
+		)
 		db, err := sql.Open("postgres", dbURL)
 		if err != nil {
 			log.Fatalf("could not connect to db: %v", err)
@@ -51,14 +56,12 @@ func main() {
 			log.Fatalf("could not ping db: %v", err)
 		}
 
-		pqRepo, err := pqstore.New(db, fileStore)
+		pqStore, err := pqstore.New(db, fileStore)
 		if err != nil {
 			log.Fatalf("could not create new pq store: %v", err)
 		}
 
-		s := store.New(pqRepo)
-
-		svc = app.NewProfileService(s)
+		svc = app.NewProfileService(pqStore)
 	}
 
 	mux := http.NewServeMux()

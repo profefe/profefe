@@ -82,7 +82,7 @@ func (api *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Reques
 }
 
 func (api *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) error {
-	getReq := new(getProfileRequest)
+	getReq := &getProfileRequest{}
 	if err := readGetProfileRequest(getReq, r); err != nil {
 		return err
 	}

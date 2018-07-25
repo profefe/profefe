@@ -9,6 +9,7 @@ import (
 	"github.com/lib/pq/hstore"
 	"github.com/profefe/profefe/pkg/filestore"
 	"github.com/profefe/profefe/pkg/profile"
+	"github.com/profefe/profefe/pkg/store"
 )
 
 const (
@@ -37,21 +38,21 @@ const (
 
 const defaultProfilesLimit = 100
 
-type pqRepo struct {
+type pqStore struct {
 	db        *sql.DB
 	fileStore *filestore.FileStore
 }
 
-func New(db *sql.DB, fileStore *filestore.FileStore) (profile.Repo, error) {
-	s := &pqRepo{
+func New(db *sql.DB, fileStore *filestore.FileStore) (store.Store, error) {
+	s := &pqStore{
 		db:        db,
 		fileStore: fileStore,
 	}
 	return s, nil
 }
 
-func (r *pqRepo) Create(ctx context.Context, meta map[string]interface{}, data []byte) (*profile.Profile, error) {
-	dgst, size, err := r.fileStore.Put(ctx, data)
+func (s *pqStore) Create(ctx context.Context, meta map[string]interface{}, data []byte) (*profile.Profile, error) {
+	dgst, size, err := s.fileStore.Put(ctx, data)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +61,7 @@ func (r *pqRepo) Create(ctx context.Context, meta map[string]interface{}, data [
 	p.Digest = dgst
 	p.Size = size
 
-	tx, err := r.db.Begin()
+	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
 	}
@@ -85,32 +86,32 @@ func (r *pqRepo) Create(ctx context.Context, meta map[string]interface{}, data [
 	return p, err
 }
 
-func (r *pqRepo) Open(ctx context.Context, dgst profile.Digest) (io.ReadCloser, error) {
-	return r.fileStore.Get(ctx, dgst)
+func (s *pqStore) Open(ctx context.Context, dgst profile.Digest) (io.ReadCloser, error) {
+	return s.fileStore.Get(ctx, dgst)
 }
 
-func (r *pqRepo) Get(ctx context.Context, dgst profile.Digest) (*profile.Profile, error) {
+func (s *pqStore) Get(ctx context.Context, dgst profile.Digest) (*profile.Profile, error) {
 	panic("implement me")
 }
 
-func (r *pqRepo) List(ctx context.Context, filter func(*profile.Profile) bool) ([]*profile.Profile, error) {
+func (s *pqStore) List(ctx context.Context, filter func(*profile.Profile) bool) ([]*profile.Profile, error) {
 	panic("implement me")
 }
 
-func (r *pqRepo) Query(ctx context.Context, queryReq *profile.QueryRequest) ([]*profile.Profile, error) {
+func (s *pqStore) Query(ctx context.Context, queryReq *store.QueryRequest) ([]*profile.Profile, error) {
 	if queryReq.Limit == 0 {
 		queryReq.Limit = defaultProfilesLimit
 	}
 
-	ps, err := r.queryByCreatedAt(ctx, queryReq)
+	ps, err := s.queryByCreatedAt(ctx, queryReq)
 	if err != nil {
 		err = fmt.Errorf("could not select profiles: %v", err)
 	}
 	return ps, err
 }
 
-func (r *pqRepo) queryByCreatedAt(ctx context.Context, queryReq *profile.QueryRequest) ([]*profile.Profile, error) {
-	rows, err := r.db.QueryContext(
+func (s *pqStore) queryByCreatedAt(ctx context.Context, queryReq *store.QueryRequest) ([]*profile.Profile, error) {
+	rows, err := s.db.QueryContext(
 		ctx,
 		querySelectByCreatedAt,
 		queryReq.Service,
@@ -148,6 +149,6 @@ func (r *pqRepo) queryByCreatedAt(ctx context.Context, queryReq *profile.QueryRe
 	return ps, nil
 }
 
-func (r *pqRepo) Delete(ctx context.Context, dgst profile.Digest) error {
+func (s *pqStore) Delete(ctx context.Context, dgst profile.Digest) error {
 	panic("implement me")
 }
