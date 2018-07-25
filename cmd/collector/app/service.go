@@ -32,6 +32,9 @@ type createProfileRequest struct {
 }
 
 func (svc *ProfileService) CreateProfile(ctx context.Context, req *createProfileRequest) error {
+	if req.Data == nil {
+		return errors.New("empty data")
+	}
 	p, err := svc.store.Create(ctx, req.Meta, req.Data)
 	if err != nil {
 		return err
