@@ -3,32 +3,42 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:2d370ad7a48d3523291ad53a04b9b1510c182880927f800b46221cc465427800"
   name = "github.com/lib/pq"
   packages = [
     ".",
     "hstore",
-    "oid"
+    "oid",
   ]
+  pruneopts = "UT"
   revision = "90697d60dd844d5ef6ff15135d0203f65d2f53b8"
 
 [[projects]]
+  digest = "1:757b110984b77e820e01c60d3ac03a376a0fdb05c990dd9d6bd4f9ba0d606261"
   name = "github.com/rs/xid"
   packages = ["."]
+  pruneopts = "UT"
   revision = "2c7e97ce663ff82c49656bca3048df0fdd83c5f9"
   version = "v1.2.0"
 
 [[projects]]
   branch = "master"
+  digest = "1:a17927b3d78603ae6691d5bf8d3d91467a6edd4ca43c9509347e016a54477f96"
   name = "golang.org/x/sys"
   packages = [
     "unix",
-    "windows"
+    "windows",
   ]
+  pruneopts = "UT"
   revision = "fc8bd948cf46f9c7af0f07d34151ce25fe90e477"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "85675245cfd679596130214be97dc9728ae0b09cd9ccdc566caacec82ef1a00c"
+  input-imports = [
+    "github.com/lib/pq",
+    "github.com/lib/pq/hstore",
+    "github.com/rs/xid",
+  ]
   solver-name = "gps-cdcl"
   solver-version = 1
