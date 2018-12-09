@@ -2,6 +2,47 @@
 
 
 [[projects]]
+  digest = "1:b95738a1e6ace058b5b8544303c0871fc01d224ef0d672f778f696265d0f2917"
+  name = "github.com/chzyer/readline"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "62c6fe6193755f722b8b8788aa7357be55a50ff1"
+  version = "v1.4"
+
+[[projects]]
+  branch = "master"
+  digest = "1:04d6cf7277993f311340c4903d685c7414be0042792293d706af82708308c39c"
+  name = "github.com/google/pprof"
+  packages = [
+    ".",
+    "driver",
+    "internal/binutils",
+    "internal/driver",
+    "internal/elfexec",
+    "internal/graph",
+    "internal/measurement",
+    "internal/plugin",
+    "internal/report",
+    "internal/symbolizer",
+    "internal/symbolz",
+    "internal/transport",
+    "profile",
+    "third_party/d3",
+    "third_party/d3flamegraph",
+    "third_party/svgpan",
+  ]
+  pruneopts = "UT"
+  revision = "3ea8567a2e5752420fc544d2e2ad249721768934"
+
+[[projects]]
+  branch = "master"
+  digest = "1:3e658fb4b055816998a967aab8abe0966ce1cfcbb42c2f66a22c7c19568aa1d2"
+  name = "github.com/ianlancetaylor/demangle"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "5e5cf60278f657d30daa329dd0e7e893b6b8f027"
+
+[[projects]]
   branch = "master"
   digest = "1:2d370ad7a48d3523291ad53a04b9b1510c182880927f800b46221cc465427800"
   name = "github.com/lib/pq"
@@ -36,6 +77,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/google/pprof",
     "github.com/lib/pq",
     "github.com/lib/pq/hstore",
     "github.com/rs/xid",

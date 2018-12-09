@@ -9,13 +9,13 @@ import (
 )
 
 func main() {
-	stopper := agent.Start(
+	agent.Start(
 		"adjust_server",
 		agent.WithCollector(agent.DefaultCollectorAddr),
 		agent.WithLogger(agentLogger),
-		agent.WithLabels("host", "localhost", "instance", "1", "zone", "fra", "version", "1.0"),
+		agent.WithLabels("az", "fra", "host", "localhost", "instance", "1", "version", "1.0"),
 	)
-	defer stopper.Stop()
+	defer agent.Stop()
 
 	time.Sleep(2 * time.Minute)
 }

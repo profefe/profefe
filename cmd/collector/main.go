@@ -9,13 +9,15 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
-	"github.com/profefe/profefe/cmd/collector/app"
-	"github.com/profefe/profefe/cmd/collector/middleware"
-	"github.com/profefe/profefe/pkg/filestore"
+	"time"
 
 	_ "github.com/lib/pq"
-	pqstore "github.com/profefe/profefe/pkg/store/postgres"
+	"github.com/profefe/profefe/agent"
+	"github.com/profefe/profefe/cmd/collector/middleware"
+	"github.com/profefe/profefe/cmd/collector/profile"
+	"github.com/profefe/profefe/pkg/filestore"
+	pqstore "github.com/profefe/profefe/pkg/storage/postgres"
+	"github.com/profefe/profefe/version"
 )
 
 const addr = ":10100"
@@ -32,11 +34,21 @@ func main() {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	defer cancelCtx()
 
-	var svc *app.ProfileService
+	agent.Start(
+		"profefe_collector",
+		agent.WithCollector("http://"+addr),
+		agent.WithCPUProfile(20*time.Second),
+		agent.WithLabels("az", "home", "host", "localhost", "version", version.Version, "commit", version.Commit),
+		agent.WithLogger(func(format string, args ...interface{}) {
+			log.Printf("profefe: %s\n", fmt.Sprintf(format, args...))
+		}),
+	)
+
+	var svc *profile.Service
 	{
-		fileStore, err := filestore.New(defaultDataRoot)
+		fs, err := filestore.New(defaultDataRoot)
 		if err != nil {
-			log.Fatalf("could not create file store: %v", err)
+			log.Fatalf("could not create file storage: %v", err)
 		}
 
 		dbURL := fmt.Sprintf(
@@ -56,16 +68,16 @@ func main() {
 			log.Fatalf("could not ping db: %v", err)
 		}
 
-		pqStore, err := pqstore.New(db, fileStore)
+		pqStore, err := pqstore.New(db, fs)
 		if err != nil {
 			log.Fatalf("could not create new pq store: %v", err)
 		}
 
-		svc = app.NewProfileService(pqStore)
+		svc = profile.NewProfileService(pqStore)
 	}
 
 	mux := http.NewServeMux()
-	apiHandler := app.NewAPIHandler(svc)
+	apiHandler := profile.NewAPIHandler(svc)
 	apiHandler.RegisterRoutes(mux)
 
 	handler := middleware.LoggingHandler(os.Stdout, mux)
@@ -93,6 +105,8 @@ func main() {
 			log.Fatalf("terminated: %v", err)
 		}
 	}
+
+	agent.Stop()
 
 	server.Shutdown(ctx)
 }

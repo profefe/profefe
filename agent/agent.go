@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime/pprof"
 	"sync"
@@ -19,66 +21,36 @@ import (
 	"github.com/rs/xid"
 )
 
-const (
-	DefaultCollectorAddr = "http://localhost:10100"
-)
+const DefaultCollectorAddr = "http://localhost:10100"
 
 const (
 	defaultDuration     = 20 * time.Second
 	defaultTickInterval = 5 * time.Second
-	backoffMinDelay     = time.Minute
-	backoffMaxDelay     = 30 * time.Minute
+
+	backoffMinDelay = time.Minute
+	backoffMaxDelay = 30 * time.Minute
 )
-
-type Option func(a *agent)
-
-func WithCollector(addr string) Option {
-	return func(a *agent) {
-		a.collectorAddr = addr
-	}
-}
-
-func WithLabels(args ...string) Option {
-	if len(args)%2 != 0 {
-		panic("agent.WithLabels: uneven number of arguments, expected key-value pairs")
-	}
-	return func(a *agent) {
-		for i := 0; i+1 < len(args); i += 2 {
-			a.labels[args[i]] = args[i+1]
-		}
-	}
-}
-
-func WithHTTPClient(c *http.Client) Option {
-	return func(a *agent) {
-		a.rawClient = c
-	}
-}
-
-func WithLogger(logf func(string, ...interface{})) Option {
-	return func(a *agent) {
-		a.logf = logf
-	}
-}
 
 var (
 	globalAgent     *agent
 	globalAgentOnce sync.Once
 )
 
-func Start(name string, opts ...Option) Stopper {
+func Start(name string, opts ...Option) {
 	globalAgentOnce.Do(func() {
-		globalAgent = newAgent(name, opts...)
-		globalAgent.Start()
+		globalAgent = New(name, opts...)
+		globalAgent.Start(context.Background())
 	})
-	return globalAgent
 }
 
-type Stopper interface {
-	Stop() error
+func Stop() (err error) {
+	if globalAgent != nil {
+		err = globalAgent.Stop()
+	}
+	return err
 }
 
-type client interface {
+type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
@@ -92,22 +64,21 @@ type agent struct {
 
 	logf func(format string, v ...interface{})
 
-	rawClient     client
+	rawClient     httpClient
 	collectorAddr string
-	// mu protects reqBody which is used to encode JSON payload
+	// mu protects reqBody which is to encode JSON payload
 	mu      sync.Mutex
 	reqBody bytes.Buffer
-	enc     *json.Encoder
+	reqEnc  *json.Encoder
 
 	tick time.Duration
-	stop chan struct{} // stop signals the beginning of stop
-	done chan struct{} // done is closed when stop is done
+	stop chan struct{} // signals the beginning of stop
+	done chan struct{} // closed when stopping is done
 }
 
-func newAgent(service string, opts ...Option) *agent {
+func New(service string, opts ...Option) *agent {
 	a := &agent{
 		ProfileDuration: defaultDuration,
-		CPUProfile:      true,
 
 		labels:    make(map[string]string),
 		rawClient: http.DefaultClient,
@@ -127,7 +98,7 @@ func newAgent(service string, opts ...Option) *agent {
 	a.labels[profile.LabelID] = calcBuildID(a)
 	a.labels[profile.LabelGeneration] = calcGeneration()
 
-	a.enc = json.NewEncoder(&a.reqBody)
+	a.reqEnc = json.NewEncoder(&a.reqBody)
 
 	return a
 }
@@ -154,8 +125,8 @@ func calcGeneration() string {
 	return guid.String()
 }
 
-func (a *agent) Start() {
-	go a.collectAndSend()
+func (a *agent) Start(ctx context.Context) {
+	go a.collectAndSend(ctx)
 }
 
 func (a *agent) Stop() error {
@@ -164,14 +135,14 @@ func (a *agent) Stop() error {
 	return nil
 }
 
-func (a *agent) collectProfile(ptype profile.ProfileType, buf *bytes.Buffer) error {
+func (a *agent) collectProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
 	switch ptype {
 	case profile.CPUProfile:
 		err := pprof.StartCPUProfile(buf)
 		if err != nil {
 			return fmt.Errorf("failed to start CPU profile: %v", err)
 		}
-		sleep(a.ProfileDuration, a.stop)
+		sleep(a.ProfileDuration, ctx.Done())
 		pprof.StopCPUProfile()
 	case profile.HeapProfile:
 		fallthrough
@@ -188,10 +159,10 @@ func (a *agent) collectProfile(ptype profile.ProfileType, buf *bytes.Buffer) err
 
 type profileReq struct {
 	Meta map[string]string `json:"meta"`
-	Data json.RawMessage   `json:"data"`
+	Data []byte            `json:"data"`
 }
 
-func (a *agent) sendProfile(ptype profile.ProfileType, ts time.Time, buf *bytes.Buffer) error {
+func (a *agent) sendProfile(ctx context.Context, ptype profile.ProfileType, ts time.Time, buf *bytes.Buffer) error {
 	preq := &profileReq{
 		Meta: make(map[string]string, len(a.labels)),
 		Data: buf.Bytes(),
@@ -211,41 +182,57 @@ func (a *agent) sendProfile(ptype profile.ProfileType, ts time.Time, buf *bytes.
 
 	a.reqBody.Reset()
 
-	if err := a.enc.Encode(preq); err != nil {
+	if err := a.reqEnc.Encode(preq); err != nil {
 		return err
 	}
 
-	surl := a.collectorAddr + "/api/v1/profile"
+	surl := a.collectorAddr + "/api/v0/profile"
 	req, err := http.NewRequest(http.MethodPost, surl, &a.reqBody)
 	if err != nil {
 		return err
 	}
+	req = req.WithContext(ctx)
 
-	return retry.Do(backoffMinDelay, backoffMaxDelay, func() error {
-		resp, err := a.rawClient.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode >= 500 {
-			respBody, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				return fmt.Errorf("unexpected respose %s: %v", resp.Status, err)
-			}
-			return fmt.Errorf("unexpected respose from collector %s: %q", resp.Status, respBody)
-		} else if resp.StatusCode >= 400 {
-			return retry.Cancel(fmt.Errorf("bad client request: collector responded with %s", resp.Status))
-		}
-
-		return err
-	})
+	return retry.Do(
+		backoffMinDelay,
+		backoffMaxDelay,
+		func() error { return a.doRequest(req) },
+	)
 }
 
-func (a *agent) collectAndSend() {
+func (a *agent) doRequest(req *http.Request) error {
+	resp, err := a.rawClient.Do(req)
+	if err, ok := err.(*url.Error); ok && err.Err == context.Canceled {
+		return retry.Cancel(err)
+	} else if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 500 {
+		respBody, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("unexpected respose %s: %v", resp.Status, err)
+		}
+		return fmt.Errorf("unexpected respose from collector %s: %q", resp.Status, respBody)
+	} else if resp.StatusCode >= 400 {
+		return retry.Cancel(fmt.Errorf("bad client request: collector responded with %s", resp.Status))
+	}
+	return nil
+}
+
+func (a *agent) collectAndSend(ctx context.Context) {
 	defer close(a.done)
 
 	timer := time.NewTimer(a.tick)
+
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		select {
+		case <-a.stop:
+			cancel()
+		}
+	}()
 
 	var buf bytes.Buffer
 	for {
@@ -259,9 +246,9 @@ func (a *agent) collectAndSend() {
 			ptype := profile.CPUProfile // hardcoded for now
 			ts := time.Now().UTC()
 
-			if err := a.collectProfile(ptype, &buf); err != nil {
+			if err := a.collectProfile(ctx, ptype, &buf); err != nil {
 				a.logf("failed to collect profiles: %v", err)
-			} else if err := a.sendProfile(ptype, ts, &buf); err != nil {
+			} else if err := a.sendProfile(ctx, ptype, ts, &buf); err != nil {
 				a.logf("failed to send profiles to collector: %v", err)
 			}
 

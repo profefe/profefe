@@ -1,2 +1,2 @@
 FROM postgres:10-alpine
-COPY pkg/store/postgres/sql/initial_schema.sql /docker-entrypoint-initdb.d/1.sql
+COPY pkg/storage/postgres/sql/init.sql /docker-entrypoint-initdb.d/1.sql

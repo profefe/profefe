@@ -1,73 +1,11 @@
 package profile
 
 import (
-	"fmt"
 	"sort"
-	"strconv"
-	"strings"
 	"time"
+
+	"github.com/google/pprof/profile"
 )
-
-type ProfileType int
-
-const (
-	UnknownProfile = -1
-
-	CPUProfile ProfileType = iota
-	HeapProfile
-	BlockProfile
-	MutexProfile
-)
-
-func (ptype ProfileType) MarshalString() (s string) {
-	return strconv.FormatInt(int64(ptype), 10)
-}
-
-func (ptype *ProfileType) UnmarshalString(s string) error {
-	pt, err := strconv.Atoi(s)
-	if err != nil {
-		return err
-	}
-	switch pt := ProfileType(pt); pt {
-	case CPUProfile, HeapProfile, BlockProfile, MutexProfile:
-		*ptype = pt
-	default:
-		*ptype = UnknownProfile
-	}
-	return nil
-}
-
-func (ptype ProfileType) String() string {
-	switch ptype {
-	case UnknownProfile:
-		return "unknown"
-	case CPUProfile:
-		return "cpu"
-	case HeapProfile:
-		return "heap"
-	case BlockProfile:
-		return "block"
-	case MutexProfile:
-		return "mutex"
-	}
-	return fmt.Sprintf("%d", ptype)
-}
-
-func ProfileTypeFromString(s string) ProfileType {
-	s = strings.TrimSpace(s)
-	switch s {
-	case "cpu":
-		return CPUProfile
-	case "heap":
-		return HeapProfile
-	case "block":
-		return BlockProfile
-	case "mutex":
-		return MutexProfile
-	default:
-		return UnknownProfile
-	}
-}
 
 type Digest string
 
@@ -83,18 +21,26 @@ type Profile struct {
 
 	Digest Digest // as for now, sha1 of data stored in blob storage
 	Size   int64  // size of data stored in blob storage
+
+	prof *profile.Profile
 }
 
-func New() *Profile {
-	return NewWithMeta(nil)
+func New(prof *profile.Profile) *Profile {
+	return NewWithMeta(prof, nil)
 }
 
-func NewWithMeta(meta map[string]interface{}) *Profile {
+func NewWithMeta(prof *profile.Profile, meta map[string]interface{}) *Profile {
 	p := &Profile{
-		Type:       UnknownProfile,
+		prof:       prof,
 		ReceivedAt: time.Now().UTC(),
 	}
+
 	parseProfileMeta(p, meta)
+
+	if prof.TimeNanos > 0 {
+		p.CreatedAt = time.Unix(0, prof.TimeNanos).UTC()
+	}
+
 	return p
 }
 
