@@ -1,4 +1,4 @@
-package profile
+package api
 
 import (
 	"encoding/json"
@@ -8,16 +8,15 @@ import (
 	"time"
 
 	"github.com/profefe/profefe/pkg/profile"
-	"github.com/profefe/profefe/pkg/storage"
 )
 
 type APIHandler struct {
-	svc *Service
+	profilePepo *profile.Repository
 }
 
-func NewAPIHandler(svc *Service) *APIHandler {
+func NewAPIHandler(profileRepo *profile.Repository) *APIHandler {
 	return &APIHandler{
-		svc: svc,
+		profilePepo: profileRepo,
 	}
 }
 
@@ -37,12 +36,6 @@ func (api *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			err = api.handleGetProfile(w, r)
 		}
-	case "/api/v0/profile/meta":
-		if r.Method == http.MethodPost {
-			err = api.handleCreateProfileMeta(w, r)
-		} else {
-			err = api.handleGetProfileMeta(w, r)
-		}
 	default:
 		http.NotFound(w, r)
 		return
@@ -60,7 +53,7 @@ func (api *APIHandler) handleProfiles(w http.ResponseWriter, r *http.Request) er
 		return StatusError(http.StatusMethodNotAllowed, fmt.Sprintf("bad request method: %s", r.Method), nil)
 	}
 
-	_, err := api.svc.ListProfiles(r.Context())
+	_, err := api.profilePepo.ListProfiles(r.Context())
 	if err != nil {
 		return StatusError(http.StatusServiceUnavailable, "failed to list profiles", err)
 	}
@@ -71,14 +64,14 @@ func (api *APIHandler) handleProfiles(w http.ResponseWriter, r *http.Request) er
 }
 
 func (api *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Request) error {
-	createReq := &createProfileRequest{}
+	createReq := &profile.CreateProfileRequest{}
 	if err := json.NewDecoder(r.Body).Decode(createReq); err != nil {
 		return StatusError(http.StatusBadRequest, "bad request", fmt.Errorf("could not parse request: %v", err))
 	}
 
 	//log.Printf("request: %+v\n", createReq)
 
-	err := api.svc.CreateProfile(r.Context(), createReq)
+	err := api.profilePepo.CreateProfile(r.Context(), createReq)
 	if err != nil {
 		return StatusError(http.StatusServiceUnavailable, "failed to create profile", err)
 	}
@@ -89,7 +82,7 @@ func (api *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Reques
 }
 
 func (api *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) error {
-	getReq := &getProfileRequest{}
+	getReq := &profile.GetProfileRequest{}
 	if err := readGetProfileRequest(getReq, r); err != nil {
 		return err
 	}
@@ -99,26 +92,26 @@ func (api *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) 
 
 	//log.Printf("request: %+v\n", getReq)
 
-	p, data, err := api.svc.GetProfile(r.Context(), getReq)
-	if err == storage.ErrNotFound {
+	p, err := api.profilePepo.GetProfile(r.Context(), getReq)
+	if err == profile.ErrNotFound {
 		return StatusError(http.StatusNotFound, "nothing found", nil)
 	} else if err != nil {
 		return StatusError(http.StatusServiceUnavailable, "could not get profile", err)
 	}
-	defer data.Close()
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, p.Type))
 
-	// TODO handle errors from Copy
-	io.Copy(w, data)
-
-	return nil
+	_, err = io.Copy(w, p)
+	if err != nil {
+		err = StatusError(http.StatusServiceUnavailable, "could not write profile response", err)
+	}
+	return err
 }
 
-func readGetProfileRequest(in *getProfileRequest, r *http.Request) (err error) {
+func readGetProfileRequest(in *profile.GetProfileRequest, r *http.Request) (err error) {
 	if in == nil {
-		*in = getProfileRequest{}
+		*in = profile.GetProfileRequest{}
 	}
 
 	q := r.URL.Query()
@@ -163,13 +156,5 @@ func readGetProfileRequest(in *getProfileRequest, r *http.Request) (err error) {
 		in.Labels = labels
 	}
 
-	return nil
-}
-
-func (api *APIHandler) handleCreateProfileMeta(w http.ResponseWriter, r *http.Request) error {
-	return nil
-}
-
-func (api *APIHandler) handleGetProfileMeta(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }

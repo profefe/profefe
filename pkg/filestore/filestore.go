@@ -34,26 +34,26 @@ func (fs *FileStore) Get(ctx context.Context, dgst profile.Digest) (io.ReadClose
 	return os.Open(uri)
 }
 
-func (fs *FileStore) Save(ctx context.Context, r io.Reader) (dgst profile.Digest, size int64, data []byte, err error) {
-	data, err = ioutil.ReadAll(r)
+func (fs *FileStore) Save(ctx context.Context, r io.Reader) (dgst profile.Digest, size int64, err error) {
+	data, err := ioutil.ReadAll(r)
 	if err != nil {
-		return "", 0, nil, err
+		return "", 0, fmt.Errorf("could read data: %v", err)
 	}
 
 	var uri string
-	dgst, uri, err = fs.getDataDescriptor(data)
+	dgst, uri, err = fs.getDigestFromData(data)
 	if err != nil {
-		return "", 0, nil, fmt.Errorf("could calculate descriptor for data: %v", err)
+		return "", 0, fmt.Errorf("could calculate descriptor for data: %v", err)
 	}
 
 	dataDir := filepath.Dir(uri)
 	if err := os.MkdirAll(dataDir, 0740); err != nil {
-		return "", 0, nil, fmt.Errorf("could not create data dir %q: %v", dataDir, err)
+		return "", 0, fmt.Errorf("could not create data dir %q: %v", dataDir, err)
 	}
 
 	f, err := os.Create(uri)
 	if err != nil {
-		return "", 0, nil, fmt.Errorf("could not create data file %q: %v", uri, err)
+		return "", 0, fmt.Errorf("could not create data file %q: %v", uri, err)
 	}
 	defer func() {
 		if err != nil {
@@ -66,16 +66,17 @@ func (fs *FileStore) Save(ctx context.Context, r io.Reader) (dgst profile.Digest
 
 	n, err := f.Write(data)
 	if err != nil {
-		return "", 0, nil, fmt.Errorf("could not write data to file %q: %v", uri, err)
+		return "", 0, fmt.Errorf("could not write data to file %q: %v", uri, err)
 	}
 
 	if err := f.Sync(); err != nil {
-		return "", 0, nil, fmt.Errorf("could not flush file %q: %v", uri, err)
+		return "", 0, fmt.Errorf("could not flush file %q: %v", uri, err)
 	}
 
+	size = int64(n)
 	log.Printf("DEBUG put: dgst %s, uri %s, size %d\n", dgst, uri, size)
 
-	return dgst, int64(n), data, nil
+	return dgst, size, nil
 }
 
 func (fs *FileStore) Delete(ctx context.Context, dgst profile.Digest) error {
@@ -83,7 +84,7 @@ func (fs *FileStore) Delete(ctx context.Context, dgst profile.Digest) error {
 	return os.Remove(uri)
 }
 
-func (fs *FileStore) getDataDescriptor(data []byte) (dgst profile.Digest, uri string, err error) {
+func (fs *FileStore) getDigestFromData(data []byte) (dgst profile.Digest, uri string, err error) {
 	h := sha1.New()
 	if _, err := h.Write(data); err != nil {
 		return "", "", err

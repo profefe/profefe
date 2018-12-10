@@ -6,14 +6,23 @@ import (
 	"time"
 
 	"github.com/profefe/profefe/agent"
+	"github.com/profefe/profefe/version"
 )
 
 func main() {
 	agent.Start(
-		"adjust_server",
+		"example_server",
+		agent.WithCPUProfile(20*time.Second),
 		agent.WithCollector(agent.DefaultCollectorAddr),
 		agent.WithLogger(agentLogger),
-		agent.WithLabels("az", "fra", "host", "localhost", "instance", "1", "version", "1.0"),
+		agent.WithLabels(
+			"az", "fra",
+			"host", "localhost",
+			"instance", "1",
+			"version", version.Version,
+			"commit", version.Commit,
+			"build-date", version.BuildDate,
+		),
 	)
 	defer agent.Stop()
 

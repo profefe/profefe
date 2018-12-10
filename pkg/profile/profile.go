@@ -1,6 +1,8 @@
 package profile
 
 import (
+	"bytes"
+	"io"
 	"sort"
 	"time"
 
@@ -35,7 +37,7 @@ func NewWithMeta(prof *profile.Profile, meta map[string]interface{}) *Profile {
 		ReceivedAt: time.Now().UTC(),
 	}
 
-	parseProfileMeta(p, meta)
+	p.parseMeta(meta)
 
 	if prof.TimeNanos > 0 {
 		p.CreatedAt = time.Unix(0, prof.TimeNanos).UTC()
@@ -44,7 +46,19 @@ func NewWithMeta(prof *profile.Profile, meta map[string]interface{}) *Profile {
 	return p
 }
 
-func parseProfileMeta(p *Profile, meta map[string]interface{}) {
+func (p *Profile) Read(buf []byte) (int, error) {
+	w := bytes.NewBuffer(buf)
+	err := p.prof.Write(w)
+	return w.Len(), err
+}
+
+func (p *Profile) WriteTo(w io.Writer) (int64, error) {
+	err := p.prof.Write(w)
+	// TODO(narqo): return proper size for io.WriterTo implementation
+	return 0, err
+}
+
+func (p *Profile) parseMeta(meta map[string]interface{}) {
 	if p.Labels == nil {
 		p.Labels = make(Labels, 0, len(meta))
 	}
@@ -60,11 +74,6 @@ func parseProfileMeta(p *Profile, meta map[string]interface{}) {
 			p.Generation = val
 		case LabelType:
 			p.Type.UnmarshalString(val)
-		case LabelTime:
-			tm, _ := time.Parse(time.RFC3339, val)
-			if !tm.IsZero() {
-				p.CreatedAt = tm
-			}
 		default:
 			p.Labels = append(p.Labels, Label{k, val})
 		}

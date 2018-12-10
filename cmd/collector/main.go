@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,17 +14,19 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/profefe/profefe/agent"
+	"github.com/profefe/profefe/cmd/collector/api"
 	"github.com/profefe/profefe/cmd/collector/middleware"
-	"github.com/profefe/profefe/cmd/collector/profile"
 	"github.com/profefe/profefe/pkg/filestore"
-	pqstore "github.com/profefe/profefe/pkg/storage/postgres"
+	"github.com/profefe/profefe/pkg/profile"
+	pqstorage "github.com/profefe/profefe/pkg/storage/postgres"
 	"github.com/profefe/profefe/version"
 )
 
 const addr = ":10100"
 
 const (
-	defaultDataRoot  = "/tmp/profefe"
+	defaultDataRoot = "/tmp/profefe"
+
 	postgresUser     = "postgres"
 	postgresPassword = "postgres"
 	postgresHost     = "127.0.0.1"
@@ -31,24 +34,29 @@ const (
 )
 
 func main() {
-	ctx, cancelCtx := context.WithCancel(context.Background())
-	defer cancelCtx()
+	ctx := context.Background()
 
 	agent.Start(
 		"profefe_collector",
 		agent.WithCollector("http://"+addr),
 		agent.WithCPUProfile(20*time.Second),
-		agent.WithLabels("az", "home", "host", "localhost", "version", version.Version, "commit", version.Commit),
+		agent.WithLabels("az", "home", "host", "localhost", "version", version.Version, "commit", version.Commit, "build", version.BuildDate),
 		agent.WithLogger(func(format string, args ...interface{}) {
 			log.Printf("profefe: %s\n", fmt.Sprintf(format, args...))
 		}),
 	)
 
-	var svc *profile.Service
+	if err := run(ctx); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(ctx context.Context) error {
+	var profileRepo *profile.Repository
 	{
 		fs, err := filestore.New(defaultDataRoot)
 		if err != nil {
-			log.Fatalf("could not create file storage: %v", err)
+			return fmt.Errorf("could not create file storage: %v", err)
 		}
 
 		dbURL := fmt.Sprintf(
@@ -60,25 +68,28 @@ func main() {
 		)
 		db, err := sql.Open("postgres", dbURL)
 		if err != nil {
-			log.Fatalf("could not connect to db: %v", err)
+			return fmt.Errorf("could not connect to db: %v", err)
 		}
 		defer db.Close()
 
 		if err := db.Ping(); err != nil {
-			log.Fatalf("could not ping db: %v", err)
+			return fmt.Errorf("could not ping db: %v", err)
 		}
 
-		pqStore, err := pqstore.New(db, fs)
+		pqStore, err := pqstorage.New(db, fs)
 		if err != nil {
-			log.Fatalf("could not create new pq store: %v", err)
+			return fmt.Errorf("could not create new pq storage: %v", err)
 		}
 
-		svc = profile.NewProfileService(pqStore)
+		profileRepo = profile.NewRepository(pqStore)
 	}
 
 	mux := http.NewServeMux()
-	apiHandler := profile.NewAPIHandler(svc)
+	apiHandler := api.NewAPIHandler(profileRepo)
 	apiHandler.RegisterRoutes(mux)
+
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 
 	handler := middleware.LoggingHandler(os.Stdout, mux)
 	handler = middleware.RecoveryHandler(handler)
@@ -102,11 +113,12 @@ func main() {
 		log.Println("exiting")
 	case err := <-errc:
 		if err != http.ErrServerClosed {
-			log.Fatalf("terminated: %v", err)
+			return fmt.Errorf("terminated: %v", err)
 		}
 	}
 
+	// must stop agent before server, because it sends to itself
 	agent.Stop()
 
-	server.Shutdown(ctx)
+	return server.Shutdown(ctx)
 }

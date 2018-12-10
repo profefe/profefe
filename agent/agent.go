@@ -162,7 +162,7 @@ type profileReq struct {
 	Data []byte            `json:"data"`
 }
 
-func (a *agent) sendProfile(ctx context.Context, ptype profile.ProfileType, ts time.Time, buf *bytes.Buffer) error {
+func (a *agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
 	preq := &profileReq{
 		Meta: make(map[string]string, len(a.labels)),
 		Data: buf.Bytes(),
@@ -175,7 +175,6 @@ func (a *agent) sendProfile(ctx context.Context, ptype profile.ProfileType, ts t
 	}
 
 	preq.Meta[profile.LabelType] = ptype.MarshalString()
-	preq.Meta[profile.LabelTime] = ts.Format(time.RFC3339)
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -224,8 +223,6 @@ func (a *agent) doRequest(req *http.Request) error {
 func (a *agent) collectAndSend(ctx context.Context) {
 	defer close(a.done)
 
-	timer := time.NewTimer(a.tick)
-
 	ctx, cancel := context.WithCancel(ctx)
 	go func() {
 		select {
@@ -233,6 +230,8 @@ func (a *agent) collectAndSend(ctx context.Context) {
 			cancel()
 		}
 	}()
+
+	timer := time.NewTimer(a.tick)
 
 	var buf bytes.Buffer
 	for {
@@ -244,11 +243,10 @@ func (a *agent) collectAndSend(ctx context.Context) {
 			return
 		case <-timer.C:
 			ptype := profile.CPUProfile // hardcoded for now
-			ts := time.Now().UTC()
 
 			if err := a.collectProfile(ctx, ptype, &buf); err != nil {
 				a.logf("failed to collect profiles: %v", err)
-			} else if err := a.sendProfile(ctx, ptype, ts, &buf); err != nil {
+			} else if err := a.sendProfile(ctx, ptype, &buf); err != nil {
 				a.logf("failed to send profiles to collector: %v", err)
 			}
 

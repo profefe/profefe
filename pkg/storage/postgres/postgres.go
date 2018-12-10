@@ -7,11 +7,9 @@ import (
 	"io"
 	"strconv"
 
-	pprof "github.com/google/pprof/profile"
 	"github.com/lib/pq/hstore"
 	"github.com/profefe/profefe/pkg/filestore"
 	"github.com/profefe/profefe/pkg/profile"
-	"github.com/profefe/profefe/pkg/storage"
 )
 
 const (
@@ -46,32 +44,23 @@ type pqStorage struct {
 	fs *filestore.FileStore
 }
 
-func New(db *sql.DB, fileStore *filestore.FileStore) (storage.Storage, error) {
+func New(db *sql.DB, fs *filestore.FileStore) (profile.Storage, error) {
 	s := &pqStorage{
 		db: db,
-		fs: fileStore,
+		fs: fs,
 	}
 	return s, nil
 }
 
-func (s *pqStorage) Create(ctx context.Context, meta map[string]interface{}, r io.Reader) (*profile.Profile, error) {
-	dgst, size, data, err := s.fs.Save(ctx, r)
+func (s *pqStorage) Create(ctx context.Context, p *profile.Profile, r io.Reader) error {
+	dgst, size, err := s.fs.Save(ctx, r)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	prof, err := pprof.ParseData(data)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse profile from reader: %v", err)
-	}
-
-	p := profile.NewWithMeta(prof, meta)
-	p.Digest = dgst
-	p.Size = size
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() {
 		var txErr error
@@ -87,15 +76,19 @@ func (s *pqStorage) Create(ctx context.Context, meta map[string]interface{}, r i
 
 	_, err = tx.ExecContext(ctx, queryInsertServiceOnce, p.BuildID, p.Generation, p.Service, hstoreFromLabels(p.Labels))
 	if err != nil {
-		return nil, fmt.Errorf("could not upsert service: %v", err)
+		return fmt.Errorf("could not upsert service: %v", err)
 	}
 
-	_, err = tx.ExecContext(ctx, queryInsertProfile, p.Digest, p.Type, p.Size, p.CreatedAt, p.ReceivedAt, p.BuildID, p.Generation)
+	_, err = tx.ExecContext(ctx, queryInsertProfile, dgst, p.Type, size, p.CreatedAt, p.ReceivedAt, p.BuildID, p.Generation)
 	if err != nil {
-		return nil, fmt.Errorf("could not insert profile: %v", err)
+		return fmt.Errorf("could not insert profile: %v", err)
 	}
 
-	return p, err
+	// TODO(narqo): updating profile inside the Create seems smelly; needs to think more about the API
+	p.Digest = dgst
+	p.Size = size
+
+	return nil
 }
 
 func (s *pqStorage) Open(ctx context.Context, dgst profile.Digest) (io.ReadCloser, error) {
@@ -106,19 +99,19 @@ func (s *pqStorage) Get(ctx context.Context, dgst profile.Digest) (*profile.Prof
 	panic("implement me")
 }
 
-func (s *pqStorage) Query(ctx context.Context, queryReq *storage.QueryRequest) ([]*profile.Profile, error) {
+func (s *pqStorage) Query(ctx context.Context, queryReq *profile.QueryRequest) ([]*profile.Profile, error) {
 	if queryReq.Limit == 0 {
 		queryReq.Limit = defaultProfilesLimit
 	}
 
 	ps, err := s.queryByCreatedAt(ctx, queryReq)
 	if err != nil {
-		err = fmt.Errorf("could not select profiles: %v", err)
+		err = fmt.Errorf("could not query profiles: %v", err)
 	}
 	return ps, err
 }
 
-func (s *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *storage.QueryRequest) ([]*profile.Profile, error) {
+func (s *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *profile.QueryRequest) ([]*profile.Profile, error) {
 	query := querySelectByCreatedAt
 	args := []interface{}{
 		queryReq.Service,
