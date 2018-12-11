@@ -69,9 +69,7 @@ func (api *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Reques
 		return StatusError(http.StatusBadRequest, "bad request", fmt.Errorf("could not parse request: %v", err))
 	}
 
-	//log.Printf("request: %+v\n", createReq)
-
-	err := api.profilePepo.CreateProfile(r.Context(), createReq)
+	_, err := api.profilePepo.CreateProfile(r.Context(), createReq)
 	if err != nil {
 		return StatusError(http.StatusServiceUnavailable, "failed to create profile", err)
 	}

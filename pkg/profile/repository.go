@@ -20,9 +20,9 @@ type Repository struct {
 	storage Storage
 }
 
-func NewRepository(s Storage) *Repository {
+func NewRepository(st Storage) *Repository {
 	return &Repository{
-		storage: s,
+		storage: st,
 	}
 }
 
@@ -35,26 +35,26 @@ type CreateProfileRequest struct {
 	Data []byte                 `json:"data"`
 }
 
-func (repo *Repository) CreateProfile(ctx context.Context, req *CreateProfileRequest) error {
+func (repo *Repository) CreateProfile(ctx context.Context, req *CreateProfileRequest) (*Profile, error) {
 	if len(req.Data) == 0 {
-		return ErrEmpty
+		return nil, ErrEmpty
 	}
 
 	prof, err := profile.ParseData(req.Data)
 	if err != nil {
-		return fmt.Errorf("could not parse profile: %v", err)
+		return nil, fmt.Errorf("could not parse profile: %v", err)
 	}
 
 	p := NewWithMeta(prof, req.Meta)
 
 	err = repo.storage.Create(ctx, p, bytes.NewReader(req.Data))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	log.Printf("DEBUG create profile: %+v\n", p)
 
-	return nil
+	return p, nil
 }
 
 type GetProfileRequest struct {
