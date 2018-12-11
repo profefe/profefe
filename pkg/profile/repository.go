@@ -8,12 +8,12 @@ import (
 	"log"
 	"time"
 
-	pprof "github.com/google/pprof/profile"
+	"github.com/google/pprof/profile"
 )
 
 var (
-	ErrNotFound  = errors.New("profile not found")
-	ErrDataEmpty = errors.New("profile data is empty")
+	ErrNotFound = errors.New("profile not found")
+	ErrEmpty    = errors.New("profile is empty")
 )
 
 type Repository struct {
@@ -37,10 +37,10 @@ type CreateProfileRequest struct {
 
 func (repo *Repository) CreateProfile(ctx context.Context, req *CreateProfileRequest) error {
 	if len(req.Data) == 0 {
-		return ErrDataEmpty
+		return ErrEmpty
 	}
 
-	prof, err := pprof.ParseData(req.Data)
+	prof, err := profile.ParseData(req.Data)
 	if err != nil {
 		return fmt.Errorf("could not parse profile: %v", err)
 	}
@@ -100,13 +100,13 @@ func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) 
 		return nil, ErrNotFound
 	}
 
-	profSrcs := make([]*pprof.Profile, 0, len(ps))
+	profSrcs := make([]*profile.Profile, 0, len(ps))
 	for _, p := range ps {
 		pr, err := repo.storage.Open(ctx, p.Digest)
 		if err != nil {
 			return nil, fmt.Errorf("could not open profile %s: %v", p.Digest, err)
 		}
-		prof, err := pprof.Parse(pr)
+		prof, err := profile.Parse(pr)
 		pr.Close()
 		if err != nil {
 			return nil, fmt.Errorf("could not parse profile %s: %v", p.Digest, err)
@@ -114,7 +114,7 @@ func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) 
 		profSrcs = append(profSrcs, prof)
 	}
 
-	prof, err := pprof.Merge(profSrcs)
+	prof, err := profile.Merge(profSrcs)
 	if err != nil {
 		return nil, fmt.Errorf("could not merge %d profiles: %v", len(profSrcs), err)
 	}

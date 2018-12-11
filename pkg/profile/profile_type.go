@@ -9,9 +9,8 @@ import (
 type ProfileType int
 
 const (
-	UnknownProfile = -1
-
-	CPUProfile ProfileType = iota
+	UnknownProfile ProfileType = iota
+	CPUProfile
 	HeapProfile
 	BlockProfile
 	MutexProfile
