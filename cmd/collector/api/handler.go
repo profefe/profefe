@@ -31,12 +31,15 @@ func (api *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	switch r.URL.Path {
-	case "/api/v0/profiles":
-		err = api.handleProfiles(w, r)
-	case "/api/v0/profile":
-		if r.Method == http.MethodPost {
+	case "/api/0/profiles":
+		err = api.handleGetProfiles(w, r)
+	case "/api/0/profile":
+		switch r.Method {
+		case http.MethodPut:
 			err = api.handleCreateProfile(w, r)
-		} else {
+		case http.MethodPost:
+			err = api.handleUpdateProfile(w, r)
+		case http.MethodGet:
 			err = api.handleGetProfile(w, r)
 		}
 	default:
@@ -49,31 +52,74 @@ func (api *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ReplyError(w, err)
+
+	if origErr, _ := err.(causer); origErr != nil {
+		err = origErr.Cause()
+	}
+	if err != nil {
+		api.logger.Errorw("request failed", "url", r.URL.String(), "err", err)
+	}
 }
 
-func (api *APIHandler) handleProfiles(w http.ResponseWriter, r *http.Request) error {
+func (api *APIHandler) handleGetProfiles(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
 		return StatusError(http.StatusMethodNotAllowed, fmt.Sprintf("bad request method: %s", r.Method), nil)
 	}
-
-	_, err := api.profilePepo.ListProfiles(r.Context())
-	if err != nil {
-		return StatusError(http.StatusServiceUnavailable, "failed to list profiles", err)
-	}
-
-	ReplyOK(w)
-
-	return nil
+	return StatusError(http.StatusMethodNotAllowed, "not implemented", nil)
 }
 
 func (api *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Request) error {
-	createReq := &profile.CreateProfileRequest{}
-	if err := json.NewDecoder(r.Body).Decode(createReq); err != nil {
-		return StatusError(http.StatusBadRequest, "bad request", fmt.Errorf("could not parse request: %v", err))
+	q := r.URL.Query()
+	req := &profile.CreateProfileRequest{
+		ID:      q.Get("id"),
+		Service: q.Get("service"),
+		Labels:  nil,
+	}
+	labels, err := getLabels(q)
+	if err != nil {
+		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %v", err), nil)
+	}
+	req.Labels = labels
+
+	if err := req.Validate(); err != nil {
+		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
 	}
 
-	_, err := api.profilePepo.CreateProfile(r.Context(), createReq)
+	token, err := api.profilePepo.CreateProfile(r.Context(), req)
 	if err != nil {
+		return StatusError(http.StatusServiceUnavailable, "failed to create profile", err)
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("Content-Type", "application/json")
+
+	resp := struct {
+		Code  int    `json:"code"`
+		Token string `json:"token"`
+	}{
+		Code:  http.StatusCreated,
+		Token: token,
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (api *APIHandler) handleUpdateProfile(w http.ResponseWriter, r *http.Request) error {
+	q := r.URL.Query()
+	req := &profile.UpdateProfileRequest{
+		ID:    q.Get("id"),
+		Token: q.Get("token"),
+		Type:  profile.UnknownProfile,
+	}
+	pt, err := getProfileType(q)
+	if err != nil {
+		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %v", err), nil)
+	}
+	req.Type = pt
+
+	if err := api.profilePepo.UpdateProfile(r.Context(), req, r.Body); err != nil {
 		return StatusError(http.StatusServiceUnavailable, "failed to create profile", err)
 	}
 
@@ -83,17 +129,17 @@ func (api *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Reques
 }
 
 func (api *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) error {
-	getReq := &profile.GetProfileRequest{}
-	if err := readGetProfileRequest(getReq, r); err != nil {
+	req := &profile.GetProfileRequest{}
+	if err := readGetProfileRequest(req, r); err != nil {
 		return err
 	}
-	if err := getReq.Validate(); err != nil {
+	if err := req.Validate(); err != nil {
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
 	}
 
-	api.logger.Debugf("req %+v", getReq)
+	api.logger.Debugf("req %+v", req)
 
-	p, err := api.profilePepo.GetProfile(r.Context(), getReq)
+	prof, profReader, err := api.profilePepo.GetProfile(r.Context(), req)
 	if err == profile.ErrNotFound {
 		return StatusError(http.StatusNotFound, "nothing found", nil)
 	} else if err != nil {
@@ -101,9 +147,9 @@ func (api *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, p.Type))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, prof.Type))
 
-	_, err = io.Copy(w, p)
+	_, err = io.Copy(w, profReader)
 	if err != nil {
 		err = StatusError(http.StatusServiceUnavailable, "could not write profile response", err)
 	}
@@ -123,11 +169,9 @@ func readGetProfileRequest(in *profile.GetProfileRequest, r *http.Request) (err 
 		return StatusError(http.StatusBadRequest, "bad request: no service", nil)
 	}
 
-	if v := q.Get("type"); v != "" {
-		pt := profile.ProfileTypeFromString(v)
-		if pt == profile.UnknownProfile {
-			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad profile type %q", v), err)
-		}
+	if pt, err := getProfileType(q); err != nil {
+		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad profile type %q", q.Get("type")), err)
+	} else {
 		in.Type = pt
 	}
 
@@ -149,11 +193,9 @@ func readGetProfileRequest(in *profile.GetProfileRequest, r *http.Request) (err 
 		in.To = tm
 	}
 
-	if v := q.Get("labels"); v != "" {
-		labels, err := readLabels(v)
-		if err != nil {
-			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad labels %q", v), err)
-		}
+	if labels, err := getLabels(q); err != nil {
+		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad labels %q", q.Get("labels")), err)
+	} else {
 		in.Labels = labels
 	}
 

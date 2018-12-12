@@ -18,7 +18,6 @@ import (
 
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/retry"
-	"github.com/rs/xid"
 )
 
 const DefaultCollectorAddr = "http://localhost:10100"
@@ -60,16 +59,15 @@ type agent struct {
 	HeapProfile     bool
 	MuxProfile      bool
 
-	labels map[string]string
+	service    string
+	buildID    string
+	agentToken string
+	labels     map[string]string
 
 	logf func(format string, v ...interface{})
 
 	rawClient     httpClient
 	collectorAddr string
-	// mu protects reqBody which is to encode JSON payload
-	mu      sync.Mutex
-	reqBody bytes.Buffer
-	reqEnc  *json.Encoder
 
 	tick time.Duration
 	stop chan struct{} // signals the beginning of stop
@@ -80,6 +78,7 @@ func New(service string, opts ...Option) *agent {
 	a := &agent{
 		ProfileDuration: defaultDuration,
 
+		service:   service,
 		labels:    make(map[string]string),
 		rawClient: http.DefaultClient,
 
@@ -94,16 +93,27 @@ func New(service string, opts ...Option) *agent {
 		opt(a)
 	}
 
-	a.labels[profile.LabelService] = service
-	a.labels[profile.LabelID] = calcBuildID(a)
-	a.labels[profile.LabelGeneration] = calcGeneration()
-
-	a.reqEnc = json.NewEncoder(&a.reqBody)
-
 	return a
 }
 
-func calcBuildID(a *agent) string {
+func (a *agent) Start(ctx context.Context) {
+	a.buildID = a.getBuildID()
+
+	if err := a.registerAgent(ctx); err != nil {
+		a.logf("failed to register agent: %v", err)
+		return
+	}
+
+	go a.collectAndSend(ctx)
+}
+
+func (a *agent) Stop() error {
+	close(a.stop)
+	<-a.done
+	return nil
+}
+
+func (a *agent) getBuildID() string {
 	prog := os.Args[0]
 	f, err := os.Open(prog)
 	if err != nil {
@@ -120,18 +130,56 @@ func calcBuildID(a *agent) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func calcGeneration() string {
-	guid := xid.New()
-	return guid.String()
-}
+func (a *agent) registerAgent(ctx context.Context) error {
+	var labels bytes.Buffer
+	{
+		first := true
+		for k, v := range a.labels {
+			if !first {
+				labels.WriteByte(',')
+			}
+			first = false
+			labels.WriteString(url.QueryEscape(k))
+			labels.WriteByte('=')
+			labels.WriteString(url.QueryEscape(v))
+		}
+	}
 
-func (a *agent) Start(ctx context.Context) {
-	go a.collectAndSend(ctx)
-}
+	q := url.Values{}
+	q.Set("service", a.service)
+	q.Set("id", a.buildID)
+	q.Set("labels", labels.String())
 
-func (a *agent) Stop() error {
-	close(a.stop)
-	<-a.done
+	surl := a.collectorAddr + "/api/0/profile?" + q.Encode()
+	req, err := http.NewRequest(http.MethodPut, surl, nil)
+	if err != nil {
+		return err
+	}
+
+	var rawResp bytes.Buffer
+
+	req = req.WithContext(ctx)
+	err = retry.Do(
+		backoffMinDelay,
+		backoffMaxDelay,
+		func() error { return a.doRequest(req, &rawResp) },
+	)
+	if err != nil {
+		return err
+	}
+
+	resp := struct {
+		Token string `json:"token"`
+	}{}
+	if err := json.NewDecoder(&rawResp).Decode(&resp); err != nil {
+		return fmt.Errorf("could not decode response: %v", err)
+	}
+	if resp.Token == "" {
+		return fmt.Errorf("empty token in response: %s", rawResp.String())
+	}
+
+	a.agentToken = resp.Token
+
 	return nil
 }
 
@@ -157,36 +205,14 @@ func (a *agent) collectProfile(ctx context.Context, ptype profile.ProfileType, b
 	return nil
 }
 
-type profileReq struct {
-	Meta map[string]string `json:"meta"`
-	Data []byte            `json:"data"`
-}
-
 func (a *agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
-	preq := &profileReq{
-		Meta: make(map[string]string, len(a.labels)),
-		Data: buf.Bytes(),
-	}
+	q := url.Values{}
+	q.Set("id", a.buildID)
+	q.Set("token", a.agentToken)
+	q.Set("type", ptype.String())
 
-	for k, v := range a.labels {
-		if _, ok := preq.Meta[k]; !ok {
-			preq.Meta[k] = v
-		}
-	}
-
-	preq.Meta[profile.LabelType] = ptype.MarshalString()
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	a.reqBody.Reset()
-
-	if err := a.reqEnc.Encode(preq); err != nil {
-		return err
-	}
-
-	surl := a.collectorAddr + "/api/v0/profile"
-	req, err := http.NewRequest(http.MethodPost, surl, &a.reqBody)
+	surl := a.collectorAddr + "/api/0/profile?" + q.Encode()
+	req, err := http.NewRequest(http.MethodPost, surl, buf)
 	if err != nil {
 		return err
 	}
@@ -195,11 +221,11 @@ func (a *agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf 
 	return retry.Do(
 		backoffMinDelay,
 		backoffMaxDelay,
-		func() error { return a.doRequest(req) },
+		func() error { return a.doRequest(req, nil) },
 	)
 }
 
-func (a *agent) doRequest(req *http.Request) error {
+func (a *agent) doRequest(req *http.Request, v io.Writer) error {
 	resp, err := a.rawClient.Do(req)
 	if err, ok := err.(*url.Error); ok && err.Err == context.Canceled {
 		return retry.Cancel(err)
@@ -208,15 +234,22 @@ func (a *agent) doRequest(req *http.Request) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 500 {
+	if resp.StatusCode >= 400 {
 		respBody, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("unexpected respose %s: %v", resp.Status, err)
 		}
-		return fmt.Errorf("unexpected respose from collector %s: %q", resp.Status, respBody)
-	} else if resp.StatusCode >= 400 {
-		return retry.Cancel(fmt.Errorf("bad client request: collector responded with %s", resp.Status))
+		if resp.StatusCode >= 500 {
+			return fmt.Errorf("unexpected respose from collector %s: %s", resp.Status, respBody)
+		}
+		return retry.Cancel(fmt.Errorf("bad client request: collector responded with %s: %s", resp.Status, respBody))
 	}
+
+	if v != nil {
+		_, err := io.Copy(v, resp.Body)
+		return err
+	}
+
 	return nil
 }
 
@@ -259,20 +292,20 @@ func (a *agent) collectAndSend(ctx context.Context) {
 var timersPool = sync.Pool{}
 
 func sleep(d time.Duration, cancel <-chan struct{}) {
-	t, _ := timersPool.Get().(*time.Timer)
-	if t == nil {
-		t = time.NewTimer(d)
+	timer, _ := timersPool.Get().(*time.Timer)
+	if timer == nil {
+		timer = time.NewTimer(d)
 	} else {
-		t.Reset(d)
+		timer.Reset(d)
 	}
 
 	select {
-	case <-t.C:
+	case <-timer.C:
 	case <-cancel:
-		if !t.Stop() {
-			<-t.C
+		if !timer.Stop() {
+			<-timer.C
 		}
 	}
 
-	timersPool.Put(t)
+	timersPool.Put(timer)
 }

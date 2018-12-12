@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"sync"
 
+	"github.com/profefe/profefe/pkg/collector"
 	"github.com/profefe/profefe/pkg/profile"
 )
 
@@ -92,14 +93,14 @@ func (s *Storage) Get(ctx context.Context, dgst profile.Digest) (*profile.Profil
 func (s *Storage) byDigest(_ context.Context, dgst profile.Digest) (p storageItem, err error) {
 	p, ok := s.storage[dgst]
 	if !ok {
-		err = profile.ErrNotFound
+		err = collector.ErrNotFound
 	}
 	return p, err
 }
 
 func (s *Storage) Query(ctx context.Context, query *profile.QueryRequest) (ps []*profile.Profile, err error) {
 	if query == nil {
-		return nil, profile.ErrNotFound
+		return nil, collector.ErrNotFound
 	}
 
 	s.mu.RLock()
@@ -137,7 +138,7 @@ func (s *Storage) Query(ctx context.Context, query *profile.QueryRequest) (ps []
 	}
 
 	if len(ps) == 0 {
-		return nil, profile.ErrNotFound
+		return nil, collector.ErrNotFound
 	}
 
 	return ps, nil

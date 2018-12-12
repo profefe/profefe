@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 )
@@ -39,7 +38,7 @@ func ReplyOK(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 
-	io.WriteString(w, `{"code":"200"}`)
+	io.WriteString(w, `{"code":200}`)
 }
 
 func ReplyError(w http.ResponseWriter, err error) {
@@ -65,9 +64,4 @@ func ReplyError(w http.ResponseWriter, err error) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		io.WriteString(w, `{"code":`+strconv.Itoa(http.StatusInternalServerError)+`,"error":"`+err.Error()+`"}`)
 	}
-
-	if origErr, _ := err.(causer); origErr != nil {
-		err = origErr.Cause()
-	}
-	log.Printf("request failed: %v\n", err)
 }

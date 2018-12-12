@@ -5,15 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/google/pprof/profile"
 	"github.com/profefe/profefe/pkg/logger"
-)
-
-var (
-	ErrNotFound = errors.New("profile not found")
-	ErrEmpty    = errors.New("profile is empty")
 )
 
 type Repository struct {
@@ -28,35 +24,96 @@ func NewRepository(log *logger.Logger, st Storage) *Repository {
 	}
 }
 
-func (repo *Repository) ListProfiles(ctx context.Context) ([]*Profile, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
 type CreateProfileRequest struct {
-	Meta map[string]interface{} `json:"meta"`
-	Data []byte                 `json:"data"`
+	ID      string
+	Service string
+	Labels  Labels
 }
 
-func (repo *Repository) CreateProfile(ctx context.Context, req *CreateProfileRequest) (*Profile, error) {
-	if len(req.Data) == 0 {
-		return nil, ErrEmpty
+func (req *CreateProfileRequest) Validate() error {
+	if req == nil {
+		return errors.New("nil request")
 	}
 
-	pprof, err := profile.ParseData(req.Data)
+	if req.ID == "" {
+		return fmt.Errorf("id empty: req %v", req)
+	}
+	if req.Service == "" {
+		return fmt.Errorf("service empty: req %v", req)
+	}
+	return nil
+}
+
+func (repo *Repository) CreateProfile(ctx context.Context, req *CreateProfileRequest) (token string, err error) {
+	service := NewService(req.Service, req.ID, req.Labels)
+	prof := &Profile{
+		CreatedAt:  time.Now().UTC(),
+		ReceivedAt: time.Now().UTC(),
+		Service:    service,
+	}
+
+	if err := repo.storage.Create(ctx, prof); err != nil {
+		return "", err
+	}
+
+	repo.logger.Debugw("create profile", "profile", prof)
+
+	return service.Token.String(), nil
+}
+
+type UpdateProfileRequest struct {
+	ID    string
+	Token string
+	Type  ProfileType
+}
+
+func (req *UpdateProfileRequest) Validate() error {
+	if req == nil {
+		return errors.New("nil request")
+	}
+
+	if req.ID == "" {
+		return fmt.Errorf("id empty: req: %v", req)
+	}
+	if req.Token == "" {
+		return fmt.Errorf("token empty: req: %v", req)
+	}
+	if req.Type == UnknownProfile {
+		return fmt.Errorf("unknown profile type %s: req %v", req.Type, req)
+	}
+	return nil
+}
+
+func (repo *Repository) UpdateProfile(ctx context.Context, req *UpdateProfileRequest, r io.Reader) error {
+	// TODO(narqo) cap the profile bytes with some sane defaults
+	// r = io.LimitReader(r, ??)
+
+	var buf bytes.Buffer
+	pprof, err := profile.Parse(io.TeeReader(r, &buf))
 	if err != nil {
-		return nil, fmt.Errorf("could not parse profile: %v", err)
+		return fmt.Errorf("could not parse profile: %v", err)
 	}
 
-	prof := NewWithMeta(pprof, req.Meta)
-
-	err = repo.storage.Create(ctx, prof, bytes.NewReader(req.Data))
-	if err != nil {
-		return nil, err
+	prof := &Profile{
+		Type:       req.Type,
+		ReceivedAt: time.Now().UTC(),
+		Service: &Service{
+			BuildID: req.ID,
+			Token:   TokenFromString(req.Token),
+		},
 	}
 
-	repo.logger.Debugw("create", "profile", prof)
+	if pprof.TimeNanos > 0 {
+		prof.CreatedAt = time.Unix(0, pprof.TimeNanos).UTC()
+	}
 
-	return prof, nil
+	if err := repo.storage.Update(ctx, prof, &buf); err != nil {
+		return err
+	}
+
+	repo.logger.Debugw("update profile", "profile", prof)
+
+	return nil
 }
 
 type GetProfileRequest struct {
@@ -69,25 +126,25 @@ type GetProfileRequest struct {
 
 func (req *GetProfileRequest) Validate() error {
 	if req == nil {
-		return errors.New("nil query request")
+		return errors.New("nil request")
 	}
 
 	if req.Service == "" {
-		return fmt.Errorf("no service: query %v", req)
+		return fmt.Errorf("no service: req %v", req)
 	}
 	if req.Type == UnknownProfile {
-		return fmt.Errorf("unknown profile type %s: query %v", req.Type, req)
+		return fmt.Errorf("unknown profile type %s: req %v", req.Type, req)
 	}
 	if req.From.IsZero() || req.To.IsZero() {
-		return fmt.Errorf("createdAt time zero: query %v", req)
+		return fmt.Errorf("createdAt time zero: req %v", req)
 	}
 	if req.To.Before(req.From) {
-		return fmt.Errorf("createdAt time min after max: query %v", req)
+		return fmt.Errorf("createdAt time min after max: req %v", req)
 	}
 	return nil
 }
 
-func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) (*Profile, error) {
+func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) (*Profile, io.Reader, error) {
 	query := &QueryRequest{
 		Service:      req.Service,
 		Type:         req.Type,
@@ -97,36 +154,55 @@ func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) 
 	}
 	ps, err := repo.storage.Query(ctx, query)
 	if err != nil {
-		return nil, err
-	} else if len(ps) == 0 {
-		return nil, ErrNotFound
+		return nil, nil, err
+	}
+	if len(ps) == 0 {
+		return nil, nil, ErrNotFound
 	}
 
 	pprofs := make([]*profile.Profile, 0, len(ps))
 	for _, p := range ps {
 		rc, err := repo.storage.Open(ctx, p.Digest)
 		if err != nil {
-			return nil, fmt.Errorf("could not open profile %s: %v", p.Digest, err)
+			return nil, nil, fmt.Errorf("could not open profile %s: %v", p.Digest, err)
 		}
 		pprof, err := profile.Parse(rc)
 		rc.Close()
 		if err != nil {
-			return nil, fmt.Errorf("could not parse profile %s: %v", p.Digest, err)
+			return nil, nil, fmt.Errorf("could not parse profile %s: %v", p.Digest, err)
 		}
 		pprofs = append(pprofs, pprof)
 	}
 
 	pprof, err := profile.Merge(pprofs)
 	if err != nil {
-		return nil, fmt.Errorf("could not merge %d profiles: %v", len(pprofs), err)
+		return nil, nil, fmt.Errorf("could not merge %d profiles: %v", len(pprofs), err)
 	}
 
-	prof := New(pprof)
 	// copy only fields that make sense for a merged profile
-	prof.Service = ps[0].Service
-	prof.Type = ps[0].Type
+	prof := &Profile{
+		Type: ps[0].Type,
+		Service: &Service{
+			Name: req.Service,
+		},
+	}
 
-	repo.logger.Debugw("get", "profile", prof)
+	return prof, &pprofReader{prof: pprof}, nil
+}
 
-	return prof, nil
+type pprofReader struct {
+	buf  bytes.Buffer
+	prof *profile.Profile
+}
+
+func (r *pprofReader) Read(p []byte) (n int, err error) {
+	if err := r.prof.Write(&r.buf); err != nil {
+		return 0, err
+	}
+	return r.buf.Read(p)
+}
+
+func (r *pprofReader) WriteTo(w io.Writer) (n int64, err error) {
+	err = r.prof.Write(w)
+	return 0, err
 }

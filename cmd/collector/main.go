@@ -43,17 +43,6 @@ func main() {
 
 	log := logger.New(baseLogger)
 
-	agentLogger := log.With("svc", "agent")
-	agent.Start(
-		"profefe_collector",
-		agent.WithCollector("http://"+addr),
-		agent.WithCPUProfile(20*time.Second),
-		agent.WithLabels("az", "home", "host", "localhost", "version", version.Version, "commit", version.Commit, "build", version.BuildTime),
-		agent.WithLogger(func(format string, args ...interface{}) {
-			agentLogger.Debugf("profefe: %s", fmt.Sprintf(format, args...))
-		}),
-	)
-
 	if err := run(ctx, log); err != nil {
 		log.Fatal(err)
 	}
@@ -112,6 +101,18 @@ func run(ctx context.Context, log *logger.Logger) error {
 		log.Infow("server is running", "addr", addr)
 		errc <- server.ListenAndServe()
 	}()
+
+	// start agent after server, because it sends to itself
+	agentLogger := log.With("svc", "profefe")
+	agent.Start(
+		"profefe_collector",
+		agent.WithCollector("http://"+addr),
+		agent.WithCPUProfile(20*time.Second),
+		agent.WithLabels("az", "home", "host", "localhost", "version", version.Version, "commit", version.Commit, "build", version.BuildTime),
+		agent.WithLogger(func(format string, args ...interface{}) {
+			agentLogger.Debugf(format, args...)
+		}),
+	)
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)

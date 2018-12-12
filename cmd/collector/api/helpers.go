@@ -1,13 +1,26 @@
 package api
 
 import (
+	"fmt"
 	"net/url"
 	"sort"
 
 	"github.com/profefe/profefe/pkg/profile"
 )
 
-func readLabels(s string) (labels profile.Labels, err error) {
+func getProfileType(q url.Values) (pt profile.ProfileType, err error) {
+	if v := q.Get("type"); v != "" {
+		pt = profile.ProfileTypeFromString(v)
+		if pt == profile.UnknownProfile {
+			err = fmt.Errorf("bad profile type %v", pt)
+		}
+	}
+	return pt, err
+}
+
+func getLabels(q url.Values) (labels profile.Labels, err error) {
+	s := q.Get("labels")
+
 	var chunk string
 	for s != "" {
 		chunk, s = split2(s, ',')

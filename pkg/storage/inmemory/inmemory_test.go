@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/profefe/profefe/pkg/collector"
 	"github.com/profefe/profefe/pkg/profile"
 )
 
@@ -43,7 +44,7 @@ func TestStorage_Open(t *testing.T) {
 	}
 
 	_, err = st.Open(context.Background(), "blah")
-	if err != profile.ErrNotFound {
+	if err != collector.ErrNotFound {
 		t.Fatalf("Open: got %v, want not found", err)
 	}
 }
@@ -60,7 +61,7 @@ func TestStorage_Get(t *testing.T) {
 	}
 
 	_, err = st.Get(context.Background(), "blah")
-	if err != profile.ErrNotFound {
+	if err != collector.ErrNotFound {
 		t.Fatalf("Get: got %v, want not found", err)
 	}
 }
@@ -146,7 +147,7 @@ func TestStorage_Delete(t *testing.T) {
 	}
 
 	_, err = st.Get(context.Background(), inProf.Digest)
-	if err != profile.ErrNotFound {
+	if err != collector.ErrNotFound {
 		t.Fatalf("Get: got %v after Delete, want not found", err)
 	}
 

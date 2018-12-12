@@ -22,7 +22,7 @@ func hstoreFromLabels(labels profile.Labels) hstore.Hstore {
 }
 
 // TODO implement sql.Scanner in profile.Labels
-func hstoreToLabes(h hstore.Hstore, labels profile.Labels) profile.Labels {
+func hstoreToLabels(h hstore.Hstore, labels profile.Labels) profile.Labels {
 	if len(h.Map) == 0 {
 		return labels
 	}

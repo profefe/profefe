@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/profefe/profefe/pkg/collector"
 	"github.com/profefe/profefe/pkg/logger"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage/inmemory"
@@ -13,7 +14,7 @@ import (
 func TestRepository_CreateProfile(t *testing.T) {
 	log := logger.NewNop()
 	st := inmemory.New()
-	repo := profile.NewRepository(log, st)
+	repo := collector.NewRepository(log, st)
 
 	meta := map[string]interface{}{
 		"service": "testapp",
@@ -26,7 +27,7 @@ func TestRepository_CreateProfile(t *testing.T) {
 
 	ctx := context.Background()
 
-	req := &profile.CreateProfileRequest{
+	req := &collector.UpdateProfileRequest{
 		Meta: meta,
 		Data: data,
 	}

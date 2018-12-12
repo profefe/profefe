@@ -13,24 +13,24 @@ import (
 )
 
 const (
-	queryInsertServiceOnce = `
-		INSERT INTO services(build_id, generation, name, labels)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (build_id, generation) DO NOTHING`
+	queryInsertService = `
+		INSERT INTO services(name, build_id, token, created_at, labels)
+		VALUES ($1, $2, $3, $4, $5)`
 	queryInsertProfile = `
-		INSERT INTO profiles_pprof(digest, type, size, created_at, received_at, build_id, generation)
+		INSERT INTO profiles_pprof(digest, type, size, build_id, token, created_at, received_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)`
-	querySelectByCreatedAt = `
+	querySelectProfileByCreatedAt = `
 		SELECT
 			p.digest,
+			p.type,
 			p.size,
 			p.created_at,
 			p.received_at,
 			p.build_id,
-			p.generation,
+			p.token,
 			s.labels
 		FROM profiles_pprof p, services s
-		WHERE p.build_id = s.build_id AND p.generation = s.generation 
+		WHERE p.build_id = s.build_id AND p.token = s.token 
 		AND s.name = $1 AND p.type = $2
 		%s
 		AND p.created_at BETWEEN $3 AND $4
@@ -52,67 +52,71 @@ func New(db *sql.DB, fs *filestore.FileStore) (profile.Storage, error) {
 	return s, nil
 }
 
-func (s *pqStorage) Create(ctx context.Context, p *profile.Profile, r io.Reader) error {
-	dgst, size, err := s.fs.Save(ctx, r)
+func (st *pqStorage) Create(ctx context.Context, p *profile.Profile) error {
+	_, err := st.db.ExecContext(
+		ctx,
+		queryInsertService,
+		p.Service.Name,
+		p.Service.BuildID,
+		p.Service.Token.String(),
+		p.CreatedAt,
+		hstoreFromLabels(p.Service.Labels),
+	)
+	if err != nil {
+		err = fmt.Errorf("pg: could not insert %+v into services: %v", p, err)
+	}
+	return err
+}
+
+func (st *pqStorage) Update(ctx context.Context, p *profile.Profile, r io.Reader) error {
+	dgst, size, err := st.fs.Save(ctx, r)
 	if err != nil {
 		return err
 	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() {
-		var txErr error
-		if err == nil {
-			txErr = tx.Commit()
-		} else {
-			txErr = tx.Rollback()
-		}
-		if txErr != nil {
-			err = txErr
-		}
-	}()
-
-	_, err = tx.ExecContext(ctx, queryInsertServiceOnce, p.BuildID, p.Generation, p.Service, hstoreFromLabels(p.Labels))
-	if err != nil {
-		return fmt.Errorf("could not upsert service: %v", err)
+	if size == 0 {
+		return profile.ErrEmpty
 	}
 
-	_, err = tx.ExecContext(ctx, queryInsertProfile, dgst, p.Type, size, p.CreatedAt, p.ReceivedAt, p.BuildID, p.Generation)
+	_, err = st.db.ExecContext(
+		ctx,
+		queryInsertProfile,
+		dgst,
+		p.Type,
+		size,
+		p.Service.BuildID,
+		p.Service.Token.String(),
+		p.CreatedAt,
+		p.ReceivedAt,
+	)
 	if err != nil {
-		return fmt.Errorf("could not insert profile: %v", err)
+		return fmt.Errorf("pg: could not insert %+v into profiles: %v", p, err)
 	}
-
-	// TODO(narqo): updating profile inside the Create seems smelly; needs to think more about the API
-	p.Digest = dgst
-	p.Size = size
 
 	return nil
 }
 
-func (s *pqStorage) Open(ctx context.Context, dgst profile.Digest) (io.ReadCloser, error) {
-	return s.fs.Get(ctx, dgst)
+func (st *pqStorage) Open(ctx context.Context, dgst profile.Digest) (io.ReadCloser, error) {
+	return st.fs.Get(ctx, dgst)
 }
 
-func (s *pqStorage) Get(ctx context.Context, dgst profile.Digest) (*profile.Profile, error) {
+func (st *pqStorage) Get(ctx context.Context, dgst profile.Digest) (*profile.Profile, error) {
 	panic("implement me")
 }
 
-func (s *pqStorage) Query(ctx context.Context, queryReq *profile.QueryRequest) ([]*profile.Profile, error) {
+func (st *pqStorage) Query(ctx context.Context, queryReq *profile.QueryRequest) ([]*profile.Profile, error) {
 	if queryReq.Limit == 0 {
 		queryReq.Limit = defaultProfilesLimit
 	}
 
-	ps, err := s.queryByCreatedAt(ctx, queryReq)
+	ps, err := st.queryByCreatedAt(ctx, queryReq)
 	if err != nil {
 		err = fmt.Errorf("could not query profiles: %v", err)
 	}
 	return ps, err
 }
 
-func (s *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *profile.QueryRequest) ([]*profile.Profile, error) {
-	query := querySelectByCreatedAt
+func (st *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *profile.QueryRequest) ([]*profile.Profile, error) {
+	query := querySelectProfileByCreatedAt
 	args := []interface{}{
 		queryReq.Service,
 		queryReq.Type,
@@ -138,7 +142,7 @@ func (s *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *profile.Quer
 		query += " LIMIT $" + n
 	}
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := st.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -148,15 +152,21 @@ func (s *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *profile.Quer
 		ps       []*profile.Profile
 		hsLabels hstore.Hstore
 	)
-
 	for rows.Next() {
-		var p profile.Profile
-		err = rows.Scan(&p.Digest, &p.Size, &p.CreatedAt, &p.ReceivedAt, &p.BuildID, &p.Generation, &hsLabels)
+		var (
+			p              profile.Profile
+			buildID, token string
+		)
+		err = rows.Scan(&p.Digest, &p.Type, &p.Size, &p.CreatedAt, &p.ReceivedAt, &buildID, &token, &hsLabels)
 		if err != nil {
 			return nil, err
 		}
 
-		p.Labels = hstoreToLabes(hsLabels, p.Labels)
+		p.Service = &profile.Service{
+			BuildID: buildID,
+			Token:   profile.TokenFromString(token),
+			Labels:  hstoreToLabels(hsLabels, nil),
+		}
 
 		ps = append(ps, &p)
 	}
@@ -167,6 +177,6 @@ func (s *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *profile.Quer
 	return ps, nil
 }
 
-func (s *pqStorage) Delete(ctx context.Context, dgst profile.Digest) error {
+func (st *pqStorage) Delete(ctx context.Context, dgst profile.Digest) error {
 	panic("implement me")
 }
