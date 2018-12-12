@@ -7,15 +7,18 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/profefe/profefe/pkg/logger"
 	"github.com/profefe/profefe/pkg/profile"
 )
 
 type APIHandler struct {
+	logger      *logger.Logger
 	profilePepo *profile.Repository
 }
 
-func NewAPIHandler(profileRepo *profile.Repository) *APIHandler {
+func NewAPIHandler(log *logger.Logger, profileRepo *profile.Repository) *APIHandler {
 	return &APIHandler{
+		logger:      log,
 		profilePepo: profileRepo,
 	}
 }
@@ -88,7 +91,7 @@ func (api *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) 
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
 	}
 
-	//log.Printf("request: %+v\n", getReq)
+	api.logger.Debugf("req %+v", getReq)
 
 	p, err := api.profilePepo.GetProfile(r.Context(), getReq)
 	if err == profile.ErrNotFound {

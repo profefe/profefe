@@ -24,62 +24,62 @@ type Profile struct {
 	Digest Digest // as for now, sha1 of data stored in blob storage
 	Size   int64  // size of data stored in blob storage
 
-	prof *profile.Profile
+	pprof *profile.Profile
 }
 
 func New(prof *profile.Profile) *Profile {
 	return NewWithMeta(prof, nil)
 }
 
-func NewWithMeta(prof *profile.Profile, meta map[string]interface{}) *Profile {
-	p := &Profile{
-		prof:       prof,
+func NewWithMeta(pprof *profile.Profile, meta map[string]interface{}) *Profile {
+	prof := &Profile{
+		pprof:      pprof,
 		ReceivedAt: time.Now().UTC(),
 	}
 
-	p.parseMeta(meta)
+	prof.parseMeta(meta)
 
-	if prof.TimeNanos > 0 {
-		p.CreatedAt = time.Unix(0, prof.TimeNanos).UTC()
+	if pprof.TimeNanos > 0 {
+		prof.CreatedAt = time.Unix(0, pprof.TimeNanos).UTC()
 	}
 
-	return p
+	return prof
 }
 
-func (p *Profile) Read(buf []byte) (int, error) {
+func (prof *Profile) Read(buf []byte) (int, error) {
 	w := bytes.NewBuffer(buf)
-	err := p.prof.Write(w)
+	err := prof.pprof.Write(w)
 	return w.Len(), err
 }
 
-func (p *Profile) WriteTo(w io.Writer) (int64, error) {
-	err := p.prof.Write(w)
+func (prof *Profile) WriteTo(w io.Writer) (int64, error) {
+	err := prof.pprof.Write(w)
 	// TODO(narqo): return proper size for io.WriterTo implementation
 	return 0, err
 }
 
-func (p *Profile) parseMeta(meta map[string]interface{}) {
-	if p.Labels == nil {
-		p.Labels = make(Labels, 0, len(meta))
+func (prof *Profile) parseMeta(meta map[string]interface{}) {
+	if prof.Labels == nil {
+		prof.Labels = make(Labels, 0, len(meta))
 	}
 
 	for k, rawVal := range meta {
 		val, _ := rawVal.(string)
 		switch k {
 		case LabelService:
-			p.Service = val
+			prof.Service = val
 		case LabelID:
-			p.BuildID = val
+			prof.BuildID = val
 		case LabelGeneration:
-			p.Generation = val
+			prof.Generation = val
 		case LabelType:
-			p.Type.UnmarshalString(val)
+			prof.Type.UnmarshalString(val)
 		default:
-			p.Labels = append(p.Labels, Label{k, val})
+			prof.Labels = append(prof.Labels, Label{k, val})
 		}
 	}
 
-	if len(p.Labels) > 0 {
-		sort.Sort(p.Labels)
+	if len(prof.Labels) > 0 {
+		sort.Sort(prof.Labels)
 	}
 }

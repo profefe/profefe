@@ -15,15 +15,15 @@ func NewTestProfile(t testing.TB, filename string, meta map[string]interface{}) 
 		t.Fatalf("failed to open test profile: %v", err)
 	}
 
-	prof, err := profile.ParseData(data)
+	pprof, err := profile.ParseData(data)
 	if err != nil {
 		t.Fatalf("failed parsing profile data: %v", err)
 	}
 
-	p := NewWithMeta(prof, meta)
-	if p == nil {
+	prof := NewWithMeta(pprof, meta)
+	if prof == nil {
 		t.Fatal("unexpected empty profile")
 	}
 
-	return p, bytes.NewReader(data)
+	return prof, bytes.NewReader(data)
 }

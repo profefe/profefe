@@ -5,10 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/google/pprof/profile"
+	"github.com/profefe/profefe/pkg/logger"
 )
 
 var (
@@ -17,11 +17,13 @@ var (
 )
 
 type Repository struct {
+	logger  *logger.Logger
 	storage Storage
 }
 
-func NewRepository(st Storage) *Repository {
+func NewRepository(log *logger.Logger, st Storage) *Repository {
 	return &Repository{
+		logger:  log,
 		storage: st,
 	}
 }
@@ -40,21 +42,21 @@ func (repo *Repository) CreateProfile(ctx context.Context, req *CreateProfileReq
 		return nil, ErrEmpty
 	}
 
-	prof, err := profile.ParseData(req.Data)
+	pprof, err := profile.ParseData(req.Data)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse profile: %v", err)
 	}
 
-	p := NewWithMeta(prof, req.Meta)
+	prof := NewWithMeta(pprof, req.Meta)
 
-	err = repo.storage.Create(ctx, p, bytes.NewReader(req.Data))
+	err = repo.storage.Create(ctx, prof, bytes.NewReader(req.Data))
 	if err != nil {
 		return nil, err
 	}
 
-	log.Printf("DEBUG create profile: %+v\n", p)
+	repo.logger.Debugw("create", "profile", prof)
 
-	return p, nil
+	return prof, nil
 }
 
 type GetProfileRequest struct {
@@ -100,31 +102,31 @@ func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) 
 		return nil, ErrNotFound
 	}
 
-	profSrcs := make([]*profile.Profile, 0, len(ps))
+	pprofs := make([]*profile.Profile, 0, len(ps))
 	for _, p := range ps {
-		pr, err := repo.storage.Open(ctx, p.Digest)
+		rc, err := repo.storage.Open(ctx, p.Digest)
 		if err != nil {
 			return nil, fmt.Errorf("could not open profile %s: %v", p.Digest, err)
 		}
-		prof, err := profile.Parse(pr)
-		pr.Close()
+		pprof, err := profile.Parse(rc)
+		rc.Close()
 		if err != nil {
 			return nil, fmt.Errorf("could not parse profile %s: %v", p.Digest, err)
 		}
-		profSrcs = append(profSrcs, prof)
+		pprofs = append(pprofs, pprof)
 	}
 
-	prof, err := profile.Merge(profSrcs)
+	pprof, err := profile.Merge(pprofs)
 	if err != nil {
-		return nil, fmt.Errorf("could not merge %d profiles: %v", len(profSrcs), err)
+		return nil, fmt.Errorf("could not merge %d profiles: %v", len(pprofs), err)
 	}
 
-	p := New(prof)
+	prof := New(pprof)
 	// copy only fields that make sense for a merged profile
-	p.Service = ps[0].Service
-	p.Type = ps[0].Type
+	prof.Service = ps[0].Service
+	prof.Type = ps[0].Type
 
-	log.Printf("DEBUG get profile: %+v\n", p)
+	repo.logger.Debugw("get", "profile", prof)
 
-	return p, nil
+	return prof, nil
 }

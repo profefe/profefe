@@ -7,23 +7,25 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 
+	"github.com/profefe/profefe/pkg/logger"
 	"github.com/profefe/profefe/pkg/profile"
 )
 
 type FileStore struct {
+	logger   *logger.Logger
 	dataRoot string
 }
 
-func New(dataRoot string) (*FileStore, error) {
+func New(log *logger.Logger, dataRoot string) (*FileStore, error) {
 	err := os.MkdirAll(dataRoot, 0755)
 	if err != nil {
 		return nil, fmt.Errorf("could not create data root %q: %v", dataRoot, err)
 	}
 	fs := &FileStore{
+		logger:   log,
 		dataRoot: dataRoot,
 	}
 	return fs, nil
@@ -74,7 +76,7 @@ func (fs *FileStore) Save(ctx context.Context, r io.Reader) (dgst profile.Digest
 	}
 
 	size = int64(n)
-	log.Printf("DEBUG put: dgst %s, uri %s, size %d\n", dgst, uri, size)
+	fs.logger.Debugw("put", "dgst", dgst, "uri", uri, "size", size)
 
 	return dgst, size, nil
 }

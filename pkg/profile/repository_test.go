@@ -5,13 +5,15 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/profefe/profefe/pkg/logger"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage/inmemory"
 )
 
 func TestRepository_CreateProfile(t *testing.T) {
+	log := logger.NewNop()
 	st := inmemory.New()
-	repo := profile.NewRepository(st)
+	repo := profile.NewRepository(log, st)
 
 	meta := map[string]interface{}{
 		"service": "testapp",

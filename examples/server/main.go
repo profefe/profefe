@@ -21,7 +21,7 @@ func main() {
 			"instance", "1",
 			"version", version.Version,
 			"commit", version.Commit,
-			"build-date", version.BuildDate,
+			"build-date", version.BuildTime,
 		),
 	)
 	defer agent.Stop()

@@ -6,7 +6,6 @@ const (
 	LabelID         = "id"
 	LabelGeneration = "generation"
 	LabelType       = "type"
-	LabelTime       = "ts"
 )
 
 type Label struct {
