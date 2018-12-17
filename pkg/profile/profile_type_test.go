@@ -1,6 +1,11 @@
 package profile
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 func TestProfileTypeFromString(t *testing.T) {
 	cases := []struct {
@@ -12,8 +17,19 @@ func TestProfileTypeFromString(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		if got := ProfileTypeFromString(tc.in); tc.want != got {
-			t.Errorf("ProfileTypeFromString(%q): got %v, want %v", tc.in, got, tc.want)
-		}
+		assert.Equal(t, tc.want, ProfileTypeFromString(tc.in))
+	}
+}
+
+func TestProfileType_MarshalUnmarshalString(t *testing.T) {
+	cases := []ProfileType{
+		CPUProfile,
+		UnknownProfile,
+	}
+
+	for _, want := range cases {
+		var got ProfileType
+		require.NoError(t, got.UnmarshalString(want.MarshalString()))
+		assert.Equalf(t, want, got, "type %v (%v)", want.String(), want.MarshalString())
 	}
 }

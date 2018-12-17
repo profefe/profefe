@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/profefe/profefe/pkg/collector"
 	"github.com/profefe/profefe/pkg/profile"
 )
 
