@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"flag"
 	"fmt"
 	"net/http"
 	"net/http/pprof"
@@ -15,27 +16,24 @@ import (
 	"github.com/profefe/profefe/agent"
 	"github.com/profefe/profefe/cmd/collector/api"
 	"github.com/profefe/profefe/cmd/collector/middleware"
+	"github.com/profefe/profefe/pkg/config"
 	"github.com/profefe/profefe/pkg/filestore"
 	"github.com/profefe/profefe/pkg/logger"
 	"github.com/profefe/profefe/pkg/profile"
-	pqstorage "github.com/profefe/profefe/pkg/storage/postgres"
+	pgstorage "github.com/profefe/profefe/pkg/storage/postgres"
 	"github.com/profefe/profefe/version"
 	"go.uber.org/zap"
 )
 
 const addr = ":10100"
 
-const (
-	defaultDataRoot = "/tmp/profefe"
-
-	postgresUser     = "postgres"
-	postgresPassword = "postgres"
-	postgresHost     = "127.0.0.1"
-	postgresDB       = "profiles"
-)
+const defaultDataRoot = "/tmp/profefe"
 
 func main() {
-	ctx := context.Background()
+	var conf config.Config
+	conf.RegisterFlags(flag.CommandLine)
+
+	flag.Parse()
 
 	// TODO: init base logger
 	baseLogger := zap.NewExample()
@@ -43,12 +41,12 @@ func main() {
 
 	log := logger.New(baseLogger)
 
-	if err := run(ctx, log); err != nil {
-		log.Fatal(err)
+	if err := run(context.Background(), log, conf); err != nil {
+		log.Error(err)
 	}
 }
 
-func run(ctx context.Context, log *logger.Logger) error {
+func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 	var profileRepo *profile.Repository
 	{
 		fs, err := filestore.New(log, defaultDataRoot)
@@ -56,14 +54,7 @@ func run(ctx context.Context, log *logger.Logger) error {
 			return fmt.Errorf("could not create file storage: %v", err)
 		}
 
-		dbURL := fmt.Sprintf(
-			"postgres://%s:%s@%s/%s?sslmode=disable",
-			postgresUser,
-			postgresPassword,
-			postgresHost,
-			postgresDB,
-		)
-		db, err := sql.Open("postgres", dbURL)
+		db, err := sql.Open("postgres", conf.Postgres.ConnString())
 		if err != nil {
 			return fmt.Errorf("could not connect to db: %v", err)
 		}
@@ -73,12 +64,12 @@ func run(ctx context.Context, log *logger.Logger) error {
 			return fmt.Errorf("could not ping db: %v", err)
 		}
 
-		pqStore, err := pqstorage.New(db, fs)
+		pgStorage, err := pgstorage.New(db, fs)
 		if err != nil {
-			return fmt.Errorf("could not create new pq storage: %v", err)
+			return fmt.Errorf("could not create new pg storage: %v", err)
 		}
 
-		profileRepo = profile.NewRepository(log, pqStore)
+		profileRepo = profile.NewRepository(log, pgStorage)
 	}
 
 	mux := http.NewServeMux()
