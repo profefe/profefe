@@ -1,131 +1,91 @@
 package inmemory
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
-	"fmt"
 	"io"
-	"io/ioutil"
 	"sync"
 
 	"github.com/profefe/profefe/pkg/profile"
 )
 
+type storageKey struct {
+	buildID string
+	token   profile.Token
+}
+
 type storageItem struct {
-	profile   *profile.Profile
-	labelsIdx map[profile.Label]struct{}
-	data      []byte
+	profiles  []*profile.Profile
+	labelsSet map[profile.Label]struct{}
 }
 
 type Storage struct {
 	mu      sync.RWMutex
-	storage map[profile.Digest]storageItem
+	storage map[storageKey]storageItem
 }
 
 var _ profile.Storage = (*Storage)(nil)
 
 func New() *Storage {
 	return &Storage{
-		storage: make(map[profile.Digest]storageItem),
+		storage: make(map[storageKey]storageItem),
 	}
 }
 
-func (s *Storage) Create(ctx context.Context, p *profile.Profile, r io.Reader) error {
-	data, err := ioutil.ReadAll(r)
-	if err != nil {
-		return err
-	}
-	dgst, err := s.getDigestFor(data)
-	if err != nil {
-		return err
-	}
-
-	dataCopy := make([]byte, len(data))
-	copy(dataCopy, data)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	p.Digest = dgst
-	p.Size = int64(len(data))
-
-	if _, ok := s.storage[p.Digest]; ok {
-		return fmt.Errorf("duplicate profile: %v", p)
-	}
-
-	labelsIdx := make(map[profile.Label]struct{})
-	for _, label := range p.Labels {
-		labelsIdx[label] = struct{}{}
-	}
-
-	s.storage[p.Digest] = storageItem{p, labelsIdx, dataCopy}
-
+func (st *Storage) Create(ctx context.Context, prof *profile.Profile) error {
 	return nil
 }
 
-func (s *Storage) Open(ctx context.Context, dgst profile.Digest) (io.ReadCloser, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	p, err := s.byDigest(ctx, dgst)
-	if err != nil {
-		return nil, err
-	}
-
-	return ioutil.NopCloser(bytes.NewReader(p.data)), nil
+func (st *Storage) Update(ctx context.Context, prof *profile.Profile, r io.Reader) error {
+	return nil
 }
 
-func (s *Storage) Get(ctx context.Context, dgst profile.Digest) (*profile.Profile, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	p, err := s.byDigest(ctx, dgst)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.profile, nil
+func (st *Storage) Open(ctx context.Context, dgst profile.Digest) (io.ReadCloser, error) {
+	return nil, nil
 }
 
-func (s *Storage) byDigest(_ context.Context, dgst profile.Digest) (p storageItem, err error) {
-	p, ok := s.storage[dgst]
+func (st *Storage) Get(ctx context.Context, dgst profile.Digest) (*profile.Profile, error) {
+	return nil, nil
+}
+
+func (st *Storage) byDigest(_ context.Context, dgst profile.Digest) (p storageItem, err error) {
+	p, ok := st.storage[dgst]
 	if !ok {
 		err = profile.ErrNotFound
 	}
 	return p, err
 }
 
-func (s *Storage) Query(ctx context.Context, query *profile.QueryRequest) (ps []*profile.Profile, err error) {
+func (st *Storage) Query(ctx context.Context, query *profile.QueryRequest) (profs []*profile.Profile, err error) {
 	if query == nil {
 		return nil, profile.ErrNotFound
 	}
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	st.mu.RLock()
+	defer st.mu.RUnlock()
 
-	for _, item := range s.storage {
-		p := item.profile
-		if query.Digest != "" && p.Digest != query.Digest {
+	for _, item := range st.storage {
+		prof := item.profile
+		if query.Digest != "" && prof.Digest != query.Digest {
 			continue
 		}
-		if query.Service != "" && p.Service != query.Service {
+		if query.Service != "" && prof.Service.Name != query.Service {
 			continue
 		}
-		if query.Type != profile.UnknownProfile && p.Type != query.Type {
+		if query.Type != profile.UnknownProfile && prof.Type != query.Type {
 			continue
 		}
-		if !query.CreatedAtMin.IsZero() && p.CreatedAt.Before(query.CreatedAtMin) {
+		if !query.CreatedAtMin.IsZero() && prof.CreatedAt.Before(query.CreatedAtMin) {
 			continue
 		}
-		if !query.CreatedAtMax.IsZero() && p.CreatedAt.After(query.CreatedAtMax) {
+		if !query.CreatedAtMax.IsZero() && prof.CreatedAt.After(query.CreatedAtMax) {
 			continue
 		}
 
 		ok := true
 		for _, label := range query.Labels {
-			if _, ok = item.labelsIdx[label]; !ok {
+			if _, ok = item.labelsSet[label]; !ok {
 				break
 			}
 		}
@@ -133,25 +93,24 @@ func (s *Storage) Query(ctx context.Context, query *profile.QueryRequest) (ps []
 			continue
 		}
 
-		ps = append(ps, p)
+		profs = append(profs, prof)
 	}
 
-	if len(ps) == 0 {
+	if len(profs) == 0 {
 		return nil, profile.ErrNotFound
 	}
 
-	return ps, nil
+	return profs, nil
 }
 
-func (s *Storage) Delete(ctx context.Context, dgst profile.Digest) error {
-	s.mu.Lock()
-	delete(s.storage, dgst)
-	s.mu.Unlock()
-
+func (st *Storage) Delete(ctx context.Context, dgst profile.Digest) error {
+	st.mu.Lock()
+	delete(st.storage, dgst)
+	st.mu.Unlock()
 	return nil
 }
 
-func (s *Storage) getDigestFor(data []byte) (profile.Digest, error) {
+func (st *Storage) getDigestFor(data []byte) (profile.Digest, error) {
 	h := sha1.New()
 	if _, err := h.Write(data); err != nil {
 		return "", err

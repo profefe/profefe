@@ -9,8 +9,16 @@
 
 [[constraint]]
   name = "github.com/rs/xid"
-  version = "^1.2.0"
+  version = "1.2.0"
+
+[[constraint]]
+  name = "go.uber.org/zap"
+  version = "1.9.0"
 
 [[constraint]]
   branch = "master"
   name = "github.com/google/pprof"
+
+[[constraint]]
+  name = "github.com/stretchr/testify"
+  version = "1.2.0"

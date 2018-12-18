@@ -2,8 +2,14 @@ package profile
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
+)
+
+var (
+	ErrNotFound = errors.New("profile not found")
+	ErrEmpty    = errors.New("profile is empty")
 )
 
 type QueryRequest struct {
@@ -22,7 +28,8 @@ type Queryer interface {
 
 type Storage interface {
 	Queryer
-	Create(ctx context.Context, p *Profile, r io.Reader) error
+	Create(ctx context.Context, prof *Profile) error
+	Update(ctx context.Context, prof *Profile, r io.Reader) error
 	Open(ctx context.Context, dgst Digest) (io.ReadCloser, error)
 	Delete(ctx context.Context, dgst Digest) error
 }

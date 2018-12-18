@@ -1,85 +1,48 @@
 package profile
 
 import (
-	"bytes"
-	"io"
-	"sort"
 	"time"
 
-	"github.com/google/pprof/profile"
+	"github.com/rs/xid"
 )
 
 type Digest string
 
 type Profile struct {
-	Service    string // adjust_server, callback_worker, etc
-	BuildID    string // sha1 of the binary
-	Generation string // generation within binary's build id
 	Type       ProfileType
 	CreatedAt  time.Time
 	ReceivedAt time.Time
 
-	Labels Labels // arbitrary set of key-value pairs
+	Service *Service
 
-	Digest Digest // as for now, sha1 of data stored in blob storage
-	Size   int64  // size of data stored in blob storage
-
-	prof *profile.Profile
+	Data   []byte
+	Digest Digest // as for now, sha1 of data stored in file storage
+	Size   int64  // size of data stored in file storage
 }
 
-func New(prof *profile.Profile) *Profile {
-	return NewWithMeta(prof, nil)
+type Token xid.ID
+
+func TokenFromString(s string) Token {
+	token, _ := xid.FromString(s)
+	return Token(token)
 }
 
-func NewWithMeta(prof *profile.Profile, meta map[string]interface{}) *Profile {
-	p := &Profile{
-		prof:       prof,
-		ReceivedAt: time.Now().UTC(),
-	}
-
-	p.parseMeta(meta)
-
-	if prof.TimeNanos > 0 {
-		p.CreatedAt = time.Unix(0, prof.TimeNanos).UTC()
-	}
-
-	return p
+func (token Token) String() string {
+	return xid.ID(token).String()
 }
 
-func (p *Profile) Read(buf []byte) (int, error) {
-	w := bytes.NewBuffer(buf)
-	err := p.prof.Write(w)
-	return w.Len(), err
+type Service struct {
+	Name    string
+	BuildID string
+	Token   Token
+	Labels  Labels
 }
 
-func (p *Profile) WriteTo(w io.Writer) (int64, error) {
-	err := p.prof.Write(w)
-	// TODO(narqo): return proper size for io.WriterTo implementation
-	return 0, err
-}
-
-func (p *Profile) parseMeta(meta map[string]interface{}) {
-	if p.Labels == nil {
-		p.Labels = make(Labels, 0, len(meta))
-	}
-
-	for k, rawVal := range meta {
-		val, _ := rawVal.(string)
-		switch k {
-		case LabelService:
-			p.Service = val
-		case LabelID:
-			p.BuildID = val
-		case LabelGeneration:
-			p.Generation = val
-		case LabelType:
-			p.Type.UnmarshalString(val)
-		default:
-			p.Labels = append(p.Labels, Label{k, val})
-		}
-	}
-
-	if len(p.Labels) > 0 {
-		sort.Sort(p.Labels)
+func NewService(name, id string, labels Labels) *Service {
+	return &Service{
+		Name:    name,
+		BuildID: id,
+		Token:   Token(xid.New()),
+		Labels:  labels,
 	}
 }

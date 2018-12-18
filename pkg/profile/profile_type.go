@@ -16,6 +16,22 @@ const (
 	MutexProfile
 )
 
+func ProfileTypeFromString(s string) ProfileType {
+	s = strings.TrimSpace(s)
+	switch s {
+	case "cpu":
+		return CPUProfile
+	case "heap":
+		return HeapProfile
+	case "block":
+		return BlockProfile
+	case "mutex":
+		return MutexProfile
+	default:
+		return UnknownProfile
+	}
+}
+
 func (ptype ProfileType) MarshalString() (s string) {
 	return strconv.FormatInt(int64(ptype), 10)
 }
@@ -48,20 +64,4 @@ func (ptype ProfileType) String() string {
 		return "mutex"
 	}
 	return fmt.Sprintf("%d", ptype)
-}
-
-func ProfileTypeFromString(s string) ProfileType {
-	s = strings.TrimSpace(s)
-	switch s {
-	case "cpu":
-		return CPUProfile
-	case "heap":
-		return HeapProfile
-	case "block":
-		return BlockProfile
-	case "mutex":
-		return MutexProfile
-	default:
-		return UnknownProfile
-	}
 }
