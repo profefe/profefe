@@ -85,15 +85,6 @@ func (req *UpdateProfileRequest) Validate() error {
 }
 
 func (repo *Repository) UpdateProfile(ctx context.Context, req *UpdateProfileRequest, r io.Reader) error {
-	// TODO(narqo) cap the profile bytes with some sane defaults
-	// r = io.LimitReader(r, ??)
-
-	var buf bytes.Buffer
-	pprof, err := profile.Parse(io.TeeReader(r, &buf))
-	if err != nil {
-		return fmt.Errorf("could not parse profile: %v", err)
-	}
-
 	prof := &Profile{
 		Type:       req.Type,
 		ReceivedAt: time.Now().UTC(),
@@ -103,11 +94,9 @@ func (repo *Repository) UpdateProfile(ctx context.Context, req *UpdateProfileReq
 		},
 	}
 
-	if pprof.TimeNanos > 0 {
-		prof.CreatedAt = time.Unix(0, pprof.TimeNanos).UTC()
-	}
-
-	if err := repo.storage.Update(ctx, prof, &buf); err != nil {
+	// TODO(narqo) cap the profile bytes with some sane defaults
+	// r = io.LimitReader(r, ??)
+	if err := repo.storage.Update(ctx, prof, r); err != nil {
 		return err
 	}
 
@@ -145,49 +134,50 @@ func (req *GetProfileRequest) Validate() error {
 }
 
 func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) (*Profile, io.Reader, error) {
-	query := &QueryRequest{
-		Service:      req.Service,
-		Type:         req.Type,
-		Labels:       req.Labels,
-		CreatedAtMin: req.From,
-		CreatedAtMax: req.To,
-	}
-	ps, err := repo.storage.Query(ctx, query)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(ps) == 0 {
-		return nil, nil, ErrNotFound
-	}
-
-	pprofs := make([]*profile.Profile, 0, len(ps))
-	for _, p := range ps {
-		rc, err := repo.storage.Open(ctx, p.Digest)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not open profile %s: %v", p.Digest, err)
-		}
-		pprof, err := profile.Parse(rc)
-		rc.Close()
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not parse profile %s: %v", p.Digest, err)
-		}
-		pprofs = append(pprofs, pprof)
-	}
-
-	pprof, err := profile.Merge(pprofs)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not merge %d profiles: %v", len(pprofs), err)
-	}
-
-	// copy only fields that make sense for a merged profile
-	prof := &Profile{
-		Type: ps[0].Type,
-		Service: &Service{
-			Name: req.Service,
-		},
-	}
-
-	return prof, &pprofReader{prof: pprof}, nil
+	return &Profile{}, nil, nil
+	//query := &QueryRequest{
+	//	Service:      req.Service,
+	//	Type:         req.Type,
+	//	Labels:       req.Labels,
+	//	CreatedAtMin: req.From,
+	//	CreatedAtMax: req.To,
+	//}
+	//ps, err := repo.storage.Query(ctx, query)
+	//if err != nil {
+	//	return nil, nil, err
+	//}
+	//if len(ps) == 0 {
+	//	return nil, nil, ErrNotFound
+	//}
+	//
+	//pprofs := make([]*profile.Profile, 0, len(ps))
+	//for _, p := range ps {
+	//	rc, err := repo.storage.Open(ctx, p.Digest)
+	//	if err != nil {
+	//		return nil, nil, fmt.Errorf("could not open profile %s: %v", p.Digest, err)
+	//	}
+	//	pprof, err := profile.Parse(rc)
+	//	rc.Close()
+	//	if err != nil {
+	//		return nil, nil, fmt.Errorf("could not parse profile %s: %v", p.Digest, err)
+	//	}
+	//	pprofs = append(pprofs, pprof)
+	//}
+	//
+	//pprof, err := profile.Merge(pprofs)
+	//if err != nil {
+	//	return nil, nil, fmt.Errorf("could not merge %d profiles: %v", len(pprofs), err)
+	//}
+	//
+	//// copy only fields that make sense for a merged profile
+	//prof := &Profile{
+	//	Type: ps[0].Type,
+	//	Service: &Service{
+	//		Name: req.Service,
+	//	},
+	//}
+	//
+	//return prof, &pprofReader{prof: pprof}, nil
 }
 
 type pprofReader struct {

@@ -15,7 +15,6 @@ var (
 type QueryRequest struct {
 	Service      string
 	Type         ProfileType
-	Digest       Digest
 	Labels       Labels
 	CreatedAtMin time.Time
 	CreatedAtMax time.Time
@@ -30,6 +29,5 @@ type Storage interface {
 	Queryer
 	Create(ctx context.Context, prof *Profile) error
 	Update(ctx context.Context, prof *Profile, r io.Reader) error
-	Open(ctx context.Context, dgst Digest) (io.ReadCloser, error)
-	Delete(ctx context.Context, dgst Digest) error
+	Delete(ctx context.Context, prof *Profile) error
 }

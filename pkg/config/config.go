@@ -33,7 +33,7 @@ func (conf *PostgresConfig) RegisterFlags(f *flag.FlagSet) {
 
 func (conf *PostgresConfig) ConnString() string {
 	return fmt.Sprintf(
-		"host=%v port=%v user=%v password=%q dbname=%v sslmode=%v",
+		"host=%v port=%v user=%v password='%s' dbname=%v sslmode=%v",
 		conf.Host,
 		conf.Port,
 		conf.User,

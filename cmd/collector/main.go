@@ -17,7 +17,6 @@ import (
 	"github.com/profefe/profefe/cmd/collector/api"
 	"github.com/profefe/profefe/cmd/collector/middleware"
 	"github.com/profefe/profefe/pkg/config"
-	"github.com/profefe/profefe/pkg/filestore"
 	"github.com/profefe/profefe/pkg/logger"
 	"github.com/profefe/profefe/pkg/profile"
 	pgstorage "github.com/profefe/profefe/pkg/storage/postgres"
@@ -26,8 +25,6 @@ import (
 )
 
 const addr = ":10100"
-
-const defaultDataRoot = "/tmp/profefe"
 
 func main() {
 	var conf config.Config
@@ -49,11 +46,6 @@ func main() {
 func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 	var profileRepo *profile.Repository
 	{
-		fs, err := filestore.New(log, defaultDataRoot)
-		if err != nil {
-			return fmt.Errorf("could not create file storage: %v", err)
-		}
-
 		db, err := sql.Open("postgres", conf.Postgres.ConnString())
 		if err != nil {
 			return fmt.Errorf("could not connect to db: %v", err)
@@ -64,7 +56,7 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 			return fmt.Errorf("could not ping db: %v", err)
 		}
 
-		pgStorage, err := pgstorage.New(db, fs)
+		pgStorage, err := pgstorage.New(db)
 		if err != nil {
 			return fmt.Errorf("could not create new pg storage: %v", err)
 		}
