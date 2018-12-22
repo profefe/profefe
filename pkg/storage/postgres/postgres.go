@@ -27,7 +27,11 @@ const (
 	sqlInsertLocations = `
 		INSERT INTO profile_pprof_locations (func_name, file_name, line) 
 		SELECT tmp.func_name, tmp.file_name, tmp.line 
-		FROM profile_pprof_samples_tmp AS tmp ON CONFLICT DO NOTHING;`
+		FROM profile_pprof_samples_tmp AS tmp 
+		LEFT JOIN profile_pprof_locations l 
+		ON tmp.func_name = l.func_name AND tmp.file_name = l.file_name AND tmp.line = l.line
+		WHERE l.func_name IS NULL
+		ON CONFLICT (func_name, file_name, line) DO NOTHING;`
 
 	sqlInsertSamples = `
 		INSERT INTO %[1]s (build_id, token, created_at, received_at, locations, %[2]s)
