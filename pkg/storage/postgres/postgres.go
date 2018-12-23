@@ -17,7 +17,7 @@ import (
 
 const (
 	sqlInsertService = `
-		INSERT INTO services(build_id, token, name, created_at, labels)
+		INSERT INTO services (build_id, token, name, created_at, labels)
 		VALUES ($1, $2, $3, $4, $5)`
 
 	sqlCreateTempTable = `

@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS hstore;
 
 DROP TABLE IF EXISTS services;
 
-CREATE TABLE services(
+CREATE TABLE services (
   build_id    VARCHAR(40) NOT NULL,
   token       VARCHAR(40) NOT NULL,
   name        TEXT NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE services(
 
 DROP TABLE IF EXISTS profile_pprof_samples_cpu;
 
-CREATE TABLE profile_pprof_samples_cpu(
+CREATE TABLE profile_pprof_samples_cpu (
   build_id    VARCHAR(40) NOT NULL,
   token       VARCHAR(40) NOT NULL,
   locations   INTEGER[],
@@ -23,14 +23,14 @@ CREATE TABLE profile_pprof_samples_cpu(
   value_cpu   BIGINT,
   value_nanos BIGINT,
 
-  CONSTRAINT fk_service FOREIGN KEY (build_id, token) REFERENCES services (build_id, token) ON DELETE CASCADE
+  FOREIGN KEY (build_id, token) REFERENCES services ON DELETE CASCADE
 );
 
 CREATE INDEX ON profile_pprof_samples_cpu (build_id, token, created_at DESC);
 
 DROP TABLE IF EXISTS profile_pprof_samples_heap;
 
-CREATE TABLE profile_pprof_samples_heap(
+CREATE TABLE profile_pprof_samples_heap (
   build_id      VARCHAR(40) NOT NULL,
   token         VARCHAR(40) NOT NULL,
   locations     INTEGER[],
@@ -41,14 +41,14 @@ CREATE TABLE profile_pprof_samples_heap(
   inuse_objects BIGINT,
   inuse_bytes   BIGINT,
 
-  CONSTRAINT fk_service FOREIGN KEY (build_id, token) REFERENCES services (build_id, token) ON DELETE CASCADE
+  FOREIGN KEY (build_id, token) REFERENCES services ON DELETE CASCADE
 );
 
 CREATE INDEX ON profile_pprof_samples_heap (build_id, token, created_at DESC);
 
 DROP TABLE IF EXISTS profile_pprof_locations;
 
-CREATE TABLE profile_pprof_locations(
+CREATE TABLE profile_pprof_locations (
   location_id SERIAL PRIMARY KEY,
   func_name   TEXT NOT NULL,
   file_name   TEXT NOT NULL,
