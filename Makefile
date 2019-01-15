@@ -16,7 +16,7 @@ LDFLAGS += -X $(PKG)/version.Version=$(VERSION)
 LDFLAGS += -X $(PKG)/version.Commit=$(GITSHA)
 LDFLAGS += -X $(PKG)/version.BuildTime=$(BUILDTIME)
 
-BUILDDIR  := BUILD
+BUILDDIR := BUILD
 
 # Required for globs to work correctly
 SHELL := /bin/bash

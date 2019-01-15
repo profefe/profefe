@@ -20,44 +20,16 @@ func main() {
 	}
 
 	var run func(ctx context.Context, args []string) error
-	switch strings.ToLower(os.Args[1]) {
+	switch cmd := strings.ToLower(os.Args[1]); cmd {
 	case "import":
 		run = runImport
 	default:
-		log.Fatal("bad command")
+		log.Fatalf("bad command %q", cmd)
 	}
 
 	if err := run(context.Background(), os.Args[2:]); err != nil {
 		log.Fatal(err)
 	}
-}
-
-type ProfileType profile.ProfileType
-
-func (pt ProfileType) String() string {
-	return profile.ProfileType(pt).String()
-}
-
-func (pt *ProfileType) Set(s string) error {
-	var origType profile.ProfileType
-	if err := origType.FromString(s); err != nil {
-		return err
-	}
-	if origType == profile.UnknownProfile {
-		return fmt.Errorf("unknown profile: %v", s)
-	}
-	*pt = ProfileType(origType)
-	return nil
-}
-
-type Labels profile.Labels
-
-func (ll Labels) String() string {
-	return profile.Labels(ll).String()
-}
-
-func (ll *Labels) Set(s string) error {
-	return (*profile.Labels)(ll).FromString(s)
 }
 
 func newProfileRepo(log *logger.Logger, conf config.Config) (*profile.Repository, error) {
