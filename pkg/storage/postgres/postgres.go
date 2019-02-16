@@ -33,7 +33,7 @@ const (
 		WHERE l.func_name IS NULL
 		ON CONFLICT (func_name, file_name, line) DO NOTHING;`
 
-	sqlInsertSamples = `
+	sqlInsertSamplesTmpl = `
 		INSERT INTO %[1]s (build_id, token, created_at, received_at, locations, %[2]s)
 		SELECT s.build_id, s.token, s.created_at, s.received_at, locations, %[2]s
 		FROM (values ($1, $2, $3::timestamp, $4::timestamp)) AS s (build_id, token, created_at, received_at),
@@ -319,5 +319,5 @@ func createInsertSamples(table string, cols ...string) string {
 	for n, col := range cols {
 		tCols = append(tCols, fmt.Sprintf("values_all[%d] AS %s", n+1, col))
 	}
-	return fmt.Sprintf(sqlInsertSamples, table, strings.Join(cols, ","), strings.Join(tCols, ","))
+	return fmt.Sprintf(sqlInsertSamplesTmpl, table, strings.Join(cols, ","), strings.Join(tCols, ","))
 }

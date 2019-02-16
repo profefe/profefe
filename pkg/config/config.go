@@ -6,10 +6,13 @@ import (
 )
 
 type Config struct {
+	Addr     string
 	Postgres PostgresConfig
 }
 
 func (conf *Config) RegisterFlags(f *flag.FlagSet) {
+	f.StringVar(&conf.Addr, "addr", ":10100", "address to listen")
+
 	conf.Postgres.RegisterFlags(f)
 }
 

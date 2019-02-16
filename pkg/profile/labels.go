@@ -53,7 +53,9 @@ func (labels *Labels) FromString(s string) (err error) {
 		*labels = append(*labels, Label{key, val})
 	}
 
-	sort.Sort(labels)
+	if len(*labels) != 0 {
+		sort.Sort(labels)
+	}
 
 	return nil
 }
