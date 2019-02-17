@@ -1,14 +1,12 @@
 package profile
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"time"
 
-	"github.com/google/pprof/profile"
 	"github.com/profefe/profefe/pkg/logger"
 )
 
@@ -133,66 +131,13 @@ func (req *GetProfileRequest) Validate() error {
 	return nil
 }
 
-func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) (*Profile, io.Reader, error) {
-	return &Profile{}, nil, nil
-	//query := &QueryRequest{
-	//	Service:      req.Service,
-	//	Type:         req.Type,
-	//	Labels:       req.Labels,
-	//	CreatedAtMin: req.From,
-	//	CreatedAtMax: req.To,
-	//}
-	//ps, err := repo.storage.Query(ctx, query)
-	//if err != nil {
-	//	return nil, nil, err
-	//}
-	//if len(ps) == 0 {
-	//	return nil, nil, ErrNotFound
-	//}
-	//
-	//pprofs := make([]*profile.Profile, 0, len(ps))
-	//for _, p := range ps {
-	//	rc, err := repo.storage.Open(ctx, p.Digest)
-	//	if err != nil {
-	//		return nil, nil, fmt.Errorf("could not open profile %s: %v", p.Digest, err)
-	//	}
-	//	pprof, err := profile.Parse(rc)
-	//	rc.Close()
-	//	if err != nil {
-	//		return nil, nil, fmt.Errorf("could not parse profile %s: %v", p.Digest, err)
-	//	}
-	//	pprofs = append(pprofs, pprof)
-	//}
-	//
-	//pprof, err := profile.Merge(pprofs)
-	//if err != nil {
-	//	return nil, nil, fmt.Errorf("could not merge %d profiles: %v", len(pprofs), err)
-	//}
-	//
-	//// copy only fields that make sense for a merged profile
-	//prof := &Profile{
-	//	Type: ps[0].Type,
-	//	Service: &Service{
-	//		Name: req.Service,
-	//	},
-	//}
-	//
-	//return prof, &pprofReader{prof: pprof}, nil
-}
-
-type pprofReader struct {
-	buf  bytes.Buffer
-	prof *profile.Profile
-}
-
-func (r *pprofReader) Read(p []byte) (n int, err error) {
-	if err := r.prof.Write(&r.buf); err != nil {
-		return 0, err
+func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) (io.Reader, error) {
+	query := &QueryRequest{
+		Service:      req.Service,
+		Type:         req.Type,
+		Labels:       req.Labels,
+		CreatedAtMin: req.From,
+		CreatedAtMax: req.To,
 	}
-	return r.buf.Read(p)
-}
-
-func (r *pprofReader) WriteTo(w io.Writer) (n int64, err error) {
-	err = r.prof.Write(w)
-	return 0, err
+	return repo.storage.Query(ctx, query)
 }

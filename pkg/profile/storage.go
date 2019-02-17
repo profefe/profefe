@@ -22,7 +22,7 @@ type QueryRequest struct {
 }
 
 type Queryer interface {
-	Query(ctx context.Context, query *QueryRequest) ([]*Profile, error)
+	Query(ctx context.Context, query *QueryRequest) (io.Reader, error)
 }
 
 type Storage interface {

@@ -12,43 +12,45 @@ CREATE TABLE services (
   PRIMARY KEY (build_id, token)
 );
 
-DROP TABLE IF EXISTS profile_pprof_samples_cpu;
+DROP TABLE IF EXISTS pprof_samples_cpu;
 
-CREATE TABLE profile_pprof_samples_cpu (
-  build_id    VARCHAR(40) NOT NULL,
-  token       VARCHAR(40) NOT NULL,
-  locations   INTEGER[],
-  created_at  TIMESTAMPTZ NOT NULL,
-  received_at TIMESTAMPTZ NOT NULL,
-  value_cpu   BIGINT,
-  value_nanos BIGINT,
+CREATE TABLE pprof_samples_cpu (
+  build_id      VARCHAR(40) NOT NULL,
+  token         VARCHAR(40) NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL,
+  received_at   TIMESTAMPTZ NOT NULL,
+  locations     INTEGER[],
+  samples_count BIGINT,
+  cpu_nanos     BIGINT,
+  labels        INTEGER[],
 
   FOREIGN KEY (build_id, token) REFERENCES services ON DELETE CASCADE
 );
 
-CREATE INDEX ON profile_pprof_samples_cpu (build_id, token, created_at DESC);
+CREATE INDEX ON pprof_samples_cpu (build_id, token, created_at DESC);
 
-DROP TABLE IF EXISTS profile_pprof_samples_heap;
+DROP TABLE IF EXISTS pprof_samples_heap;
 
-CREATE TABLE profile_pprof_samples_heap (
+CREATE TABLE pprof_samples_heap (
   build_id      VARCHAR(40) NOT NULL,
   token         VARCHAR(40) NOT NULL,
-  locations     INTEGER[],
   created_at    TIMESTAMPTZ NOT NULL,
   received_at   TIMESTAMPTZ NOT NULL,
+  locations     INTEGER[],
   alloc_objects BIGINT,
   alloc_bytes   BIGINT,
   inuse_objects BIGINT,
   inuse_bytes   BIGINT,
+  labels        INTEGER[],
 
   FOREIGN KEY (build_id, token) REFERENCES services ON DELETE CASCADE
 );
 
-CREATE INDEX ON profile_pprof_samples_heap (build_id, token, created_at DESC);
+CREATE INDEX ON pprof_samples_heap (build_id, token, created_at DESC);
 
-DROP TABLE IF EXISTS profile_pprof_locations;
+DROP TABLE IF EXISTS pprof_locations;
 
-CREATE TABLE profile_pprof_locations (
+CREATE TABLE pprof_locations (
   location_id SERIAL PRIMARY KEY,
   func_name   TEXT NOT NULL,
   file_name   TEXT NOT NULL,
@@ -57,4 +59,15 @@ CREATE TABLE profile_pprof_locations (
   UNIQUE (func_name, file_name, line)
 );
 
-CREATE INDEX ON profile_pprof_locations (func_name, file_name, line);
+CREATE INDEX ON pprof_locations (func_name, file_name, line);
+
+DROP TABLE IF EXISTS pprof_labels;
+
+CREATE TABLE pprof_labels (
+  label_id  SERIAL PRIMARY KEY,
+  key       TEXT NOT NULL,
+  value_str TEXT,
+  value_num INTEGER,
+
+  UNIQUE (key, value_str, value_num)
+);

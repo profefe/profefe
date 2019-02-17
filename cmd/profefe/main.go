@@ -10,9 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/profefe/profefe/agent"
 	"github.com/profefe/profefe/cmd/profefe/api"
 	"github.com/profefe/profefe/cmd/profefe/middleware"
 	"github.com/profefe/profefe/pkg/config"
@@ -39,7 +37,7 @@ func main() {
 	}
 
 	// TODO: init base logger
-	baseLogger := zap.NewExample()
+	baseLogger, _ := zap.NewDevelopment()
 	defer baseLogger.Sync()
 
 	log := logger.New(baseLogger)
@@ -62,7 +60,7 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 			return fmt.Errorf("could not ping db: %v", err)
 		}
 
-		pgStorage, err := pgstorage.New(log.With("svc", "db"), db)
+		pgStorage, err := pgstorage.New(log.With("svc", "pg"), db)
 		if err != nil {
 			return fmt.Errorf("could not create new pg storage: %v", err)
 		}
@@ -91,19 +89,6 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 		errc <- server.ListenAndServe()
 	}()
 
-	// start agent after server, because it sends to itself
-	// TODO: wait server to be ready to accept connections from the agent
-	agentLogger := log.With("svc", "profefe")
-	agent.Start(
-		"profefe_collector",
-		agent.WithCollector("http://"+conf.Addr),
-		agent.WithCPUProfile(20*time.Second),
-		agent.WithLabels("az", "home", "host", "localhost", "version", version.Version, "commit", version.Commit, "build", version.BuildTime),
-		agent.WithLogger(func(format string, args ...interface{}) {
-			agentLogger.Debugf(format, args...)
-		}),
-	)
-
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
@@ -115,9 +100,6 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 			return fmt.Errorf("terminated: %v", err)
 		}
 	}
-
-	// must stop agent before server, because it sends to itself
-	agent.Stop()
 
 	return server.Shutdown(ctx)
 }

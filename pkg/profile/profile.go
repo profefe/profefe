@@ -29,7 +29,7 @@ func (token Token) String() string {
 type Service struct {
 	Name    string
 	BuildID string
-	Token   Token
+	Token   Token `json:",string"`
 	Labels  Labels
 }
 

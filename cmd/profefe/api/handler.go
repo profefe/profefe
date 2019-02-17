@@ -143,7 +143,7 @@ func (api *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) 
 
 	api.logger.Debugf("req %+v", req)
 
-	prof, profReader, err := api.profilePepo.GetProfile(r.Context(), req)
+	profReader, err := api.profilePepo.GetProfile(r.Context(), req)
 	if err == profile.ErrNotFound {
 		return StatusError(http.StatusNotFound, "nothing found", nil)
 	} else if err != nil {
@@ -151,7 +151,7 @@ func (api *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, prof.Type))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, "profile"))
 
 	_, err = io.Copy(w, profReader)
 	if err != nil {
