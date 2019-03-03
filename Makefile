@@ -24,7 +24,7 @@ SHELL := /bin/bash
 BUILD.go = $(GO) build $(GOFLAGS)
 TEST.go  = $(GO) test $(TESTFLAGS)
 
-all:
+all: build-profefe
 
 build-%:
 	$(BUILD.go) -ldflags "$(LDFLAGS)" -o $(BUILDDIR)/$(*) $(PKG)/cmd/$(*)
