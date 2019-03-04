@@ -12,12 +12,7 @@ type Profile struct {
 	Type       ProfileType
 	CreatedAt  time.Time
 	ReceivedAt time.Time
-
-	Service *Service
-
-	Data   []byte
-	Digest Digest // as for now, sha1 of data stored in file storage
-	Size   int64  // size of data stored in file storage
+	Service    *Service
 }
 
 type Token xid.ID
@@ -34,7 +29,7 @@ func (token Token) String() string {
 type Service struct {
 	Name    string
 	BuildID string
-	Token   Token
+	Token   Token `json:",string"`
 	Labels  Labels
 }
 

@@ -10,33 +10,34 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	_ "github.com/lib/pq"
-	"github.com/profefe/profefe/agent"
-	"github.com/profefe/profefe/cmd/collector/api"
-	"github.com/profefe/profefe/cmd/collector/middleware"
+	"github.com/profefe/profefe/cmd/profefe/api"
+	"github.com/profefe/profefe/cmd/profefe/middleware"
 	"github.com/profefe/profefe/pkg/config"
-	"github.com/profefe/profefe/pkg/filestore"
 	"github.com/profefe/profefe/pkg/logger"
 	"github.com/profefe/profefe/pkg/profile"
-	pgstorage "github.com/profefe/profefe/pkg/storage/postgres"
 	"github.com/profefe/profefe/version"
 	"go.uber.org/zap"
+
+	_ "github.com/lib/pq"
+	pgstorage "github.com/profefe/profefe/pkg/storage/postgres"
 )
 
-const addr = ":10100"
-
-const defaultDataRoot = "/tmp/profefe"
-
 func main() {
+	printVersion := flag.Bool("version", false, "print version and exit")
+
 	var conf config.Config
 	conf.RegisterFlags(flag.CommandLine)
 
 	flag.Parse()
 
+	if *printVersion {
+		fmt.Println(version.String())
+		os.Exit(1)
+	}
+
 	// TODO: init base logger
-	baseLogger := zap.NewExample()
+	baseLogger, _ := zap.NewDevelopment()
 	defer baseLogger.Sync()
 
 	log := logger.New(baseLogger)
@@ -49,11 +50,6 @@ func main() {
 func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 	var profileRepo *profile.Repository
 	{
-		fs, err := filestore.New(log, defaultDataRoot)
-		if err != nil {
-			return fmt.Errorf("could not create file storage: %v", err)
-		}
-
 		db, err := sql.Open("postgres", conf.Postgres.ConnString())
 		if err != nil {
 			return fmt.Errorf("could not connect to db: %v", err)
@@ -64,7 +60,7 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 			return fmt.Errorf("could not ping db: %v", err)
 		}
 
-		pgStorage, err := pgstorage.New(db, fs)
+		pgStorage, err := pgstorage.New(log.With("svc", "pg"), db)
 		if err != nil {
 			return fmt.Errorf("could not create new pg storage: %v", err)
 		}
@@ -83,27 +79,15 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 	handler = middleware.RecoveryHandler(handler)
 
 	server := http.Server{
-		Addr:    addr,
+		Addr:    conf.Addr,
 		Handler: handler,
 	}
 
 	errc := make(chan error, 1)
 	go func() {
-		log.Infow("server is running", "addr", addr)
+		log.Infow("server is running", "addr", server.Addr)
 		errc <- server.ListenAndServe()
 	}()
-
-	// start agent after server, because it sends to itself
-	agentLogger := log.With("svc", "profefe")
-	agent.Start(
-		"profefe_collector",
-		agent.WithCollector("http://"+addr),
-		agent.WithCPUProfile(20*time.Second),
-		agent.WithLabels("az", "home", "host", "localhost", "version", version.Version, "commit", version.Commit, "build", version.BuildTime),
-		agent.WithLogger(func(format string, args ...interface{}) {
-			agentLogger.Debugf(format, args...)
-		}),
-	)
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
@@ -116,9 +100,6 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 			return fmt.Errorf("terminated: %v", err)
 		}
 	}
-
-	// must stop agent before server, because it sends to itself
-	agent.Stop()
 
 	return server.Shutdown(ctx)
 }

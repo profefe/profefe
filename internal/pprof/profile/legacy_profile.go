@@ -1,16 +1,6 @@
-// Copyright 2014 Google Inc. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2014 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 // This file implements parsers to convert legacy profiles into the
 // profile.proto format.
@@ -29,8 +19,8 @@ import (
 )
 
 var (
-	countStartRE = regexp.MustCompile(`\A(\S+) profile: total \d+\z`)
-	countRE      = regexp.MustCompile(`\A(\d+) @(( 0x[0-9a-f]+)+)\z`)
+	countStartRE = regexp.MustCompile(`\A(\w+) profile: total \d+\n\z`)
+	countRE      = regexp.MustCompile(`\A(\d+) @(( 0x[0-9a-f]+)+)\n\z`)
 
 	heapHeaderRE = regexp.MustCompile(`heap profile: *(\d+): *(\d+) *\[ *(\d+): *(\d+) *\] *@ *(heap[_a-z0-9]*)/?(\d*)`)
 	heapSampleRE = regexp.MustCompile(`(-?\d+): *(-?\d+) *\[ *(\d+): *(\d+) *] @([ x0-9a-f]*)`)
@@ -39,34 +29,22 @@ var (
 
 	hexNumberRE = regexp.MustCompile(`0x[0-9a-f]+`)
 
-	growthHeaderRE = regexp.MustCompile(`heap profile: *(\d+): *(\d+) *\[ *(\d+): *(\d+) *\] @ growthz?`)
+	growthHeaderRE = regexp.MustCompile(`heap profile: *(\d+): *(\d+) *\[ *(\d+): *(\d+) *\] @ growthz`)
 
-	fragmentationHeaderRE = regexp.MustCompile(`heap profile: *(\d+): *(\d+) *\[ *(\d+): *(\d+) *\] @ fragmentationz?`)
+	fragmentationHeaderRE = regexp.MustCompile(`heap profile: *(\d+): *(\d+) *\[ *(\d+): *(\d+) *\] @ fragmentationz`)
 
 	threadzStartRE = regexp.MustCompile(`--- threadz \d+ ---`)
 	threadStartRE  = regexp.MustCompile(`--- Thread ([[:xdigit:]]+) \(name: (.*)/(\d+)\) stack: ---`)
 
-	// Regular expressions to parse process mappings. Support the format used by Linux /proc/.../maps and other tools.
-	// Recommended format:
-	// Start   End     object file name     offset(optional)   linker build id
-	// 0x40000-0x80000 /path/to/binary      (@FF00)            abc123456
-	spaceDigits = `\s+[[:digit:]]+`
-	hexPair     = `\s+[[:xdigit:]]+:[[:xdigit:]]+`
-	oSpace      = `\s*`
-	// Capturing expressions.
-	cHex           = `(?:0x)?([[:xdigit:]]+)`
-	cHexRange      = `\s*` + cHex + `[\s-]?` + oSpace + cHex + `:?`
-	cSpaceString   = `(?:\s+(\S+))?`
-	cSpaceHex      = `(?:\s+([[:xdigit:]]+))?`
-	cSpaceAtOffset = `(?:\s+\(@([[:xdigit:]]+)\))?`
-	cPerm          = `(?:\s+([-rwxp]+))?`
+	procMapsRE = regexp.MustCompile(`([[:xdigit:]]+)-([[:xdigit:]]+)\s+([-rwxp]+)\s+([[:xdigit:]]+)\s+([[:xdigit:]]+):([[:xdigit:]]+)\s+([[:digit:]]+)\s*(\S+)?`)
 
-	procMapsRE  = regexp.MustCompile(`^` + cHexRange + cPerm + cSpaceHex + hexPair + spaceDigits + cSpaceString)
-	briefMapsRE = regexp.MustCompile(`^` + cHexRange + cPerm + cSpaceString + cSpaceAtOffset + cSpaceHex)
+	briefMapsRE = regexp.MustCompile(`\s*([[:xdigit:]]+)-([[:xdigit:]]+):\s*(\S+)(\s.*@)?([[:xdigit:]]+)?`)
 
-	// Regular expression to parse log data, of the form:
-	// ... file:line] msg...
-	logInfoRE = regexp.MustCompile(`^[^\[\]]+:[0-9]+]\s`)
+	// LegacyHeapAllocated instructs the heapz parsers to use the
+	// allocated memory stats instead of the default in-use memory. Note
+	// that tcmalloc doesn't provide all allocated memory, only in-use
+	// stats.
+	LegacyHeapAllocated bool
 )
 
 func isSpaceOrComment(line string) bool {
@@ -77,14 +55,22 @@ func isSpaceOrComment(line string) bool {
 // parseGoCount parses a Go count profile (e.g., threadcreate or
 // goroutine) and returns a new Profile.
 func parseGoCount(b []byte) (*Profile, error) {
-	s := bufio.NewScanner(bytes.NewBuffer(b))
-	// Skip comments at the beginning of the file.
-	for s.Scan() && isSpaceOrComment(s.Text()) {
+	r := bytes.NewBuffer(b)
+
+	var line string
+	var err error
+	for {
+		// Skip past comments and empty lines seeking a real header.
+		line, err = r.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		if !isSpaceOrComment(line) {
+			break
+		}
 	}
-	if err := s.Err(); err != nil {
-		return nil, err
-	}
-	m := countStartRE.FindStringSubmatch(s.Text())
+
+	m := countStartRE.FindStringSubmatch(line)
 	if m == nil {
 		return nil, errUnrecognized
 	}
@@ -95,8 +81,14 @@ func parseGoCount(b []byte) (*Profile, error) {
 		SampleType: []*ValueType{{Type: profileType, Unit: "count"}},
 	}
 	locations := make(map[uint64]*Location)
-	for s.Scan() {
-		line := s.Text()
+	for {
+		line, err = r.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
 		if isSpaceOrComment(line) {
 			continue
 		}
@@ -118,7 +110,7 @@ func parseGoCount(b []byte) (*Profile, error) {
 			if err != nil {
 				return nil, errMalformed
 			}
-			// Adjust all frames by -1 to land on top of the call instruction.
+			// Adjust all frames by -1 to land on the call instruction.
 			addr--
 			loc := locations[addr]
 			if loc == nil {
@@ -135,11 +127,8 @@ func parseGoCount(b []byte) (*Profile, error) {
 			Value:    []int64{n},
 		})
 	}
-	if err := s.Err(); err != nil {
-		return nil, err
-	}
 
-	if err := parseAdditionalSections(s, p); err != nil {
+	if err = parseAdditionalSections(strings.TrimSpace(line), r, p); err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -188,65 +177,38 @@ func (p *Profile) remapFunctionIDs() {
 // up as a bottleneck, evaluate sorting the mappings and doing a
 // binary search, which would make it O(N*log(M)).
 func (p *Profile) remapMappingIDs() {
+	if len(p.Mapping) == 0 {
+		return
+	}
+
 	// Some profile handlers will incorrectly set regions for the main
 	// executable if its section is remapped. Fix them through heuristics.
 
-	if len(p.Mapping) > 0 {
-		// Remove the initial mapping if named '/anon_hugepage' and has a
-		// consecutive adjacent mapping.
-		if m := p.Mapping[0]; strings.HasPrefix(m.File, "/anon_hugepage") {
-			if len(p.Mapping) > 1 && m.Limit == p.Mapping[1].Start {
-				p.Mapping = p.Mapping[1:]
-			}
+	// Remove the initial mapping if named '/anon_hugepage' and has a
+	// consecutive adjacent mapping.
+	if m := p.Mapping[0]; strings.HasPrefix(m.File, "/anon_hugepage") {
+		if len(p.Mapping) > 1 && m.Limit == p.Mapping[1].Start {
+			p.Mapping = p.Mapping[1:]
 		}
 	}
 
 	// Subtract the offset from the start of the main mapping if it
 	// ends up at a recognizable start address.
-	if len(p.Mapping) > 0 {
-		const expectedStart = 0x400000
-		if m := p.Mapping[0]; m.Start-m.Offset == expectedStart {
-			m.Start = expectedStart
-			m.Offset = 0
-		}
+	const expectedStart = 0x400000
+	if m := p.Mapping[0]; m.Start-m.Offset == expectedStart {
+		m.Start = expectedStart
+		m.Offset = 0
 	}
 
-	// Associate each location with an address to the corresponding
-	// mapping. Create fake mapping if a suitable one isn't found.
-	var fake *Mapping
-nextLocation:
 	for _, l := range p.Location {
-		a := l.Address
-		if l.Mapping != nil || a == 0 {
-			continue
-		}
-		for _, m := range p.Mapping {
-			if m.Start <= a && a < m.Limit {
-				l.Mapping = m
-				continue nextLocation
+		if a := l.Address; a != 0 {
+			for _, m := range p.Mapping {
+				if m.Start <= a && a < m.Limit {
+					l.Mapping = m
+					break
+				}
 			}
 		}
-		// Work around legacy handlers failing to encode the first
-		// part of mappings split into adjacent ranges.
-		for _, m := range p.Mapping {
-			if m.Offset != 0 && m.Start-m.Offset <= a && a < m.Start {
-				m.Start -= m.Offset
-				m.Offset = 0
-				l.Mapping = m
-				continue nextLocation
-			}
-		}
-		// If there is still no mapping, create a fake one.
-		// This is important for the Go legacy handler, which produced
-		// no mappings.
-		if fake == nil {
-			fake = &Mapping{
-				ID:    1,
-				Limit: ^uint64(0),
-			}
-			p.Mapping = append(p.Mapping, fake)
-		}
-		l.Mapping = fake
 	}
 
 	// Reset all mapping IDs.
@@ -290,6 +252,84 @@ func get64b(b []byte) (uint64, []byte) {
 	return uint64(b[7]) | uint64(b[6])<<8 | uint64(b[5])<<16 | uint64(b[4])<<24 | uint64(b[3])<<32 | uint64(b[2])<<40 | uint64(b[1])<<48 | uint64(b[0])<<56, b[8:]
 }
 
+// ParseTracebacks parses a set of tracebacks and returns a newly
+// populated profile. It will accept any text file and generate a
+// Profile out of it with any hex addresses it can identify, including
+// a process map if it can recognize one. Each sample will include a
+// tag "source" with the addresses recognized in string format.
+func ParseTracebacks(b []byte) (*Profile, error) {
+	r := bytes.NewBuffer(b)
+
+	p := &Profile{
+		PeriodType: &ValueType{Type: "trace", Unit: "count"},
+		Period:     1,
+		SampleType: []*ValueType{
+			{Type: "trace", Unit: "count"},
+		},
+	}
+
+	var sources []string
+	var sloc []*Location
+
+	locs := make(map[uint64]*Location)
+	for {
+		l, err := r.ReadString('\n')
+		if err != nil {
+			if err != io.EOF {
+				return nil, err
+			}
+			if l == "" {
+				break
+			}
+		}
+		if sectionTrigger(l) == memoryMapSection {
+			break
+		}
+		if s, addrs := extractHexAddresses(l); len(s) > 0 {
+			for _, addr := range addrs {
+				// Addresses from stack traces point to the next instruction after
+				// each call. Adjust by -1 to land somewhere on the actual call.
+				addr--
+				loc := locs[addr]
+				if locs[addr] == nil {
+					loc = &Location{
+						Address: addr,
+					}
+					p.Location = append(p.Location, loc)
+					locs[addr] = loc
+				}
+				sloc = append(sloc, loc)
+			}
+
+			sources = append(sources, s...)
+		} else {
+			if len(sources) > 0 || len(sloc) > 0 {
+				addTracebackSample(sloc, sources, p)
+				sloc, sources = nil, nil
+			}
+		}
+	}
+
+	// Add final sample to save any leftover data.
+	if len(sources) > 0 || len(sloc) > 0 {
+		addTracebackSample(sloc, sources, p)
+	}
+
+	if err := p.ParseMemoryMap(r); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func addTracebackSample(l []*Location, s []string, p *Profile) {
+	p.Sample = append(p.Sample,
+		&Sample{
+			Value:    []int64{1},
+			Location: l,
+			Label:    map[string][]string{"source": s},
+		})
+}
+
 // parseCPU parses a profilez legacy profile and returns a newly
 // populated Profile.
 //
@@ -315,10 +355,6 @@ func parseCPU(b []byte) (*Profile, error) {
 			b = tmp
 			return cpuProfile(b, int64(n4), parse)
 		}
-		if tmp != nil && n1 == 0 && n2 == 3 && n3 == 1 && n4 > 0 && n5 == 0 {
-			b = tmp
-			return javaCPUProfile(b, int64(n4), parse)
-		}
 	}
 	return nil, errUnrecognized
 }
@@ -341,38 +377,24 @@ func cpuProfile(b []byte, period int64, parse func(b []byte) (uint64, []byte)) (
 		return nil, err
 	}
 
-	// If *most* samples have the same second-to-the-bottom frame, it
+	// If all samples have the same second-to-the-bottom frame, it
 	// strongly suggests that it is an uninteresting artifact of
 	// measurement -- a stack frame pushed by the signal handler. The
 	// bottom frame is always correct as it is picked up from the signal
 	// structure, not the stack. Check if this is the case and if so,
 	// remove.
-
-	// Remove up to two frames.
-	maxiter := 2
-	// Allow one different sample for this many samples with the same
-	// second-to-last frame.
-	similarSamples := 32
-	margin := len(p.Sample) / similarSamples
-
-	for iter := 0; iter < maxiter; iter++ {
-		addr1 := make(map[uint64]int)
+	if len(p.Sample) > 1 && len(p.Sample[0].Location) > 1 {
+		allSame := true
+		id1 := p.Sample[0].Location[1].Address
 		for _, s := range p.Sample {
-			if len(s.Location) > 1 {
-				a := s.Location[1].Address
-				addr1[a] = addr1[a] + 1
+			if len(s.Location) < 2 || id1 != s.Location[1].Address {
+				allSame = false
+				break
 			}
 		}
-
-		for id1, count := range addr1 {
-			if count >= len(p.Sample)-margin {
-				// Found uninteresting frame, strip it out from all samples
-				for _, s := range p.Sample {
-					if len(s.Location) > 1 && s.Location[1].Address == id1 {
-						s.Location = append(s.Location[:1], s.Location[2:]...)
-					}
-				}
-				break
+		if allSame {
+			for _, s := range p.Sample {
+				s.Location = append(s.Location[:1], s.Location[2:]...)
 			}
 		}
 	}
@@ -380,22 +402,7 @@ func cpuProfile(b []byte, period int64, parse func(b []byte) (uint64, []byte)) (
 	if err := p.ParseMemoryMap(bytes.NewBuffer(b)); err != nil {
 		return nil, err
 	}
-
-	cleanupDuplicateLocations(p)
 	return p, nil
-}
-
-func cleanupDuplicateLocations(p *Profile) {
-	// The profile handler may duplicate the leaf frame, because it gets
-	// its address both from stack unwinding and from the signal
-	// context. Detect this and delete the duplicate, which has been
-	// adjusted by -1. The leaf address should not be adjusted as it is
-	// not a call.
-	for _, s := range p.Sample {
-		if len(s.Location) > 1 && s.Location[0].Address == s.Location[1].Address+1 {
-			s.Location = append(s.Location[:1], s.Location[2:]...)
-		}
-	}
 }
 
 // parseCPUSamples parses a collection of profilez samples from a
@@ -462,66 +469,98 @@ func parseCPUSamples(b []byte, parse func(b []byte) (uint64, []byte), adjust boo
 // parseHeap parses a heapz legacy or a growthz profile and
 // returns a newly populated Profile.
 func parseHeap(b []byte) (p *Profile, err error) {
-	s := bufio.NewScanner(bytes.NewBuffer(b))
-	if !s.Scan() {
-		if err := s.Err(); err != nil {
-			return nil, err
-		}
+	r := bytes.NewBuffer(b)
+	l, err := r.ReadString('\n')
+	if err != nil {
 		return nil, errUnrecognized
 	}
-	p = &Profile{}
 
 	sampling := ""
-	hasAlloc := false
 
-	line := s.Text()
-	p.PeriodType = &ValueType{Type: "space", Unit: "bytes"}
-	if header := heapHeaderRE.FindStringSubmatch(line); header != nil {
-		sampling, p.Period, hasAlloc, err = parseHeapHeader(line)
-		if err != nil {
-			return nil, err
+	if header := heapHeaderRE.FindStringSubmatch(l); header != nil {
+		p = &Profile{
+			SampleType: []*ValueType{
+				{Type: "objects", Unit: "count"},
+				{Type: "space", Unit: "bytes"},
+			},
+			PeriodType: &ValueType{Type: "objects", Unit: "bytes"},
 		}
-	} else if header = growthHeaderRE.FindStringSubmatch(line); header != nil {
-		p.Period = 1
-	} else if header = fragmentationHeaderRE.FindStringSubmatch(line); header != nil {
-		p.Period = 1
+
+		var period int64
+		if len(header[6]) > 0 {
+			if period, err = strconv.ParseInt(header[6], 10, 64); err != nil {
+				return nil, errUnrecognized
+			}
+		}
+
+		switch header[5] {
+		case "heapz_v2", "heap_v2":
+			sampling, p.Period = "v2", period
+		case "heapprofile":
+			sampling, p.Period = "", 1
+		case "heap":
+			sampling, p.Period = "v2", period/2
+		default:
+			return nil, errUnrecognized
+		}
+	} else if header = growthHeaderRE.FindStringSubmatch(l); header != nil {
+		p = &Profile{
+			SampleType: []*ValueType{
+				{Type: "objects", Unit: "count"},
+				{Type: "space", Unit: "bytes"},
+			},
+			PeriodType: &ValueType{Type: "heapgrowth", Unit: "count"},
+			Period:     1,
+		}
+	} else if header = fragmentationHeaderRE.FindStringSubmatch(l); header != nil {
+		p = &Profile{
+			SampleType: []*ValueType{
+				{Type: "objects", Unit: "count"},
+				{Type: "space", Unit: "bytes"},
+			},
+			PeriodType: &ValueType{Type: "allocations", Unit: "count"},
+			Period:     1,
+		}
 	} else {
 		return nil, errUnrecognized
 	}
 
-	if hasAlloc {
-		// Put alloc before inuse so that default pprof selection
-		// will prefer inuse_space.
-		p.SampleType = []*ValueType{
-			{Type: "alloc_objects", Unit: "count"},
-			{Type: "alloc_space", Unit: "bytes"},
-			{Type: "inuse_objects", Unit: "count"},
-			{Type: "inuse_space", Unit: "bytes"},
+	if LegacyHeapAllocated {
+		for _, st := range p.SampleType {
+			st.Type = "alloc_" + st.Type
 		}
 	} else {
-		p.SampleType = []*ValueType{
-			{Type: "objects", Unit: "count"},
-			{Type: "space", Unit: "bytes"},
+		for _, st := range p.SampleType {
+			st.Type = "inuse_" + st.Type
 		}
 	}
 
 	locs := make(map[uint64]*Location)
-	for s.Scan() {
-		line := strings.TrimSpace(s.Text())
+	for {
+		l, err = r.ReadString('\n')
+		if err != nil {
+			if err != io.EOF {
+				return nil, err
+			}
 
-		if isSpaceOrComment(line) {
-			continue
+			if l == "" {
+				break
+			}
 		}
 
-		if isMemoryMapSentinel(line) {
+		if isSpaceOrComment(l) {
+			continue
+		}
+		l = strings.TrimSpace(l)
+
+		if sectionTrigger(l) != unrecognizedSection {
 			break
 		}
 
-		value, blocksize, addrs, err := parseHeapSample(line, p.Period, sampling, hasAlloc)
+		value, blocksize, addrs, err := parseHeapSample(l, p.Period, sampling)
 		if err != nil {
 			return nil, err
 		}
-
 		var sloc []*Location
 		for _, addr := range addrs {
 			// Addresses from stack traces point to the next instruction after
@@ -544,107 +583,74 @@ func parseHeap(b []byte) (p *Profile, err error) {
 			NumLabel: map[string][]int64{"bytes": {blocksize}},
 		})
 	}
-	if err := s.Err(); err != nil {
-		return nil, err
-	}
-	if err := parseAdditionalSections(s, p); err != nil {
+
+	if err = parseAdditionalSections(l, r, p); err != nil {
 		return nil, err
 	}
 	return p, nil
 }
 
-func parseHeapHeader(line string) (sampling string, period int64, hasAlloc bool, err error) {
-	header := heapHeaderRE.FindStringSubmatch(line)
-	if header == nil {
-		return "", 0, false, errUnrecognized
-	}
-
-	if len(header[6]) > 0 {
-		if period, err = strconv.ParseInt(header[6], 10, 64); err != nil {
-			return "", 0, false, errUnrecognized
-		}
-	}
-
-	if (header[3] != header[1] && header[3] != "0") || (header[4] != header[2] && header[4] != "0") {
-		hasAlloc = true
-	}
-
-	switch header[5] {
-	case "heapz_v2", "heap_v2":
-		return "v2", period, hasAlloc, nil
-	case "heapprofile":
-		return "", 1, hasAlloc, nil
-	case "heap":
-		return "v2", period / 2, hasAlloc, nil
-	default:
-		return "", 0, false, errUnrecognized
-	}
-}
-
 // parseHeapSample parses a single row from a heap profile into a new Sample.
-func parseHeapSample(line string, rate int64, sampling string, includeAlloc bool) (value []int64, blocksize int64, addrs []uint64, err error) {
+func parseHeapSample(line string, rate int64, sampling string) (value []int64, blocksize int64, addrs []uint64, err error) {
 	sampleData := heapSampleRE.FindStringSubmatch(line)
 	if len(sampleData) != 6 {
-		return nil, 0, nil, fmt.Errorf("unexpected number of sample values: got %d, want 6", len(sampleData))
+		return value, blocksize, addrs, fmt.Errorf("unexpected number of sample values: got %d, want 6", len(sampleData))
 	}
 
-	// This is a local-scoped helper function to avoid needing to pass
-	// around rate, sampling and many return parameters.
-	addValues := func(countString, sizeString string, label string) error {
-		count, err := strconv.ParseInt(countString, 10, 64)
-		if err != nil {
-			return fmt.Errorf("malformed sample: %s: %v", line, err)
-		}
-		size, err := strconv.ParseInt(sizeString, 10, 64)
-		if err != nil {
-			return fmt.Errorf("malformed sample: %s: %v", line, err)
-		}
-		if count == 0 && size != 0 {
-			return fmt.Errorf("%s count was 0 but %s bytes was %d", label, label, size)
-		}
-		if count != 0 {
-			blocksize = size / count
-			if sampling == "v2" {
-				count, size = scaleHeapSample(count, size, rate)
-			}
-		}
-		value = append(value, count, size)
-		return nil
+	// Use first two values by default; tcmalloc sampling generates the
+	// same value for both, only the older heap-profile collect separate
+	// stats for in-use and allocated objects.
+	valueIndex := 1
+	if LegacyHeapAllocated {
+		valueIndex = 3
 	}
 
-	if includeAlloc {
-		if err := addValues(sampleData[3], sampleData[4], "allocation"); err != nil {
-			return nil, 0, nil, err
+	var v1, v2 int64
+	if v1, err = strconv.ParseInt(sampleData[valueIndex], 10, 64); err != nil {
+		return value, blocksize, addrs, fmt.Errorf("malformed sample: %s: %v", line, err)
+	}
+	if v2, err = strconv.ParseInt(sampleData[valueIndex+1], 10, 64); err != nil {
+		return value, blocksize, addrs, fmt.Errorf("malformed sample: %s: %v", line, err)
+	}
+
+	if v1 == 0 {
+		if v2 != 0 {
+			return value, blocksize, addrs, fmt.Errorf("allocation count was 0 but allocation bytes was %d", v2)
+		}
+	} else {
+		blocksize = v2 / v1
+		if sampling == "v2" {
+			v1, v2 = scaleHeapSample(v1, v2, rate)
 		}
 	}
 
-	if err := addValues(sampleData[1], sampleData[2], "inuse"); err != nil {
-		return nil, 0, nil, err
-	}
-
-	addrs, err = parseHexAddresses(sampleData[5])
-	if err != nil {
-		return nil, 0, nil, fmt.Errorf("malformed sample: %s: %v", line, err)
-	}
+	value = []int64{v1, v2}
+	addrs = parseHexAddresses(sampleData[5])
 
 	return value, blocksize, addrs, nil
 }
 
-// parseHexAddresses extracts hex numbers from a string, attempts to convert
-// each to an unsigned 64-bit number and returns the resulting numbers as a
-// slice, or an error if the string contains hex numbers which are too large to
-// handle (which means a malformed profile).
-func parseHexAddresses(s string) ([]uint64, error) {
+// extractHexAddresses extracts hex numbers from a string and returns
+// them, together with their numeric value, in a slice.
+func extractHexAddresses(s string) ([]string, []uint64) {
 	hexStrings := hexNumberRE.FindAllString(s, -1)
-	var addrs []uint64
+	var ids []uint64
 	for _, s := range hexStrings {
-		if addr, err := strconv.ParseUint(s, 0, 64); err == nil {
-			addrs = append(addrs, addr)
+		if id, err := strconv.ParseUint(s, 0, 64); err == nil {
+			ids = append(ids, id)
 		} else {
-			return nil, fmt.Errorf("failed to parse as hex 64-bit number: %s", s)
+			// Do not expect any parsing failures due to the regexp matching.
+			panic("failed to parse hex value:" + s)
 		}
 	}
-	return addrs, nil
+	return hexStrings, ids
+}
+
+// parseHexAddresses parses hex numbers from a string and returns them
+// in a slice.
+func parseHexAddresses(s string) []uint64 {
+	_, ids := extractHexAddresses(s)
+	return ids
 }
 
 // scaleHeapSample adjusts the data from a heapz Sample to
@@ -676,23 +682,37 @@ func scaleHeapSample(count, size, rate int64) (int64, int64) {
 // parseContention parses a mutex or contention profile. There are 2 cases:
 // "--- contentionz " for legacy C++ profiles (and backwards compatibility)
 // "--- mutex:" or "--- contention:" for profiles generated by the Go runtime.
+// This code converts the text output from runtime into a *Profile. (In the future
+// the runtime might write a serialized Profile directly making this unnecessary.)
 func parseContention(b []byte) (*Profile, error) {
-	s := bufio.NewScanner(bytes.NewBuffer(b))
-	if !s.Scan() {
-		if err := s.Err(); err != nil {
+	r := bytes.NewBuffer(b)
+	var l string
+	var err error
+	for {
+		// Skip past comments and empty lines seeking a real header.
+		l, err = r.ReadString('\n')
+		if err != nil {
 			return nil, err
 		}
-		return nil, errUnrecognized
+		if !isSpaceOrComment(l) {
+			break
+		}
 	}
 
-	switch l := s.Text(); {
-	case strings.HasPrefix(l, "--- contentionz "):
-	case strings.HasPrefix(l, "--- mutex:"):
-	case strings.HasPrefix(l, "--- contention:"):
-	default:
-		return nil, errUnrecognized
+	if strings.HasPrefix(l, "--- contentionz ") {
+		return parseCppContention(r)
+	} else if strings.HasPrefix(l, "--- mutex:") {
+		return parseCppContention(r)
+	} else if strings.HasPrefix(l, "--- contention:") {
+		return parseCppContention(r)
 	}
+	return nil, errUnrecognized
+}
 
+// parseCppContention parses the output from synchronization_profiling.cc
+// for backward compatibility, and the compatible (non-debug) block profile
+// output from the Go runtime.
+func parseCppContention(r *bytes.Buffer) (*Profile, error) {
 	p := &Profile{
 		PeriodType: &ValueType{Type: "contentions", Unit: "count"},
 		Period:     1,
@@ -703,17 +723,34 @@ func parseContention(b []byte) (*Profile, error) {
 	}
 
 	var cpuHz int64
+	var l string
+	var err error
 	// Parse text of the form "attribute = value" before the samples.
 	const delimiter = "="
-	for s.Scan() {
-		line := s.Text()
-		if line = strings.TrimSpace(line); isSpaceOrComment(line) {
+	for {
+		l, err = r.ReadString('\n')
+		if err != nil {
+			if err != io.EOF {
+				return nil, err
+			}
+
+			if l == "" {
+				break
+			}
+		}
+		if isSpaceOrComment(l) {
 			continue
 		}
-		if strings.HasPrefix(line, "---") {
+
+		if l = strings.TrimSpace(l); l == "" {
+			continue
+		}
+
+		if strings.HasPrefix(l, "---") {
 			break
 		}
-		attr := strings.SplitN(line, delimiter, 2)
+
+		attr := strings.SplitN(l, delimiter, 2)
 		if len(attr) != 2 {
 			break
 		}
@@ -745,18 +782,14 @@ func parseContention(b []byte) (*Profile, error) {
 			return nil, errUnrecognized
 		}
 	}
-	if err := s.Err(); err != nil {
-		return nil, err
-	}
 
 	locs := make(map[uint64]*Location)
 	for {
-		line := strings.TrimSpace(s.Text())
-		if strings.HasPrefix(line, "---") {
-			break
-		}
-		if !isSpaceOrComment(line) {
-			value, addrs, err := parseContentionSample(line, p.Period, cpuHz)
+		if !isSpaceOrComment(l) {
+			if l = strings.TrimSpace(l); strings.HasPrefix(l, "---") {
+				break
+			}
+			value, addrs, err := parseContentionSample(l, p.Period, cpuHz)
 			if err != nil {
 				return nil, err
 			}
@@ -780,15 +813,18 @@ func parseContention(b []byte) (*Profile, error) {
 				Location: sloc,
 			})
 		}
-		if !s.Scan() {
-			break
+
+		if l, err = r.ReadString('\n'); err != nil {
+			if err != io.EOF {
+				return nil, err
+			}
+			if l == "" {
+				break
+			}
 		}
 	}
-	if err := s.Err(); err != nil {
-		return nil, err
-	}
 
-	if err := parseAdditionalSections(s, p); err != nil {
+	if err = parseAdditionalSections(l, r, p); err != nil {
 		return nil, err
 	}
 
@@ -800,16 +836,16 @@ func parseContention(b []byte) (*Profile, error) {
 func parseContentionSample(line string, period, cpuHz int64) (value []int64, addrs []uint64, err error) {
 	sampleData := contentionSampleRE.FindStringSubmatch(line)
 	if sampleData == nil {
-		return nil, nil, errUnrecognized
+		return value, addrs, errUnrecognized
 	}
 
 	v1, err := strconv.ParseInt(sampleData[1], 10, 64)
 	if err != nil {
-		return nil, nil, fmt.Errorf("malformed sample: %s: %v", line, err)
+		return value, addrs, fmt.Errorf("malformed sample: %s: %v", line, err)
 	}
 	v2, err := strconv.ParseInt(sampleData[2], 10, 64)
 	if err != nil {
-		return nil, nil, fmt.Errorf("malformed sample: %s: %v", line, err)
+		return value, addrs, fmt.Errorf("malformed sample: %s: %v", line, err)
 	}
 
 	// Unsample values if period and cpuHz are available.
@@ -824,26 +860,42 @@ func parseContentionSample(line string, period, cpuHz int64) (value []int64, add
 	}
 
 	value = []int64{v2, v1}
-	addrs, err = parseHexAddresses(sampleData[3])
-	if err != nil {
-		return nil, nil, fmt.Errorf("malformed sample: %s: %v", line, err)
-	}
+	addrs = parseHexAddresses(sampleData[3])
 
 	return value, addrs, nil
 }
 
 // parseThread parses a Threadz profile and returns a new Profile.
 func parseThread(b []byte) (*Profile, error) {
-	s := bufio.NewScanner(bytes.NewBuffer(b))
-	// Skip past comments and empty lines seeking a real header.
-	for s.Scan() && isSpaceOrComment(s.Text()) {
+	r := bytes.NewBuffer(b)
+
+	var line string
+	var err error
+	for {
+		// Skip past comments and empty lines seeking a real header.
+		line, err = r.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		if !isSpaceOrComment(line) {
+			break
+		}
 	}
 
-	line := s.Text()
 	if m := threadzStartRE.FindStringSubmatch(line); m != nil {
 		// Advance over initial comments until first stack trace.
-		for s.Scan() {
-			if line = s.Text(); isMemoryMapSentinel(line) || strings.HasPrefix(line, "-") {
+		for {
+			line, err = r.ReadString('\n')
+			if err != nil {
+				if err != io.EOF {
+					return nil, err
+				}
+
+				if line == "" {
+					break
+				}
+			}
+			if sectionTrigger(line) != unrecognizedSection || line[0] == '-' {
 				break
 			}
 		}
@@ -859,7 +911,7 @@ func parseThread(b []byte) (*Profile, error) {
 
 	locs := make(map[uint64]*Location)
 	// Recognize each thread and populate profile samples.
-	for !isMemoryMapSentinel(line) {
+	for sectionTrigger(line) == unrecognizedSection {
 		if strings.HasPrefix(line, "---- no stack trace for") {
 			line = ""
 			break
@@ -869,10 +921,9 @@ func parseThread(b []byte) (*Profile, error) {
 		}
 
 		var addrs []uint64
-		var err error
-		line, addrs, err = parseThreadSample(s)
+		line, addrs, err = parseThreadSample(r)
 		if err != nil {
-			return nil, err
+			return nil, errUnrecognized
 		}
 		if len(addrs) == 0 {
 			// We got a --same as previous threads--. Bump counters.
@@ -884,13 +935,10 @@ func parseThread(b []byte) (*Profile, error) {
 		}
 
 		var sloc []*Location
-		for i, addr := range addrs {
+		for _, addr := range addrs {
 			// Addresses from stack traces point to the next instruction after
-			// each call. Adjust by -1 to land somewhere on the actual call
-			// (except for the leaf, which is not a call).
-			if i > 0 {
-				addr--
-			}
+			// each call. Adjust by -1 to land somewhere on the actual call.
+			addr--
 			loc := locs[addr]
 			if locs[addr] == nil {
 				loc = &Location{
@@ -908,130 +956,122 @@ func parseThread(b []byte) (*Profile, error) {
 		})
 	}
 
-	if err := parseAdditionalSections(s, p); err != nil {
+	if err = parseAdditionalSections(line, r, p); err != nil {
 		return nil, err
 	}
 
-	cleanupDuplicateLocations(p)
 	return p, nil
 }
 
 // parseThreadSample parses a symbolized or unsymbolized stack trace.
 // Returns the first line after the traceback, the sample (or nil if
 // it hits a 'same-as-previous' marker) and an error.
-func parseThreadSample(s *bufio.Scanner) (nextl string, addrs []uint64, err error) {
-	var line string
+func parseThreadSample(b *bytes.Buffer) (nextl string, addrs []uint64, err error) {
+	var l string
 	sameAsPrevious := false
-	for s.Scan() {
-		line = strings.TrimSpace(s.Text())
-		if line == "" {
+	for {
+		if l, err = b.ReadString('\n'); err != nil {
+			if err != io.EOF {
+				return "", nil, err
+			}
+			if l == "" {
+				break
+			}
+		}
+		if l = strings.TrimSpace(l); l == "" {
 			continue
 		}
 
-		if strings.HasPrefix(line, "---") {
+		if strings.HasPrefix(l, "---") {
 			break
 		}
-		if strings.Contains(line, "same as previous thread") {
+		if strings.Contains(l, "same as previous thread") {
 			sameAsPrevious = true
 			continue
 		}
 
-		curAddrs, err := parseHexAddresses(line)
-		if err != nil {
-			return "", nil, fmt.Errorf("malformed sample: %s: %v", line, err)
-		}
-		addrs = append(addrs, curAddrs...)
+		addrs = append(addrs, parseHexAddresses(l)...)
 	}
-	if err := s.Err(); err != nil {
-		return "", nil, err
-	}
+
 	if sameAsPrevious {
-		return line, nil, nil
+		return l, nil, nil
 	}
-	return line, addrs, nil
+	return l, addrs, nil
 }
 
 // parseAdditionalSections parses any additional sections in the
 // profile, ignoring any unrecognized sections.
-func parseAdditionalSections(s *bufio.Scanner, p *Profile) error {
-	for !isMemoryMapSentinel(s.Text()) && s.Scan() {
-	}
-	if err := s.Err(); err != nil {
-		return err
-	}
-	return p.ParseMemoryMapFromScanner(s)
-}
-
-// ParseProcMaps parses a memory map in the format of /proc/self/maps.
-// ParseMemoryMap should be called after setting on a profile to
-// associate locations to the corresponding mapping based on their
-// address.
-func ParseProcMaps(rd io.Reader) ([]*Mapping, error) {
-	s := bufio.NewScanner(rd)
-	return parseProcMapsFromScanner(s)
-}
-
-func parseProcMapsFromScanner(s *bufio.Scanner) ([]*Mapping, error) {
-	var mapping []*Mapping
-
-	var attrs []string
-	const delimiter = "="
-	r := strings.NewReplacer()
-	for s.Scan() {
-		line := r.Replace(removeLoggingInfo(s.Text()))
-		m, err := parseMappingEntry(line)
-		if err != nil {
-			if err == errUnrecognized {
-				// Recognize assignments of the form: attr=value, and replace
-				// $attr with value on subsequent mappings.
-				if attr := strings.SplitN(line, delimiter, 2); len(attr) == 2 {
-					attrs = append(attrs, "$"+strings.TrimSpace(attr[0]), strings.TrimSpace(attr[1]))
-					r = strings.NewReplacer(attrs...)
-				}
-				// Ignore any unrecognized entries
-				continue
+func parseAdditionalSections(l string, b *bytes.Buffer, p *Profile) (err error) {
+	for {
+		if sectionTrigger(l) == memoryMapSection {
+			break
+		}
+		// Ignore any unrecognized sections.
+		if l, err := b.ReadString('\n'); err != nil {
+			if err != io.EOF {
+				return err
 			}
-			return nil, err
+			if l == "" {
+				break
+			}
 		}
-		if m == nil {
-			continue
-		}
-		mapping = append(mapping, m)
 	}
-	if err := s.Err(); err != nil {
-		return nil, err
-	}
-	return mapping, nil
-}
-
-// removeLoggingInfo detects and removes log prefix entries generated
-// by the glog package. If no logging prefix is detected, the string
-// is returned unmodified.
-func removeLoggingInfo(line string) string {
-	if match := logInfoRE.FindStringIndex(line); match != nil {
-		return line[match[1]:]
-	}
-	return line
+	return p.ParseMemoryMap(b)
 }
 
 // ParseMemoryMap parses a memory map in the format of
 // /proc/self/maps, and overrides the mappings in the current profile.
 // It renumbers the samples and locations in the profile correspondingly.
 func (p *Profile) ParseMemoryMap(rd io.Reader) error {
-	return p.ParseMemoryMapFromScanner(bufio.NewScanner(rd))
-}
+	b := bufio.NewReader(rd)
 
-// ParseMemoryMapFromScanner parses a memory map in the format of
-// /proc/self/maps or a variety of legacy format, and overrides the
-// mappings in the current profile.  It renumbers the samples and
-// locations in the profile correspondingly.
-func (p *Profile) ParseMemoryMapFromScanner(s *bufio.Scanner) error {
-	mapping, err := parseProcMapsFromScanner(s)
-	if err != nil {
-		return err
+	var attrs []string
+	var r *strings.Replacer
+	const delimiter = "="
+	for {
+		l, err := b.ReadString('\n')
+		if err != nil {
+			if err != io.EOF {
+				return err
+			}
+			if l == "" {
+				break
+			}
+		}
+		if l = strings.TrimSpace(l); l == "" {
+			continue
+		}
+
+		if r != nil {
+			l = r.Replace(l)
+		}
+		m, err := parseMappingEntry(l)
+		if err != nil {
+			if err == errUnrecognized {
+				// Recognize assignments of the form: attr=value, and replace
+				// $attr with value on subsequent mappings.
+				if attr := strings.SplitN(l, delimiter, 2); len(attr) == 2 {
+					attrs = append(attrs, "$"+strings.TrimSpace(attr[0]), strings.TrimSpace(attr[1]))
+					r = strings.NewReplacer(attrs...)
+				}
+				// Ignore any unrecognized entries
+				continue
+			}
+			return err
+		}
+		if m == nil || (m.File == "" && len(p.Mapping) != 0) {
+			// In some cases the first entry may include the address range
+			// but not the name of the file. It should be followed by
+			// another entry with the name.
+			continue
+		}
+		if len(p.Mapping) == 1 && p.Mapping[0].File == "" {
+			// Update the name if this is the entry following that empty one.
+			p.Mapping[0].File = m.File
+			continue
+		}
+		p.Mapping = append(p.Mapping, m)
 	}
-	p.Mapping = append(p.Mapping, mapping...)
-	p.massageMappings()
 	p.remapLocationIDs()
 	p.remapFunctionIDs()
 	p.remapMappingIDs()
@@ -1039,57 +1079,73 @@ func (p *Profile) ParseMemoryMapFromScanner(s *bufio.Scanner) error {
 }
 
 func parseMappingEntry(l string) (*Mapping, error) {
-	var start, end, perm, file, offset, buildID string
-	if me := procMapsRE.FindStringSubmatch(l); len(me) == 6 {
-		start, end, perm, offset, file = me[1], me[2], me[3], me[4], me[5]
-	} else if me := briefMapsRE.FindStringSubmatch(l); len(me) == 7 {
-		start, end, perm, file, offset, buildID = me[1], me[2], me[3], me[4], me[5], me[6]
-	} else {
-		return nil, errUnrecognized
-	}
-
+	mapping := &Mapping{}
 	var err error
-	mapping := &Mapping{
-		File:    file,
-		BuildID: buildID,
-	}
-	if perm != "" && !strings.Contains(perm, "x") {
-		// Skip non-executable entries.
-		return nil, nil
-	}
-	if mapping.Start, err = strconv.ParseUint(start, 16, 64); err != nil {
-		return nil, errUnrecognized
-	}
-	if mapping.Limit, err = strconv.ParseUint(end, 16, 64); err != nil {
-		return nil, errUnrecognized
-	}
-	if offset != "" {
-		if mapping.Offset, err = strconv.ParseUint(offset, 16, 64); err != nil {
+	if me := procMapsRE.FindStringSubmatch(l); len(me) == 9 {
+		if !strings.Contains(me[3], "x") {
+			// Skip non-executable entries.
+			return nil, nil
+		}
+		if mapping.Start, err = strconv.ParseUint(me[1], 16, 64); err != nil {
 			return nil, errUnrecognized
 		}
+		if mapping.Limit, err = strconv.ParseUint(me[2], 16, 64); err != nil {
+			return nil, errUnrecognized
+		}
+		if me[4] != "" {
+			if mapping.Offset, err = strconv.ParseUint(me[4], 16, 64); err != nil {
+				return nil, errUnrecognized
+			}
+		}
+		mapping.File = me[8]
+		return mapping, nil
 	}
-	return mapping, nil
+
+	if me := briefMapsRE.FindStringSubmatch(l); len(me) == 6 {
+		if mapping.Start, err = strconv.ParseUint(me[1], 16, 64); err != nil {
+			return nil, errUnrecognized
+		}
+		if mapping.Limit, err = strconv.ParseUint(me[2], 16, 64); err != nil {
+			return nil, errUnrecognized
+		}
+		mapping.File = me[3]
+		if me[5] != "" {
+			if mapping.Offset, err = strconv.ParseUint(me[5], 16, 64); err != nil {
+				return nil, errUnrecognized
+			}
+		}
+		return mapping, nil
+	}
+
+	return nil, errUnrecognized
 }
 
-var memoryMapSentinels = []string{
+type sectionType int
+
+const (
+	unrecognizedSection sectionType = iota
+	memoryMapSection
+)
+
+var memoryMapTriggers = []string{
 	"--- Memory map: ---",
 	"MAPPED_LIBRARIES:",
 }
 
-// isMemoryMapSentinel returns true if the string contains one of the
-// known sentinels for memory map information.
-func isMemoryMapSentinel(line string) bool {
-	for _, s := range memoryMapSentinels {
-		if strings.Contains(line, s) {
-			return true
+func sectionTrigger(line string) sectionType {
+	for _, trigger := range memoryMapTriggers {
+		if strings.Contains(line, trigger) {
+			return memoryMapSection
 		}
 	}
-	return false
+	return unrecognizedSection
 }
 
 func (p *Profile) addLegacyFrameInfo() {
 	switch {
-	case isProfileType(p, heapzSampleTypes):
+	case isProfileType(p, heapzSampleTypes) ||
+		isProfileType(p, heapzInUseSampleTypes) ||
+		isProfileType(p, heapzAllocSampleTypes):
 		p.DropFrames, p.KeepFrames = allocRxStr, allocSkipRxStr
 	case isProfileType(p, contentionzSampleTypes):
 		p.DropFrames, p.KeepFrames = lockRxStr, ""
@@ -1098,33 +1154,23 @@ func (p *Profile) addLegacyFrameInfo() {
 	}
 }
 
-var heapzSampleTypes = [][]string{
-	{"allocations", "size"}, // early Go pprof profiles
-	{"objects", "space"},
-	{"inuse_objects", "inuse_space"},
-	{"alloc_objects", "alloc_space"},
-	{"alloc_objects", "alloc_space", "inuse_objects", "inuse_space"}, // Go pprof legacy profiles
-}
-var contentionzSampleTypes = [][]string{
-	{"contentions", "delay"},
-}
+var heapzSampleTypes = []string{"allocations", "size"} // early Go pprof profiles
+var heapzInUseSampleTypes = []string{"inuse_objects", "inuse_space"}
+var heapzAllocSampleTypes = []string{"alloc_objects", "alloc_space"}
+var contentionzSampleTypes = []string{"contentions", "delay"}
 
-func isProfileType(p *Profile, types [][]string) bool {
+func isProfileType(p *Profile, t []string) bool {
 	st := p.SampleType
-nextType:
-	for _, t := range types {
-		if len(st) != len(t) {
-			continue
-		}
-
-		for i := range st {
-			if st[i].Type != t[i] {
-				continue nextType
-			}
-		}
-		return true
+	if len(st) != len(t) {
+		return false
 	}
-	return false
+
+	for i := range st {
+		if st[i].Type != t[i] {
+			return false
+		}
+	}
+	return true
 }
 
 var allocRxStr = strings.Join([]string{
@@ -1209,11 +1255,6 @@ var lockRxStr = strings.Join([]string{
 	`(base::)?RecordLockProfileData.*`,
 	`(base::)?SubmitMutexProfileData.*`,
 	`(base::)?SubmitSpinLockProfileData.*`,
-	`(base::Mutex::)?AwaitCommon.*`,
-	`(base::Mutex::)?Unlock.*`,
-	`(base::Mutex::)?UnlockSlow.*`,
-	`(base::Mutex::)?ReaderUnlock.*`,
-	`(base::MutexLock::)?~MutexLock.*`,
 	`(Mutex::)?AwaitCommon.*`,
 	`(Mutex::)?Unlock.*`,
 	`(Mutex::)?UnlockSlow.*`,

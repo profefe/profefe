@@ -16,7 +16,7 @@ LDFLAGS += -X $(PKG)/version.Version=$(VERSION)
 LDFLAGS += -X $(PKG)/version.Commit=$(GITSHA)
 LDFLAGS += -X $(PKG)/version.BuildTime=$(BUILDTIME)
 
-BUILDDIR  := BUILD
+BUILDDIR := BUILD
 
 # Required for globs to work correctly
 SHELL := /bin/bash
@@ -24,14 +24,11 @@ SHELL := /bin/bash
 BUILD.go = $(GO) build $(GOFLAGS)
 TEST.go  = $(GO) test $(TESTFLAGS)
 
-all:
+all: build-profefe
 
-build:
-	$(BUILD.go) -ldflags "$(LDFLAGS)" -o $(BUILDDIR)/collector $(PKG)/cmd/collector
+build-%:
+	$(BUILD.go) -ldflags "$(LDFLAGS)" -o $(BUILDDIR)/$(*) $(PKG)/cmd/$(*)
 
 deploy:
-
-run: build
-	$(BUILDDIR)/collector
 
 .PHONY: all build deploy run test

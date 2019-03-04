@@ -15,6 +15,10 @@ func init() {
 
 const headerRequestID = "X-Request-Id"
 
+func newRequestID() string {
+	return fmt.Sprintf("%08x%08x", rand.Uint32(), rand.Uint32())
+}
+
 type responseWriter struct {
 	http.ResponseWriter
 	statusCode int
@@ -34,6 +38,7 @@ func LoggingHandler(out io.Writer, next http.Handler) http.Handler {
 		rid := r.Header.Get(headerRequestID)
 		if rid == "" {
 			rid = newRequestID()
+			r.Header.Set(headerRequestID, rid)
 		}
 
 		next.ServeHTTP(resp, r)
@@ -64,8 +69,4 @@ func LoggingHandler(out io.Writer, next http.Handler) http.Handler {
 		)
 	}
 	return http.HandlerFunc(h)
-}
-
-func newRequestID() string {
-	return fmt.Sprintf("%08x%08x", rand.Uint32(), rand.Uint32())
 }

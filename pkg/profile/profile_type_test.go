@@ -7,17 +7,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestProfileTypeFromString(t *testing.T) {
+func TestProfileType_FromString(t *testing.T) {
 	cases := []struct {
 		in   string
 		want ProfileType
 	}{
 		{"cpu", CPUProfile},
+		{"heap", HeapProfile},
 		{"blah", UnknownProfile},
 	}
 
 	for _, tc := range cases {
-		assert.Equal(t, tc.want, ProfileTypeFromString(tc.in))
+		var pt ProfileType
+		require.NoError(t, pt.FromString(tc.in))
+		assert.Equal(t, tc.want, pt)
 	}
 }
 

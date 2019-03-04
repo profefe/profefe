@@ -280,7 +280,7 @@ func (a *agent) collectAndSend(ctx context.Context) {
 			if err := a.collectProfile(ctx, ptype, &buf); err != nil {
 				a.logf("failed to collect profiles: %v", err)
 			} else if err := a.sendProfile(ctx, ptype, &buf); err != nil {
-				a.logf("failed to send profiles to collector: %v", err)
+				a.logf("failed to send profiles: %v", err)
 			}
 
 			buf.Reset()

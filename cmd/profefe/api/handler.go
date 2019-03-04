@@ -9,6 +9,7 @@ import (
 
 	"github.com/profefe/profefe/pkg/logger"
 	"github.com/profefe/profefe/pkg/profile"
+	"github.com/profefe/profefe/version"
 )
 
 type APIHandler struct {
@@ -30,6 +31,7 @@ func (api *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 func (api *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 
+	// TODO(narqo): maybe use github.com/go-chi/chi
 	switch r.URL.Path {
 	case "/api/0/profiles":
 		err = api.handleGetProfiles(w, r)
@@ -42,6 +44,8 @@ func (api *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodGet:
 			err = api.handleGetProfile(w, r)
 		}
+	case "/api/0/version":
+		err = api.handleGetVersion(w, r)
 	default:
 		http.NotFound(w, r)
 		return
@@ -139,7 +143,7 @@ func (api *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) 
 
 	api.logger.Debugf("req %+v", req)
 
-	prof, profReader, err := api.profilePepo.GetProfile(r.Context(), req)
+	profReader, err := api.profilePepo.GetProfile(r.Context(), req)
 	if err == profile.ErrNotFound {
 		return StatusError(http.StatusNotFound, "nothing found", nil)
 	} else if err != nil {
@@ -147,7 +151,7 @@ func (api *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, prof.Type))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, "profile"))
 
 	_, err = io.Copy(w, profReader)
 	if err != nil {
@@ -200,4 +204,19 @@ func readGetProfileRequest(in *profile.GetProfileRequest, r *http.Request) (err 
 	}
 
 	return nil
+}
+
+func (api *APIHandler) handleGetVersion(w http.ResponseWriter, r *http.Request) error {
+	w.Header().Set("Content-Type", "application/json")
+
+	resp := struct {
+		Version   string `json:"version"`
+		Commit    string `json:"commit"`
+		BuildTime string `json:"build_time"`
+	}{
+		Version:   version.Version,
+		Commit:    version.Commit,
+		BuildTime: version.BuildTime,
+	}
+	return json.NewEncoder(w).Encode(resp)
 }
