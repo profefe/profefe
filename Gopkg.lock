@@ -11,14 +11,6 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:089d56c0adb79140365b5c86815ce97233986da6f3a525c6b706773e4b83876f"
-  name = "github.com/google/pprof"
-  packages = ["profile"]
-  pruneopts = "UT"
-  revision = "3ea8567a2e5752420fc544d2e2ad249721768934"
-
-[[projects]]
-  branch = "master"
   digest = "1:2d370ad7a48d3523291ad53a04b9b1510c182880927f800b46221cc465427800"
   name = "github.com/lib/pq"
   packages = [
@@ -102,10 +94,10 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/google/pprof/profile",
     "github.com/lib/pq",
     "github.com/lib/pq/hstore",
     "github.com/rs/xid",
+    "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/require",
     "go.uber.org/zap",
   ]
