@@ -11,7 +11,6 @@ type Digest string
 type Profile struct {
 	Type       ProfileType
 	CreatedAt  time.Time
-	ReceivedAt time.Time
 	Service    *Service
 }
 
