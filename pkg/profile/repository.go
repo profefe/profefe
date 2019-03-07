@@ -45,9 +45,8 @@ func (req *CreateProfileRequest) Validate() error {
 func (repo *Repository) CreateProfile(ctx context.Context, req *CreateProfileRequest) (token string, err error) {
 	service := NewService(req.Service, req.ID, req.Labels)
 	prof := &Profile{
-		CreatedAt:  time.Now().UTC(),
-		ReceivedAt: time.Now().UTC(),
-		Service:    service,
+		CreatedAt: time.Now().UTC(),
+		Service:   service,
 	}
 
 	if err := repo.storage.Create(ctx, prof); err != nil {
@@ -84,8 +83,7 @@ func (req *UpdateProfileRequest) Validate() error {
 
 func (repo *Repository) UpdateProfile(ctx context.Context, req *UpdateProfileRequest, r io.Reader) error {
 	prof := &Profile{
-		Type:       req.Type,
-		ReceivedAt: time.Now().UTC(),
+		Type: req.Type,
 		Service: &Service{
 			BuildID: req.ID,
 			Token:   TokenFromString(req.Token),

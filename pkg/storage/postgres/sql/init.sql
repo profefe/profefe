@@ -18,11 +18,10 @@ CREATE TABLE pprof_samples_cpu (
   build_id      VARCHAR(40) NOT NULL,
   token         VARCHAR(40) NOT NULL,
   created_at    TIMESTAMPTZ NOT NULL,
-  received_at   TIMESTAMPTZ NOT NULL,
   locations     INTEGER[],
   samples_count BIGINT,
   cpu_nanos     BIGINT,
-  labels        INTEGER[],
+  labels        jsonb,
 
   FOREIGN KEY (build_id, token) REFERENCES services ON DELETE CASCADE
 );
@@ -35,13 +34,12 @@ CREATE TABLE pprof_samples_heap (
   build_id      VARCHAR(40) NOT NULL,
   token         VARCHAR(40) NOT NULL,
   created_at    TIMESTAMPTZ NOT NULL,
-  received_at   TIMESTAMPTZ NOT NULL,
   locations     INTEGER[],
   alloc_objects BIGINT,
   alloc_bytes   BIGINT,
   inuse_objects BIGINT,
   inuse_bytes   BIGINT,
-  labels        INTEGER[],
+  labels        jsonb,
 
   FOREIGN KEY (build_id, token) REFERENCES services ON DELETE CASCADE
 );
@@ -60,14 +58,3 @@ CREATE TABLE pprof_locations (
 );
 
 CREATE INDEX ON pprof_locations (func_name, file_name, line);
-
-DROP TABLE IF EXISTS pprof_labels;
-
-CREATE TABLE pprof_labels (
-  label_id  SERIAL PRIMARY KEY,
-  key       TEXT NOT NULL,
-  value_str TEXT,
-  value_num INTEGER,
-
-  UNIQUE (key, value_str, value_num)
-);
