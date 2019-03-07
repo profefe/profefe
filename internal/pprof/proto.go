@@ -16,6 +16,7 @@ type ProfileBuilder struct {
 	havePeriod bool
 	period     int64
 	m          profMap
+	locMap     LocMap
 
 	// encoding state
 	w         io.Writer
@@ -192,7 +193,7 @@ func (b *ProfileBuilder) pbMapping(tag int, id, base, limit, offset uint64, file
 // locForPC returns the location ID for addr.
 // addr must a return PC or 1 + the PC of an inline marker. This returns the location of the corresponding call.
 // It may emit to b.pb, so there must be no message encoding in progress.
-func (b *ProfileBuilder) locForPC(addr uint64, locMap map[uint64]Location) uint64 {
+func (b *ProfileBuilder) locForPC(addr uint64) uint64 {
 	id := uint64(b.locs[addr])
 	if id != 0 {
 		return id
@@ -215,7 +216,7 @@ func (b *ProfileBuilder) locForPC(addr uint64, locMap map[uint64]Location) uint6
 	b.pb.uint64Opt(tagLocation_ID, id)
 	b.pb.uint64Opt(tagLocation_Address, uint64(0))
 
-	if frame, ok := locMap[addr]; ok {
+	if frame, ok := b.locMap[addr]; ok {
 		funcID := uint64(b.funcs[frame.Function])
 		if funcID == 0 {
 			funcID = uint64(len(b.funcs)) + 1
@@ -254,12 +255,13 @@ func (b *ProfileBuilder) locForPC(addr uint64, locMap map[uint64]Location) uint6
 // CPU profiling data obtained from the runtime can be added
 // by calling b.addCPUData, and then the eventual profile
 // can be obtained by calling b.finish.
-func NewProfileBuilder(w io.Writer) *ProfileBuilder {
+func NewProfileBuilder(w io.Writer, locMap LocMap) *ProfileBuilder {
 	zw, _ := gzip.NewWriterLevel(w, gzip.BestSpeed)
 	b := &ProfileBuilder{
 		w:         w,
 		zw:        zw,
 		start:     time.Now(),
+		locMap:    locMap,
 		strings:   []string{""},
 		stringMap: map[string]int{"": 0},
 		locs:      map[uint64]int{},

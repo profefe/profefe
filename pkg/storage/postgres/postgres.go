@@ -63,7 +63,6 @@ func (st *pqStorage) updateProfile(ctx context.Context, prof *profile.Profile, p
 	default:
 		return fmt.Errorf("profile type %v is not supported", prof.Type)
 	}
-	_ = sqlSamples
 
 	defer func(t time.Time) {
 		st.logger.Debugw("update profile", "time", time.Since(t))
@@ -95,27 +94,15 @@ func (st *pqStorage) updateProfile(ctx context.Context, prof *profile.Profile, p
 		return fmt.Errorf("could not insert locations: %v", err)
 	}
 
-	insertSamplesStmt, err := tx.PrepareContext(ctx, sqlSamples.BuildInsertQuery())
-	if err != nil {
-		return fmt.Errorf("could not prepare INSERT statement: %v", err)
-	}
-
-	_, err = insertSamplesStmt.ExecContext(
+	_, err = tx.ExecContext(
 		ctx,
+		sqlSamples.BuildInsertQuery(),
 		prof.Service.BuildID,
 		prof.Service.Token.String(),
 		time.Unix(0, pp.TimeNanos),
 	)
 	if err != nil {
 		return fmt.Errorf("could not insert samples: %v", err)
-	}
-
-	if err := insertSamplesStmt.Close(); err != nil {
-		return fmt.Errorf("could not close INSERT statement: %v", err)
-	}
-
-	if err := copyStmt.Close(); err != nil {
-		return fmt.Errorf("could not close COPY statement: %v", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -173,12 +160,24 @@ func (st *pqStorage) Query(ctx context.Context, queryReq *profile.QueryRequest) 
 }
 
 func (st *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *profile.QueryRequest) (io.Reader, error) {
-	var sqlSamples sqlSamplesBuilder
+	defer func(t time.Time) {
+		st.logger.Debugw("query samples", "time", time.Since(t))
+	}(time.Now())
+
+	var (
+		queryBuilder sqlSamplesBuilder
+		scanner      profileRecordScanner
+		writeProto   func(io.Writer, []pprof.ProfileRecord, pprof.LocMap) error
+	)
 	switch queryReq.Type {
 	case profile.CPUProfile:
-		sqlSamples = sqlSamplesCPU
+		queryBuilder = sqlSamplesCPU
+		scanner.scanFunc = scanCPUProfileRecord
+		writeProto = pprof.WriteCPUProto
 	case profile.HeapProfile:
-		sqlSamples = sqlSamplesHeap
+		queryBuilder = sqlSamplesHeap
+		scanner.scanFunc = scanHeapProfileRecord
+		writeProto = pprof.WriteHeapProto
 	default:
 		return nil, fmt.Errorf("profile type %v is not supported", queryReq.Type)
 	}
@@ -195,27 +194,23 @@ func (st *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *profile.Que
 		whereLabels += fmt.Sprintf(" AND v.labels->'%s' = $%d", label.Key, len(args))
 	}
 
-	query := sqlSamples.BuildSelectQuery(whereLabels)
-	selectSamplesStmt, err := st.db.PrepareContext(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("could not prepare SELECT samples statement: %v", err)
-	}
-
-	samplesRows, err := selectSamplesStmt.QueryContext(ctx, args...)
+	query := queryBuilder.BuildSelectQuery(whereLabels)
+	samplesRows, err := st.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer samplesRows.Close()
 
 	locSet := make(map[int64]struct{})
-	var locs pq.Int64Array
 
-	var p []pprof.MemProfileRecord
+	var (
+		locs pq.Int64Array
+		p    []pprof.ProfileRecord
+	)
 	for samplesRows.Next() {
-		r := pprof.MemProfileRecord{}
-		var labels sampleLabels
-		locs = locs[:0]
-		err := samplesRows.Scan(&r.AllocObjects, &r.AllocBytes, &r.InUseObjects, &r.InUseBytes, &locs, &labels)
+		r := pprof.ProfileRecord{}
+		locs := locs[:0]
+		err := scanner.Scan(samplesRows, &r, &locs)
 		if err != nil {
 			return nil, err
 		}
@@ -223,37 +218,28 @@ func (st *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *profile.Que
 			r.Stack0 = append(r.Stack0, uint64(loc))
 			locSet[loc] = struct{}{}
 		}
-		for _, label := range labels {
-			if label.Key == "" {
-				continue
-			}
-			r.Labels = append(r.Labels, pprof.Label(label))
-		}
 		p = append(p, r)
 	}
 	if err := samplesRows.Err(); err != nil {
 		return nil, err
 	}
 
-	if err := selectSamplesStmt.Close(); err != nil {
-		return nil, fmt.Errorf("could not close SELECT samples statement: %v", err)
+	if len(p) == 0 {
+		return nil, profile.ErrEmpty
 	}
 
-	selectLocsStmt, err := st.db.PrepareContext(ctx, sqlSelectLocations)
-	if err != nil {
-		return nil, fmt.Errorf("could not prepare SELECT locations statement: %v", err)
-	}
+	locs = locs[:0]
 	for loc := range locSet {
 		locs = append(locs, loc)
 	}
 
-	locRows, err := selectLocsStmt.QueryContext(ctx, locs)
+	locRows, err := st.db.QueryContext(ctx, sqlSelectLocations, locs)
 	if err != nil {
 		return nil, err
 	}
 	defer locRows.Close()
 
-	locMap := make(map[uint64]pprof.Location, 8)
+	locMap := make(pprof.LocMap, 8)
 	for locRows.Next() {
 		var (
 			locID uint64
@@ -271,8 +257,52 @@ func (st *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *profile.Que
 
 	// TODO(narqo): implement io.WriterTo
 	var buf bytes.Buffer
-	err = pprof.WriteHeapProto(&buf, p, locMap)
+	err = writeProto(&buf, p, locMap)
 	return &buf, err
+}
+
+type scanProfileRecordFunc func(*sql.Rows, *pprof.ProfileRecord, *pq.Int64Array, *sampleLabels) error
+
+type profileRecordScanner struct {
+	labels   sampleLabels
+	scanFunc scanProfileRecordFunc
+}
+
+func (s profileRecordScanner) Scan(rows *sql.Rows, r *pprof.ProfileRecord, locs *pq.Int64Array) error {
+	labels := s.labels[:0]
+	if err := s.scanFunc(rows, r, locs, &labels); err != nil {
+		return err
+	}
+	for _, label := range labels {
+		if label.Key == "" {
+			continue
+		}
+		r.Labels = append(r.Labels, pprof.Label(label))
+	}
+	return nil
+}
+
+func scanCPUProfileRecord(rows *sql.Rows, r *pprof.ProfileRecord, locs *pq.Int64Array, labels *sampleLabels) error {
+	var samples, cpu int64
+	err := rows.Scan(&samples, &cpu, locs, labels)
+	if err != nil {
+		return err
+	}
+	r.Values = []int64{samples, cpu}
+	return nil
+}
+
+func scanHeapProfileRecord(rows *sql.Rows, r *pprof.ProfileRecord, locs *pq.Int64Array, labels *sampleLabels) error {
+	var (
+		allocObjects, allocBytes int64
+		inuseObjects, inuseBytes int64
+	)
+	err := rows.Scan(&allocObjects, &allocBytes, &inuseObjects, &inuseBytes, locs, labels)
+	if err != nil {
+		return err
+	}
+	r.Values = []int64{allocObjects, allocBytes, inuseObjects, inuseBytes}
+	return nil
 }
 
 func (st *pqStorage) Delete(ctx context.Context, prof *profile.Profile) error {
