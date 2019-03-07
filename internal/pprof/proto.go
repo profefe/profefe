@@ -2,10 +2,8 @@ package pprof
 
 import (
 	"compress/gzip"
-	"fmt"
 	"io"
 	"time"
-	"unsafe"
 )
 
 // A ProfileBuilder writes a profile incrementally from a
@@ -16,6 +14,7 @@ type ProfileBuilder struct {
 	havePeriod bool
 	period     int64
 	m          profMap
+	locMap     LocMap
 
 	// encoding state
 	w         io.Writer
@@ -192,7 +191,7 @@ func (b *ProfileBuilder) pbMapping(tag int, id, base, limit, offset uint64, file
 // locForPC returns the location ID for addr.
 // addr must a return PC or 1 + the PC of an inline marker. This returns the location of the corresponding call.
 // It may emit to b.pb, so there must be no message encoding in progress.
-func (b *ProfileBuilder) locForPC(addr uint64, locMap map[uint64]Location) uint64 {
+func (b *ProfileBuilder) locForPC(addr uint64) uint64 {
 	id := uint64(b.locs[addr])
 	if id != 0 {
 		return id
@@ -215,7 +214,7 @@ func (b *ProfileBuilder) locForPC(addr uint64, locMap map[uint64]Location) uint6
 	b.pb.uint64Opt(tagLocation_ID, id)
 	b.pb.uint64Opt(tagLocation_Address, uint64(0))
 
-	if frame, ok := locMap[addr]; ok {
+	if frame, ok := b.locMap[addr]; ok {
 		funcID := uint64(b.funcs[frame.Function])
 		if funcID == 0 {
 			funcID = uint64(len(b.funcs)) + 1
@@ -254,12 +253,13 @@ func (b *ProfileBuilder) locForPC(addr uint64, locMap map[uint64]Location) uint6
 // CPU profiling data obtained from the runtime can be added
 // by calling b.addCPUData, and then the eventual profile
 // can be obtained by calling b.finish.
-func NewProfileBuilder(w io.Writer) *ProfileBuilder {
+func NewProfileBuilder(w io.Writer, locMap LocMap) *ProfileBuilder {
 	zw, _ := gzip.NewWriterLevel(w, gzip.BestSpeed)
 	b := &ProfileBuilder{
 		w:         w,
 		zw:        zw,
 		start:     time.Now(),
+		locMap:    locMap,
 		strings:   []string{""},
 		stringMap: map[string]int{"": 0},
 		locs:      map[uint64]int{},
@@ -267,68 +267,6 @@ func NewProfileBuilder(w io.Writer) *ProfileBuilder {
 	}
 	b.readMapping()
 	return b
-}
-
-// addCPUData adds the CPU profiling data to the profile.
-// The data must be a whole number of records,
-// as delivered by the runtime.
-func (b *ProfileBuilder) addCPUData(data []uint64, tags []unsafe.Pointer) error {
-	if !b.havePeriod {
-		// first record is period
-		if len(data) < 3 {
-			return fmt.Errorf("truncated profile")
-		}
-		if data[0] != 3 || data[2] == 0 {
-			return fmt.Errorf("malformed profile")
-		}
-		// data[2] is sampling rate in Hz. Convert to sampling
-		// period in nanoseconds.
-		b.period = 1e9 / int64(data[2])
-		b.havePeriod = true
-		data = data[3:]
-	}
-
-	// Parse CPU samples from the profile.
-	// Each sample is 3+n uint64s:
-	//	data[0] = 3+n
-	//	data[1] = time stamp (ignored)
-	//	data[2] = count
-	//	data[3:3+n] = stack
-	// If the count is 0 and the stack has length 1,
-	// that's an overflow record inserted by the runtime
-	// to indicate that stack[0] samples were lost.
-	// Otherwise the count is usually 1,
-	// but in a few special cases like lost non-Go samples
-	// there can be larger counts.
-	// Because many samples with the same stack arrive,
-	// we want to deduplicate immediately, which we do
-	// using the b.m profMap.
-	for len(data) > 0 {
-		if len(data) < 3 || data[0] > uint64(len(data)) {
-			return fmt.Errorf("truncated profile")
-		}
-		if data[0] < 3 || tags != nil && len(tags) < 1 {
-			return fmt.Errorf("malformed profile")
-		}
-		count := data[2]
-		stk := data[3:data[0]]
-		data = data[data[0]:]
-		var tag unsafe.Pointer
-		if tags != nil {
-			tag = tags[0]
-			tags = tags[1:]
-		}
-
-		if count == 0 && len(stk) == 1 {
-			// overflow record
-			count = uint64(stk[0])
-			stk = []uint64{
-				//uint64(funcPC(lostProfileEvent)),
-			}
-		}
-		b.m.lookup(stk, tag).count += int64(count)
-	}
-	return nil
 }
 
 // build completes and returns the constructed profile.

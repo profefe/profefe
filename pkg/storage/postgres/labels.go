@@ -4,14 +4,18 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+
+	"github.com/lib/pq/hstore"
+	"github.com/profefe/profefe/pkg/profile"
 )
 
 type sampleLabel struct {
-	Key      string `json:"key"`
-	ValueStr string `json:"value_str,omitempty"`
-	ValueNum int64  `json:"value_num,omitempty"`
+	Key      string `json:"k"`
+	ValueStr string `json:"s,omitempty"`
+	ValueNum int64  `json:"n,omitempty"`
 }
 
+// sampleLabels is jsonb implementation for pprof.Label, pprof.NumLabel
 type sampleLabels []sampleLabel
 
 var (
@@ -31,4 +35,18 @@ func (sl sampleLabels) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return json.Marshal(sl)
+}
+
+// converts profile.Labels to hstore
+// XXX implement sql/driver.Valuer in profile.Labels
+func hstoreFromLabels(labels profile.Labels) hstore.Hstore {
+	v := hstore.Hstore{
+		Map: make(map[string]sql.NullString, len(labels)),
+	}
+
+	for _, label := range labels {
+		v.Map[label.Key] = sql.NullString{String: label.Value, Valid: true}
+	}
+
+	return v
 }

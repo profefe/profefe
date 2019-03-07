@@ -16,4 +16,4 @@ type Location struct {
 	Line int
 }
 
-type locMap map[uint64]Location
+type LocMap map[uint64]Location
