@@ -29,17 +29,17 @@ func WriteCPUProto(w io.Writer, p []ProfileRecord, locMap LocMap) error {
 
 	b := NewProfileBuilder(w, locMap)
 	b.pbValueType(tagProfile_PeriodType, "cpu", "nanoseconds")
-	b.pb.int64Opt(tagProfile_Period, b.period)
+	b.pb.int64Opt(tagProfile_Period, 0)
+	b.pb.int64Opt(tagProfile_DurationNanos, 0)
 	b.pbValueType(tagProfile_SampleType, "samples", "count")
 	b.pbValueType(tagProfile_SampleType, "cpu", "nanoseconds")
-	b.pb.int64Opt(tagProfile_DurationNanos, b.end.Sub(b.start).Nanoseconds())
 
 	var locs []uint64
 	for _, r := range p {
 		if len(r.Values) != 2 {
 			return fmt.Errorf("malformed profile record: %v", r)
 		}
-		buildProfileRecord(b, r, locs[:0])
+		buildProfileRecord(b, r, locs)
 	}
 	b.build()
 	return nil
@@ -63,7 +63,7 @@ func WriteHeapProto(w io.Writer, p []ProfileRecord, locMap LocMap) error {
 		if len(r.Values) != 4 {
 			return fmt.Errorf("malformed profile record: %v", r)
 		}
-		buildProfileRecord(b, r, locs[:0])
+		buildProfileRecord(b, r, locs)
 	}
 	b.build()
 	return nil
