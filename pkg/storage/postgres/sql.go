@@ -33,16 +33,17 @@ const (
 		ON CONFLICT (func_name, file_name, line) DO NOTHING;`
 
 	sqlInsertSamplesTmpl = `
-		INSERT INTO %[1]s (build_id, token, created_at, locations, labels, %[2]s)
-		SELECT s.build_id, s.token, s.created_at, locations, labels, %[2]s
-		FROM (values ($1, $2, $3::timestamp)) AS s (build_id, token, created_at),
+		INSERT INTO %[1]s (service, created_at, locations, labels, %[2]s)
+		SELECT v.service_id, s.created_at, locations, labels, %[2]s
+		FROM (values ($3::timestamp)) AS s (created_at),
+		(SELECT service_id FROM services v WHERE build_id = $1 AND token = $2) AS v,
 	  	(
 			SELECT sample_id, array_agg(l.location_id) as locations, labels, %[3]s
 			FROM pprof_samples_tmp tmp
 			INNER JOIN pprof_locations l
 			ON tmp.func_name = l.func_name AND tmp.file_name = l.file_name AND tmp.line = l.line
 			GROUP BY sample_id, labels, %[2]s
-		) AS t1;`
+		) AS t`
 
 	sqlSelectLocations = `
 		SELECT l.location_id, l.func_name, l.file_name, l.line 
@@ -52,7 +53,7 @@ const (
 	sqlSelectSamplesTmpl = `
 		SELECT %[2]s, s.locations, s.labels 
 		FROM %[1]s s, services v
-		WHERE s.build_id = v.build_id AND s.token = v.token and v.name = $1 
+		WHERE s.service = v.service_id AND v.name = $1 
 		%%[1]s
 		AND s.created_at BETWEEN $2 AND $3
 		ORDER BY s.created_at;`
