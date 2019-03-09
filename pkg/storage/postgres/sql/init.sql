@@ -3,48 +3,41 @@ CREATE EXTENSION IF NOT EXISTS hstore;
 DROP TABLE IF EXISTS services;
 
 CREATE TABLE services (
+  service_id  SERIAL PRIMARY KEY,
   build_id    VARCHAR(40) NOT NULL,
   token       VARCHAR(40) NOT NULL,
   name        TEXT NOT NULL,
   labels      hstore,
-  created_at  TIMESTAMPTZ NOT NULL,
-
-  PRIMARY KEY (build_id, token)
+  created_at  TIMESTAMPTZ NOT NULL
 );
 
 DROP TABLE IF EXISTS pprof_samples_cpu;
 
 CREATE TABLE pprof_samples_cpu (
-  build_id      VARCHAR(40) NOT NULL,
-  token         VARCHAR(40) NOT NULL,
+  service       INTEGER REFERENCES services ON DELETE CASCADE,
   created_at    TIMESTAMPTZ NOT NULL,
   locations     INTEGER[],
   samples_count BIGINT,
   cpu_nanos     BIGINT,
-  labels        jsonb,
-
-  FOREIGN KEY (build_id, token) REFERENCES services ON DELETE CASCADE
+  labels        jsonb
 );
 
-CREATE INDEX ON pprof_samples_cpu (build_id, token, created_at DESC);
+CREATE INDEX ON pprof_samples_cpu (service, created_at DESC);
 
 DROP TABLE IF EXISTS pprof_samples_heap;
 
 CREATE TABLE pprof_samples_heap (
-  build_id      VARCHAR(40) NOT NULL,
-  token         VARCHAR(40) NOT NULL,
+  service       INTEGER REFERENCES services ON DELETE CASCADE,
   created_at    TIMESTAMPTZ NOT NULL,
   locations     INTEGER[],
   alloc_objects BIGINT,
   alloc_bytes   BIGINT,
   inuse_objects BIGINT,
   inuse_bytes   BIGINT,
-  labels        jsonb,
-
-  FOREIGN KEY (build_id, token) REFERENCES services ON DELETE CASCADE
+  labels        jsonb
 );
 
-CREATE INDEX ON pprof_samples_heap (build_id, token, created_at DESC);
+CREATE INDEX ON pprof_samples_heap (service, created_at DESC);
 
 DROP TABLE IF EXISTS pprof_locations;
 
