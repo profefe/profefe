@@ -45,16 +45,12 @@ func (req *CreateProfileRequest) Validate() error {
 func (repo *Repository) CreateProfile(ctx context.Context, req *CreateProfileRequest) (token string, err error) {
 	service := NewService(req.Service, req.ID, req.Labels)
 	prof := &Profile{
-		CreatedAt: time.Now().UTC(),
-		Service:   service,
+		Service: service,
 	}
 
 	if err := repo.storage.Create(ctx, prof); err != nil {
 		return "", err
 	}
-
-	repo.logger.Debugw("create profile", "profile", prof)
-
 	return service.Token.String(), nil
 }
 

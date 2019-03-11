@@ -22,12 +22,17 @@ func (r ProfileRecord) Stack() []uint64 {
 	return r.Stack0[0:]
 }
 
-func WriteCPUProto(w io.Writer, p []ProfileRecord, locMap LocMap) error {
-	if len(p) == 0 {
+type Profile struct {
+	Records   []ProfileRecord
+	Locations LocMap
+}
+
+func WriteCPUProto(w io.Writer, p *Profile) error {
+	if len(p.Records) == 0 {
 		return fmt.Errorf("no profile records")
 	}
 
-	b := NewProfileBuilder(w, locMap)
+	b := NewProfileBuilder(w, p.Locations)
 	b.pbValueType(tagProfile_PeriodType, "cpu", "nanoseconds")
 	b.pb.int64Opt(tagProfile_Period, 0)
 	b.pb.int64Opt(tagProfile_DurationNanos, 0)
@@ -35,7 +40,7 @@ func WriteCPUProto(w io.Writer, p []ProfileRecord, locMap LocMap) error {
 	b.pbValueType(tagProfile_SampleType, "cpu", "nanoseconds")
 
 	var locs []uint64
-	for _, r := range p {
+	for _, r := range p.Records {
 		if len(r.Values) != 2 {
 			return fmt.Errorf("malformed profile record: %v", r)
 		}
@@ -45,12 +50,12 @@ func WriteCPUProto(w io.Writer, p []ProfileRecord, locMap LocMap) error {
 	return nil
 }
 
-func WriteHeapProto(w io.Writer, p []ProfileRecord, locMap LocMap) error {
-	if len(p) == 0 {
+func WriteHeapProto(w io.Writer, p *Profile) error {
+	if len(p.Records) == 0 {
 		return fmt.Errorf("no profile records")
 	}
 
-	b := NewProfileBuilder(w, locMap)
+	b := NewProfileBuilder(w, p.Locations)
 	b.pbValueType(tagProfile_PeriodType, "space", "bytes")
 	b.pb.int64Opt(tagProfile_Period, 0)
 	b.pbValueType(tagProfile_SampleType, "alloc_objects", "count")
@@ -59,7 +64,7 @@ func WriteHeapProto(w io.Writer, p []ProfileRecord, locMap LocMap) error {
 	b.pbValueType(tagProfile_SampleType, "inuse_space", "bytes")
 
 	var locs []uint64
-	for _, r := range p {
+	for _, r := range p.Records {
 		if len(r.Values) != 4 {
 			return fmt.Errorf("malformed profile record: %v", r)
 		}
