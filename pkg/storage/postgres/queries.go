@@ -51,11 +51,13 @@ const (
 		WHERE l.location_id = any($1);`
 
 	sqlSelectSamplesTmpl = `
-		SELECT %[2]s, s.locations, s.labels 
+		SELECT s.service, s.created_at, s.locations, s.labels, %[2]s 
 		FROM %[1]s s, services v
-		WHERE s.service = v.service_id AND v.name = $1 
-		%%[1]s
-		AND s.created_at BETWEEN $2 AND $3
+		WHERE 
+			s.service = v.service_id AND 
+			v.name = $1 AND 
+			s.created_at BETWEEN $2 AND $3
+			%%[1]s
 		ORDER BY s.created_at;`
 )
 
@@ -106,8 +108,12 @@ func (s sqlSamplesBuilder) BuildInsertQuery() string {
 	return s.insertQuery
 }
 
-func (s sqlSamplesBuilder) BuildSelectQuery(args ...interface{}) string {
-	return fmt.Sprintf(s.selectQuery, args...)
+func (s sqlSamplesBuilder) BuildSelectQuery(whereParts ...string) string {
+	var wp string
+	if len(whereParts) > 0 {
+		wp = "AND " + strings.Join(whereParts, " AND ")
+	}
+	return fmt.Sprintf(s.selectQuery, wp)
 }
 
 func createInsertSamples(table string, cols ...string) string {

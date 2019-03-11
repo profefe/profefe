@@ -145,21 +145,105 @@ func (st *pqStorage) copyProfSamples(ctx context.Context, stmt *sql.Stmt, sample
 }
 
 // returns at most one label for a key
-func (st *pqStorage) getSampleLabels(sample *pprofProfile.Sample) (labels sampleLabels) {
+func (st *pqStorage) getSampleLabels(sample *pprofProfile.Sample) (labels SampleLabels) {
 	for k, v := range sample.Label {
-		labels = append(labels, sampleLabel{Key: k, ValueStr: v[0]})
+		labels = append(labels, SampleLabel{Key: k, ValueStr: v[0]})
 	}
 	for k, v := range sample.NumLabel {
-		labels = append(labels, sampleLabel{Key: k, ValueNum: v[0]})
+		labels = append(labels, SampleLabel{Key: k, ValueNum: v[0]})
 	}
 	return labels
 }
 
 func (st *pqStorage) Query(ctx context.Context, queryReq *profile.QueryRequest) (io.Reader, error) {
+	defer func(t time.Time) {
+		st.logger.Debugw("query samples", "time", time.Since(t))
+	}(time.Now())
+
 	return st.queryByCreatedAt(ctx, queryReq)
 }
 
 func (st *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *profile.QueryRequest) (io.Reader, error) {
+	args := []interface{}{
+		queryReq.Service,
+		queryReq.CreatedAtMin,
+		queryReq.CreatedAtMax,
+	}
+	whereParts := make([]string, 0, len(queryReq.Labels))
+	for _, label := range queryReq.Labels {
+		args = append(args, label.Value)
+		whereParts = append(whereParts, fmt.Sprintf("v.labels->'%s' = $%d", label.Key, len(args))) // v.labels is for "services AS v" in the select query
+	}
+
+	var (
+		buf bytes.Buffer
+		err error
+	)
+
+	switch queryReq.Type {
+	case profile.CPUProfile:
+		query := sqlSamplesCPU.BuildSelectQuery(whereParts...)
+		err = st.queryCPUSamples(ctx, query, args...)
+	}
+
+	return &buf, err
+}
+
+func (st *pqStorage) queryCPUSamples(ctx context.Context, query string, args ...interface{}) (samples []SampleCPURecord, error error) {
+	samplesRows, err := st.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("faield to query samples (%v): %v", args, err)
+	}
+	defer samplesRows.Close()
+
+	locSet := make(map[int64]struct{})
+	locs := make(pq.Int64Array, 0)
+
+	for samplesRows.Next() {
+		var s SampleCPURecord
+		err = samplesRows.Scan(&s.ServiceID, &s.CreatedAt, &locs, &s.Labels, &s.SamplesCount, &s.CPUNanos)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, loc := range locs {
+			locSet[loc] = struct{}{}
+		}
+
+		s.Locations = locs
+		locs = locs[:0]
+
+		samples = append(samples, s)
+	}
+
+	if err := samplesRows.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(samples) == 0 {
+		return nil, profile.ErrEmpty
+	}
+
+	locs = locs[:0]
+	for loc := range locSet {
+		locs = append(locs, loc)
+	}
+	locationsRows, err := st.db.QueryContext(ctx, sqlSelectLocations, locs)
+	if err != nil {
+		return nil, fmt.Errorf("faield to query locations (%v): %v", locs, err)
+	}
+	defer locationsRows.Close()
+
+	for locationsRows.Next() {
+		var l LocationRecord
+		err := locationsRows.Scan(&l.LocationID, &l.FuncName, &l.FileName, &l.Line)
+		if err != nil {
+			return nil, err
+		}
+	}
+}
+
+func (st *pqStorage) XXXqueryByCreatedAt(ctx context.Context, queryReq *profile.QueryRequest) (io.Reader, error) {
 	defer func(t time.Time) {
 		st.logger.Debugw("query samples", "time", time.Since(t))
 	}(time.Now())
@@ -261,10 +345,10 @@ func (st *pqStorage) queryByCreatedAt(ctx context.Context, queryReq *profile.Que
 	return &buf, err
 }
 
-type scanProfileRecordFunc func(*sql.Rows, *pprof.ProfileRecord, *pq.Int64Array, *sampleLabels) error
+type scanProfileRecordFunc func(*sql.Rows, *pprof.ProfileRecord, *pq.Int64Array, *SampleLabels) error
 
 type profileRecordScanner struct {
-	labels   sampleLabels
+	labels   SampleLabels
 	scanFunc scanProfileRecordFunc
 }
 
@@ -282,7 +366,7 @@ func (s profileRecordScanner) Scan(rows *sql.Rows, r *pprof.ProfileRecord, locs 
 	return nil
 }
 
-func scanCPUProfileRecord(rows *sql.Rows, r *pprof.ProfileRecord, locs *pq.Int64Array, labels *sampleLabels) error {
+func scanCPUProfileRecord(rows *sql.Rows, r *pprof.ProfileRecord, locs *pq.Int64Array, labels *SampleLabels) error {
 	var samples, cpu int64
 	err := rows.Scan(&samples, &cpu, locs, labels)
 	if err != nil {
@@ -292,7 +376,7 @@ func scanCPUProfileRecord(rows *sql.Rows, r *pprof.ProfileRecord, locs *pq.Int64
 	return nil
 }
 
-func scanHeapProfileRecord(rows *sql.Rows, r *pprof.ProfileRecord, locs *pq.Int64Array, labels *sampleLabels) error {
+func scanHeapProfileRecord(rows *sql.Rows, r *pprof.ProfileRecord, locs *pq.Int64Array, labels *SampleLabels) error {
 	var (
 		allocObjects, allocBytes int64
 		inuseObjects, inuseBytes int64

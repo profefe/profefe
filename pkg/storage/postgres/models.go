@@ -4,37 +4,55 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"time"
 
+	"github.com/lib/pq"
 	"github.com/lib/pq/hstore"
 	"github.com/profefe/profefe/pkg/profile"
 )
 
-type sampleLabel struct {
+type SampleCPURecord struct {
+	ServiceID    uint64
+	CreatedAt    time.Time
+	Locations    pq.Int64Array
+	SamplesCount int64
+	CPUNanos     int64
+	Labels       SampleLabels
+}
+
+type SampleLabel struct {
 	Key      string `json:"k"`
 	ValueStr string `json:"s,omitempty"`
 	ValueNum int64  `json:"n,omitempty"`
 }
 
-// sampleLabels is jsonb implementation for pprof.Label, pprof.NumLabel
-type sampleLabels []sampleLabel
+// SampleLabels is jsonb implementation of pprof.Label, pprof.NumLabel
+type SampleLabels []SampleLabel
 
 var (
-	_ sql.Scanner   = (sampleLabels)(nil)
-	_ driver.Valuer = (sampleLabels)(nil)
+	_ sql.Scanner   = (SampleLabels)(nil)
+	_ driver.Valuer = (SampleLabels)(nil)
 )
 
-func (sl sampleLabels) Scan(src interface{}) error {
+func (sl SampleLabels) Scan(src interface{}) error {
 	if src == nil {
 		return nil
 	}
 	return json.Unmarshal(src.([]byte), &sl)
 }
 
-func (sl sampleLabels) Value() (driver.Value, error) {
+func (sl SampleLabels) Value() (driver.Value, error) {
 	if sl == nil {
 		return nil, nil
 	}
 	return json.Marshal(sl)
+}
+
+type LocationRecord struct {
+	LocationID uint64
+	FuncName   string
+	FileName   string
+	Line       uint
 }
 
 // converts profile.Labels to hstore
