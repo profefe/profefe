@@ -33,21 +33,24 @@ const (
 		ON CONFLICT (func_name, file_name, line) DO NOTHING;`
 
 	sqlInsertSamplesTmpl = `
+		WITH pprof_samples AS (
+			SELECT service_id, created_at, locations, labels, %[2]s
+			FROM
+			(SELECT sample_id, array_agg(l.location_id) locations, labels, %[3]s
+				FROM pprof_samples_tmp tmp
+				INNER JOIN pprof_locations l
+					ON tmp.func_name = l.func_name AND tmp.file_name = l.file_name AND tmp.line = l.line
+				GROUP BY sample_id, labels, %[2]s
+			) AS t,
+
+			(SELECT service_id
+				FROM services WHERE build_id = $1 AND token = $2) AS v,
+
+			(VALUES ($3::timestamp)) AS d (created_at)
+		)
 		INSERT INTO %[1]s (service_id, created_at, locations, labels, %[2]s)
 		SELECT service_id, created_at, locations, labels, %[4]s
-		FROM
-	  	(
-			SELECT sample_id, array_agg(l.location_id) as locations, labels, %[3]s
-			FROM pprof_samples_tmp tmp
-			INNER JOIN pprof_locations l
-				ON tmp.func_name = l.func_name AND tmp.file_name = l.file_name AND tmp.line = l.line
-			GROUP BY sample_id, labels, %[2]s
-		) AS t,
-		(
-			SELECT service_id
-			FROM services WHERE build_id = $1 AND token = $2
-		) AS v,
-		(values ($3::timestamp)) AS s (created_at);`
+		FROM pprof_samples;`
 
 	sqlSelectLocations = `
 		SELECT l.location_id, l.func_name, l.file_name, l.line 
@@ -55,7 +58,7 @@ const (
 		WHERE l.location_id = ANY($1);`
 
 	sqlSelectSamplesTmpl = `
-		SELECT s.service_id, s.created_at, s.locations, s.labels, %[2]s 
+		SELECT s.service_id, s.created_at, s.locations, s.labels, %[2]s
 		FROM %[1]s s
 		INNER JOIN services v ON s.service_id = v.service_id
 		%%s -- where clause placeholder
