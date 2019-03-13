@@ -61,7 +61,9 @@ const (
 		SELECT s.service_id, s.created_at, s.locations, s.labels, %[2]s
 		FROM %[1]s s
 		INNER JOIN services v ON s.service_id = v.service_id
-		%%s -- where clause placeholder
+		
+		-- where clause placeholder
+		%%s
 		ORDER BY s.created_at;`
 )
 

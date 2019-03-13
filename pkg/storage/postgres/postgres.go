@@ -91,9 +91,12 @@ func (st *pqStorage) updateProfile(ctx context.Context, prof *profile.Profile, p
 		return fmt.Errorf("could not insert locations: %v", err)
 	}
 
+	sqlInsertSamples := queryBuilder.ToInsertSQL()
+	st.logger.Debugw("insert samples", logger.MultiLine("query", sqlInsertSamples))
+
 	_, err = tx.ExecContext(
 		ctx,
-		queryBuilder.ToInsertSQL(),
+		sqlInsertSamples,
 		prof.Service.BuildID,
 		prof.Service.Token.String(),
 		time.Unix(0, pp.TimeNanos),
@@ -154,7 +157,7 @@ func getSampleLabels(sample *pprofProfile.Sample) (labels SampleLabels) {
 
 func (st *pqStorage) Query(ctx context.Context, queryReq *profile.QueryRequest) (io.Reader, error) {
 	defer func(t time.Time) {
-		st.logger.Debugw("query samples", "time", time.Since(t))
+		st.logger.Debugw("query profile", "time", time.Since(t))
 	}(time.Now())
 
 	pp, err := st.getProfileByCreatedAt(ctx, queryReq)
@@ -193,6 +196,7 @@ func (st *pqStorage) getProfileByCreatedAt(ctx context.Context, queryReq *profil
 	}
 
 	query := queryBuilder.ToSelectSQL(whereParts...)
+	st.logger.Debugw("get profile", logger.MultiLine("query", query), "args", args)
 
 	return st.getProfile(ctx, queryReq.Type, query, args)
 }
