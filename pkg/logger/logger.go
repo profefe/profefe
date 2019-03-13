@@ -15,9 +15,7 @@ func New(log *zap.Logger) *Logger {
 }
 
 func NewNop() *Logger {
-	return &Logger{
-		base: zap.NewNop().Sugar(),
-	}
+	return New(zap.NewNop())
 }
 
 func (log *Logger) With(args ...interface{}) *Logger {
