@@ -56,14 +56,9 @@ func (st *pqStorage) Update(ctx context.Context, prof *profile.Profile, r io.Rea
 }
 
 func (st *pqStorage) updateProfile(ctx context.Context, prof *profile.Profile, pp *pprofProfile.Profile) error {
-	var sqlSamples samplesQueryBuilder
-	switch prof.Type {
-	case profile.CPUProfile:
-		sqlSamples = sqlSamplesCPU
-	case profile.HeapProfile:
-		sqlSamples = sqlSamplesHeap
-	default:
-		return fmt.Errorf("profile type %v is not supported", prof.Type)
+	queryBuilder, err := sqlSamplesQueryBuilder(prof.Type)
+	if err != nil {
+		return err
 	}
 
 	defer func(t time.Time) {
@@ -98,7 +93,7 @@ func (st *pqStorage) updateProfile(ctx context.Context, prof *profile.Profile, p
 
 	_, err = tx.ExecContext(
 		ctx,
-		sqlSamples.ToInsertSQL(),
+		queryBuilder.ToInsertSQL(),
 		prof.Service.BuildID,
 		prof.Service.Token.String(),
 		time.Unix(0, pp.TimeNanos),
@@ -120,7 +115,7 @@ func (st *pqStorage) copyProfSamples(ctx context.Context, stmt *sql.Stmt, sample
 	}(time.Now())
 
 	for sampleID, sample := range samples {
-		labels := st.getSampleLabels(sample)
+		labels := getSampleLabels(sample)
 
 		for _, loc := range sample.Location {
 			for _, ln := range loc.Line {
@@ -147,7 +142,7 @@ func (st *pqStorage) copyProfSamples(ctx context.Context, stmt *sql.Stmt, sample
 }
 
 // returns at most one label for a key
-func (st *pqStorage) getSampleLabels(sample *pprofProfile.Sample) (labels SampleLabels) {
+func getSampleLabels(sample *pprofProfile.Sample) (labels SampleLabels) {
 	for k, v := range sample.Label {
 		labels = append(labels, SampleLabel{Key: k, ValueStr: v[0]})
 	}
@@ -162,10 +157,24 @@ func (st *pqStorage) Query(ctx context.Context, queryReq *profile.QueryRequest) 
 		st.logger.Debugw("query samples", "time", time.Since(t))
 	}(time.Now())
 
-	return st.getProfileByCreatedAt(ctx, queryReq)
+	pp, err := st.getProfileByCreatedAt(ctx, queryReq)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	if err := pprof.WriteCPUProto(&buf, pp); err != nil {
+		return nil, err
+	}
+	return &buf, nil
 }
 
-func (st *pqStorage) getProfileByCreatedAt(ctx context.Context, queryReq *profile.QueryRequest) (io.Reader, error) {
+func (st *pqStorage) getProfileByCreatedAt(ctx context.Context, queryReq *profile.QueryRequest) (*pprof.Profile, error) {
+	queryBuilder, err := sqlSamplesQueryBuilder(queryReq.Type)
+	if err != nil {
+		return nil, err
+	}
+
 	args := make([]interface{}, 0)
 	whereParts := make([]string, 0)
 	if queryReq.Service != "" {
@@ -183,50 +192,31 @@ func (st *pqStorage) getProfileByCreatedAt(ctx context.Context, queryReq *profil
 		whereParts = append(whereParts, fmt.Sprintf("v.labels->'%s' = $%d", label.Key, len(args)))
 	}
 
-	var sqlQuery string
+	query := queryBuilder.ToSelectSQL(whereParts...)
 
-	switch queryReq.Type {
-	case profile.CPUProfile:
-		sqlQuery = sqlSamplesCPU.ToSelectSQL(whereParts...)
-	}
-
-	pp, err := getPProfProfile(ctx, st.logger, st.db, queryReq.Type, sqlQuery, args)
-	if err != nil {
-		return nil, err
-	}
-
-	var buf bytes.Buffer
-	if err := pprof.WriteCPUProto(&buf, pp); err != nil {
-		return nil, err
-	}
-
-	return &buf, nil
+	return st.getProfile(ctx, queryReq.Type, query, args)
 }
 
-func (st *pqStorage) Delete(ctx context.Context, prof *profile.Profile) error {
-	panic("implement me")
-}
-
-func getPProfProfile(ctx context.Context, logger *logger.Logger, db *sql.DB, ptyp profile.ProfileType, query string, args []interface{}) (*pprof.Profile, error) {
-	samplesRows, err := db.QueryContext(ctx, query, args...)
+func (st *pqStorage) getProfile(ctx context.Context, ptyp profile.ProfileType, query string, args []interface{}) (*pprof.Profile, error) {
+	samplesRows, err := st.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("faield to query samples (%v): %v", args, err)
 	}
 	defer samplesRows.Close()
 
+	ps := newSampleRecordsScanner(ptyp)
+	recs := make([]pprof.ProfileRecord, 0)
 	locSet := make(map[int64]struct{})
 
-	var recs []pprof.ProfileRecord
 	for samplesRows.Next() {
-		var s BaseSampleRecord
-		p, err := scanSampleRecord(samplesRows, ptyp, &s)
+		err := ps.Scan(samplesRows)
 		if err != nil {
 			return nil, err
 		}
 
-		recs = append(recs, p.ToPProf())
+		recs = append(recs, ps.ToPProf())
 
-		for _, loc := range s.Locations {
+		for _, loc := range ps.sampleRec.Locations {
 			locSet[loc] = struct{}{}
 		}
 	}
@@ -243,7 +233,7 @@ func getPProfProfile(ctx context.Context, logger *logger.Logger, db *sql.DB, pty
 	for loc := range locSet {
 		locs = append(locs, loc)
 	}
-	locationsRows, err := db.QueryContext(ctx, sqlSelectLocations, locs)
+	locationsRows, err := st.db.QueryContext(ctx, sqlSelectLocations, locs)
 	if err != nil {
 		return nil, fmt.Errorf("faield to query locations (%v): %v", locs, err)
 	}
@@ -260,40 +250,74 @@ func getPProfProfile(ctx context.Context, logger *logger.Logger, db *sql.DB, pty
 		locMap[l.LocationID] = l.ToPProf()
 	}
 
-	p := &pprof.Profile{
+	pp := &pprof.Profile{
 		Records:   recs,
 		Locations: locMap,
 	}
-	return p, nil
+	return pp, nil
+}
+
+func (st *pqStorage) Delete(ctx context.Context, prof *profile.Profile) error {
+	panic("implement me")
+}
+
+func sqlSamplesQueryBuilder(ptyp profile.ProfileType) (qb samplesQueryBuilder, err error) {
+	switch ptyp {
+	case profile.CPUProfile:
+		return sqlSamplesCPU, nil
+	case profile.HeapProfile:
+		return sqlSamplesHeap, nil
+	}
+
+	return qb, fmt.Errorf("profile type %v is not supported", ptyp)
 }
 
 type toPProfProfileRecorder interface {
 	ToPProf() pprof.ProfileRecord
 }
 
-func scanSampleRecord(rows *sql.Rows, typ profile.ProfileType, s *BaseSampleRecord) (p toPProfProfileRecorder, err error) {
+type sampleRecordsScanner struct {
+	toPProfProfileRecorder
+
+	sampleRec *BaseSampleRecord
+	dest      []interface{}
+}
+
+func newSampleRecordsScanner(ptyp profile.ProfileType) *sampleRecordsScanner {
+	var (
+		rec BaseSampleRecord
+		p   toPProfProfileRecorder
+	)
+
 	dest := []interface{}{
-		&s.ServiceID,
-		&s.CreatedAt,
-		&s.Locations,
-		&s.Labels,
+		&rec.ServiceID,
+		&rec.CreatedAt,
+		&rec.Locations,
+		&rec.Labels,
 	}
 
-	switch typ {
+	switch ptyp {
 	case profile.CPUProfile:
 		sr := &SampleCPURecord{
-			BaseSampleRecord: s,
+			BaseSampleRecord: &rec,
 		}
 		dest = append(dest, &sr.SamplesCount, &sr.CPUNanos)
 		p = sr
 	case profile.HeapProfile:
 		sr := &SampleHeapRecord{
-			BaseSampleRecord: s,
+			BaseSampleRecord: &rec,
 		}
 		dest = append(dest, &sr.AllocObjects, &sr.AllocBytes, &sr.InuseObjects, &sr.InuseBytes)
 		p = sr
 	}
 
-	err = rows.Scan(dest...)
-	return p, err
+	return &sampleRecordsScanner{
+		p,
+		&rec,
+		dest,
+	}
+}
+
+func (s *sampleRecordsScanner) Scan(rows *sql.Rows) error {
+	return rows.Scan(s.dest...)
 }
