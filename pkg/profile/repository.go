@@ -88,13 +88,7 @@ func (repo *Repository) UpdateProfile(ctx context.Context, req *UpdateProfileReq
 
 	// TODO(narqo) cap the profile bytes with some sane defaults
 	// r = io.LimitReader(r, ??)
-	if err := repo.storage.Update(ctx, prof, r); err != nil {
-		return err
-	}
-
-	repo.logger.Debugw("update profile", "profile", prof)
-
-	return nil
+	return repo.storage.Update(ctx, prof, r)
 }
 
 type GetProfileRequest struct {
