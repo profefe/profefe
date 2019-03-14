@@ -3,15 +3,23 @@ package config
 import (
 	"flag"
 	"fmt"
+	"time"
+)
+
+const (
+	defaultAddr        = ":10100"
+	defaultExitTimeout = 5 * time.Second
 )
 
 type Config struct {
-	Addr     string
-	Postgres PostgresConfig
+	Addr        string
+	ExitTimeout time.Duration
+	Postgres    PostgresConfig
 }
 
 func (conf *Config) RegisterFlags(f *flag.FlagSet) {
-	f.StringVar(&conf.Addr, "addr", ":10100", "address to listen")
+	f.StringVar(&conf.Addr, "addr", defaultAddr, "address to listen")
+	f.DurationVar(&conf.ExitTimeout, "exit-timeout", defaultExitTimeout, "server shutdown timeout")
 
 	conf.Postgres.RegisterFlags(f)
 }

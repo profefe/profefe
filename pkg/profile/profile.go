@@ -6,12 +6,9 @@ import (
 	"github.com/rs/xid"
 )
 
-type Digest string
-
 type Profile struct {
-	Type       ProfileType
-	CreatedAt  time.Time
-	Service    *Service
+	Type    ProfileType
+	Service *Service
 }
 
 type Token xid.ID
@@ -21,22 +18,28 @@ func TokenFromString(s string) Token {
 	return Token(token)
 }
 
+func (token Token) MarshalJSON() ([]byte, error) {
+	return xid.ID(token).MarshalJSON()
+}
+
 func (token Token) String() string {
 	return xid.ID(token).String()
 }
 
 type Service struct {
-	Name    string
-	BuildID string
-	Token   Token `json:",string"`
-	Labels  Labels
+	Name      string
+	BuildID   string
+	Token     Token `json:",string"`
+	Labels    Labels
+	CreatedAt time.Time
 }
 
-func NewService(name, id string, labels Labels) *Service {
+func NewService(name, buildid string, labels Labels) *Service {
 	return &Service{
-		Name:    name,
-		BuildID: id,
-		Token:   Token(xid.New()),
-		Labels:  labels,
+		Name:      name,
+		BuildID:   buildid,
+		Token:     Token(xid.New()),
+		Labels:    labels,
+		CreatedAt: time.Now().UTC(),
 	}
 }

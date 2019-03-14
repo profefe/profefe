@@ -11,10 +11,12 @@ CREATE TABLE services (
   created_at  TIMESTAMPTZ NOT NULL
 );
 
+CREATE INDEX ON services (build_id, token);
+
 DROP TABLE IF EXISTS pprof_samples_cpu;
 
 CREATE TABLE pprof_samples_cpu (
-  service       INTEGER REFERENCES services ON DELETE CASCADE,
+  service_id    INTEGER REFERENCES services ON DELETE CASCADE,
   created_at    TIMESTAMPTZ NOT NULL,
   locations     INTEGER[],
   samples_count BIGINT,
@@ -22,12 +24,12 @@ CREATE TABLE pprof_samples_cpu (
   labels        jsonb
 );
 
-CREATE INDEX ON pprof_samples_cpu (service, created_at DESC);
+CREATE INDEX ON pprof_samples_cpu (service_id, created_at DESC);
 
 DROP TABLE IF EXISTS pprof_samples_heap;
 
 CREATE TABLE pprof_samples_heap (
-  service       INTEGER REFERENCES services ON DELETE CASCADE,
+  service_id    INTEGER REFERENCES services ON DELETE CASCADE,
   created_at    TIMESTAMPTZ NOT NULL,
   locations     INTEGER[],
   alloc_objects BIGINT,
@@ -37,7 +39,7 @@ CREATE TABLE pprof_samples_heap (
   labels        jsonb
 );
 
-CREATE INDEX ON pprof_samples_heap (service, created_at DESC);
+CREATE INDEX ON pprof_samples_heap (service_id, created_at DESC);
 
 DROP TABLE IF EXISTS pprof_locations;
 

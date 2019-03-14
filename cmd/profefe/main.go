@@ -101,5 +101,8 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 		}
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, conf.ExitTimeout)
+	defer cancel()
+
 	return server.Shutdown(ctx)
 }
