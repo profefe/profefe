@@ -44,7 +44,7 @@ func (pb *ProfileBuilder) AddFunction(fn *pprof.Function) {
 	pb.prof.Function = append(pb.prof.Function, fn)
 }
 
-func (pb *ProfileBuilder) Build() *pprof.Profile {
+func (pb *ProfileBuilder) Build() (*pprof.Profile, error) {
 	switch pb.ptyp {
 	case profile.CPUProfile:
 		pb.buildCPU()
@@ -52,7 +52,9 @@ func (pb *ProfileBuilder) Build() *pprof.Profile {
 		pb.buildHeap()
 	}
 
-	return pb.prof
+	err := pb.prof.CheckValid()
+
+	return pb.prof, err
 }
 
 func (pb *ProfileBuilder) buildCPU() {

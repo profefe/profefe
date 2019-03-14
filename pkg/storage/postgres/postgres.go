@@ -221,7 +221,7 @@ func (st *pqStorage) getProfile(ctx context.Context, queryReq *profile.QueryRequ
 		return nil, err
 	}
 
-	return pb.Build(), nil
+	return pb.Build()
 }
 
 func (st *pqStorage) selectProfileSamples(
@@ -301,14 +301,16 @@ func (st *pqStorage) selectProfileLocations(
 			return fmt.Errorf("found unexpected location record %v", l)
 		}
 
+		// as for Go 1.12 Function.start_line never got populated by runtime/pprof
+		// see https://github.com/golang/go/blob/5ee1b849592787ed050ef3fbd9b2c58aabd20ff3/src/runtime/pprof/proto.go
 		fn := &pprofProfile.Function{
 			Name:       l.FuncName,
 			SystemName: l.FuncName,
 			Filename:   l.FileName,
-			StartLine:  l.Line,
 		}
 		pb.AddFunction(fn)
 
+		// TODO(narqo): "multiple line indicates this location has inlined functions" (see profile.proto)
 		line := pprofProfile.Line{
 			Function: fn,
 			Line:     l.Line,
