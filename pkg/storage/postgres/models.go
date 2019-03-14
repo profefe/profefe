@@ -8,7 +8,6 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/lib/pq/hstore"
-	"github.com/profefe/profefe/internal/pprof"
 	"github.com/profefe/profefe/pkg/profile"
 )
 
@@ -40,23 +39,15 @@ func (sl SampleLabels) Value() (driver.Value, error) {
 	return json.Marshal(sl)
 }
 
+type sampleRecordValuer interface {
+	Value() []int64
+}
+
 type BaseSampleRecord struct {
 	ServiceID uint64
 	CreatedAt time.Time
 	Locations pq.Int64Array
 	Labels    SampleLabels
-}
-
-func (s *BaseSampleRecord) toPProf(r *pprof.ProfileRecord) {
-	for _, loc := range s.Locations {
-		r.Stack0 = append(r.Stack0, uint64(loc))
-	}
-	for _, label := range s.Labels {
-		if label.Key == "" {
-			continue
-		}
-		r.Labels = append(r.Labels, pprof.Label(label))
-	}
 }
 
 type SampleCPURecord struct {
@@ -65,12 +56,8 @@ type SampleCPURecord struct {
 	CPUNanos     sql.NullInt64
 }
 
-func (s *SampleCPURecord) ToPProf() pprof.ProfileRecord {
-	r := pprof.ProfileRecord{
-		Values: []int64{s.SamplesCount.Int64, s.CPUNanos.Int64},
-	}
-	s.toPProf(&r)
-	return r
+func (s *SampleCPURecord) Value() []int64 {
+	return []int64{s.SamplesCount.Int64, s.CPUNanos.Int64}
 }
 
 type SampleHeapRecord struct {
@@ -81,23 +68,15 @@ type SampleHeapRecord struct {
 	InuseBytes   sql.NullInt64
 }
 
-func (s *SampleHeapRecord) ToPProf() pprof.ProfileRecord {
-	r := pprof.ProfileRecord{
-		Values: []int64{s.AllocObjects.Int64, s.AllocBytes.Int64, s.InuseObjects.Int64, s.InuseBytes.Int64},
-	}
-	s.toPProf(&r)
-	return r
+func (s *SampleHeapRecord) Value() []int64 {
+	return []int64{s.AllocObjects.Int64, s.AllocBytes.Int64, s.InuseObjects.Int64, s.InuseBytes.Int64}
 }
 
 type LocationRecord struct {
-	LocationID uint64
+	LocationID int64
 	FuncName   string
 	FileName   string
-	Line       int
-}
-
-func (l LocationRecord) ToPProf() pprof.Location {
-	return pprof.Location{l.FuncName, l.FileName, l.Line}
+	Line       int64
 }
 
 // converts profile.Labels to hstore
