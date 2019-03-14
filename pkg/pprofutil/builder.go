@@ -25,9 +25,11 @@ func (pb *ProfileBuilder) AddSample(s *pprof.Sample) {
 	pb.prof.Sample = append(pb.prof.Sample, s)
 }
 
-// TODO(narqo) See profefe/profefe#1.
 func (pb *ProfileBuilder) AddMapping(m *pprof.Mapping) {
-	panic("not implemented")
+	if m.ID == 0 {
+		m.ID = nextID(len(pb.prof.Mapping))
+	}
+	pb.prof.Mapping = append(pb.prof.Mapping, m)
 }
 
 func (pb *ProfileBuilder) AddLocation(loc *pprof.Location) {
