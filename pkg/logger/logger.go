@@ -7,10 +7,6 @@ type Logger struct {
 }
 
 func New(log *zap.Logger) *Logger {
-	zap.RedirectStdLog(log)
-
-	//log = log.WithOptions(zap.AddCallerSkip(1))
-
 	return &Logger{
 		base: log.Sugar(),
 	}

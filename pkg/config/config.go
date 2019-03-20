@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"time"
+
+	"github.com/profefe/profefe/pkg/logger"
 )
 
 const (
@@ -14,6 +16,7 @@ const (
 type Config struct {
 	Addr        string
 	ExitTimeout time.Duration
+	Logger      logger.Config
 	Postgres    PostgresConfig
 }
 
@@ -21,6 +24,7 @@ func (conf *Config) RegisterFlags(f *flag.FlagSet) {
 	f.StringVar(&conf.Addr, "addr", defaultAddr, "address to listen")
 	f.DurationVar(&conf.ExitTimeout, "exit-timeout", defaultExitTimeout, "server shutdown timeout")
 
+	conf.Logger.RegisterFlags(f)
 	conf.Postgres.RegisterFlags(f)
 }
 

@@ -11,16 +11,14 @@ import (
 	"os/signal"
 	"syscall"
 
+	_ "github.com/lib/pq"
 	"github.com/profefe/profefe/cmd/profefe/api"
 	"github.com/profefe/profefe/cmd/profefe/middleware"
 	"github.com/profefe/profefe/pkg/config"
 	"github.com/profefe/profefe/pkg/logger"
 	"github.com/profefe/profefe/pkg/profile"
-	"github.com/profefe/profefe/version"
-	"go.uber.org/zap"
-
-	_ "github.com/lib/pq"
 	pgstorage "github.com/profefe/profefe/pkg/storage/postgres"
+	"github.com/profefe/profefe/version"
 )
 
 func main() {
@@ -36,14 +34,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: init base logger
-	baseLoggerConf := zap.NewDevelopmentConfig()
-	baseLoggerConf.DisableCaller = true
-	baseLoggerConf.DisableStacktrace = true
-	baseLogger, _ := baseLoggerConf.Build()
-	defer baseLogger.Sync()
-
-	log := logger.New(baseLogger)
+	log, err := conf.Logger.Build()
+	if err != nil {
+		panic(err)
+	}
 
 	if err := run(context.Background(), log, conf); err != nil {
 		log.Error(err)
