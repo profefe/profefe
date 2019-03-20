@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"time"
+
+	"github.com/profefe/profefe/internal/pprof/profile"
 )
 
 var (
@@ -12,7 +14,7 @@ var (
 	ErrEmpty    = errors.New("profile is empty")
 )
 
-type QueryRequest struct {
+type ReadProfileFilter struct {
 	Service      string
 	Type         ProfileType
 	Labels       Labels
@@ -21,13 +23,11 @@ type QueryRequest struct {
 	Limit        uint
 }
 
-type Queryer interface {
-	Query(ctx context.Context, query *QueryRequest) (io.Reader, error)
-}
-
 type Storage interface {
-	Queryer
-	Create(ctx context.Context, prof *Profile) error
-	Update(ctx context.Context, prof *Profile, r io.Reader) error
-	Delete(ctx context.Context, prof *Profile) error
+	CreateService(ctx context.Context, service *Service) error
+
+	CreateProfile(ctx context.Context, prof *Profile, r io.Reader) error
+	ReadProfile(ctx context.Context, filter *ReadProfileFilter) (io.Reader, error)
+	ReadRawProfile(ctx context.Context, filter *ReadProfileFilter) (*profile.Profile, error)
+	DeleteProfile(ctx context.Context, prof *Profile) error
 }

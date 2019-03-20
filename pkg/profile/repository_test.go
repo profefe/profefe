@@ -12,19 +12,19 @@ func TestRepository_CreateProfile(t *testing.T) {
 	//
 	//ctx := context.Background()
 	//
-	//createReq := &profile.CreateProfileRequest{
+	//createReq := &profile.CreateServiceRequest{
 	//	ID:      "123abc",
 	//	Service: "test",
 	//	Labels:  profile.Labels{{"key", "value"}},
 	//}
-	//token, err := repo.CreateProfile(ctx, createReq)
+	//token, err := repo.CreateService(ctx, createReq)
 	//require.NoError(t, err)
-	//require.NotEmptyf(t, token, "CreateProfile: empty token")
+	//require.NotEmptyf(t, token, "CreateService: empty token")
 	//
-	//queryReq := &profile.QueryRequest{
+	//queryReq := &profile.ReadProfileFilter{
 	//	Service: "test",
 	//}
-	//profs, err := st.Query(ctx, queryReq)
+	//profs, err := st.ReadProfile(ctx, queryReq)
 	//require.NoError(t, err)
 	//require.Len(t, profs, 1)
 	//require.Equal(t, token, profs[0].Service.Token)

@@ -74,7 +74,7 @@ func (api *APIHandler) handleGetProfiles(w http.ResponseWriter, r *http.Request)
 
 func (api *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
-	req := &profile.CreateProfileRequest{
+	req := &profile.CreateServiceRequest{
 		ID:      q.Get("id"),
 		Service: q.Get("service"),
 		Labels:  nil,
@@ -89,7 +89,7 @@ func (api *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Reques
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
 	}
 
-	token, err := api.profilePepo.CreateProfile(r.Context(), req)
+	token, err := api.profilePepo.CreateService(r.Context(), req)
 	if err != nil {
 		return StatusError(http.StatusServiceUnavailable, "failed to create profile", err)
 	}
@@ -112,7 +112,7 @@ func (api *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Reques
 
 func (api *APIHandler) handleUpdateProfile(w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
-	req := &profile.UpdateProfileRequest{
+	req := &profile.CreateProfileRequest{
 		ID:    q.Get("id"),
 		Token: q.Get("token"),
 		Type:  profile.UnknownProfile,
@@ -123,8 +123,8 @@ func (api *APIHandler) handleUpdateProfile(w http.ResponseWriter, r *http.Reques
 	}
 	req.Type = pt
 
-	if err := api.profilePepo.UpdateProfile(r.Context(), req, r.Body); err != nil {
-		return StatusError(http.StatusServiceUnavailable, "failed to create profile", err)
+	if err := api.profilePepo.CreateProfile(r.Context(), req, r.Body); err != nil {
+		return StatusError(http.StatusServiceUnavailable, "failed to update profile", err)
 	}
 
 	ReplyOK(w)

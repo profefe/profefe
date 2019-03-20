@@ -28,25 +28,25 @@ func New(log *logger.Logger, db *sql.DB) (profile.Storage, error) {
 	return s, nil
 }
 
-func (st *pqStorage) Create(ctx context.Context, prof *profile.Profile) error {
-	st.logger.Debugw("createProfile", "profile", prof)
+func (st *pqStorage) CreateService(ctx context.Context, svc *profile.Service) error {
+	st.logger.Debugw("createService", "profile", svc)
 
 	_, err := st.db.ExecContext(
 		ctx,
 		sqlInsertService,
-		prof.Service.BuildID,
-		prof.Service.Token.String(),
-		prof.Service.Name,
-		prof.Service.CreatedAt,
-		ServiceLabels(prof.Service.Labels),
+		svc.BuildID,
+		svc.Token.String(),
+		svc.Name,
+		svc.CreatedAt,
+		ServiceLabels(svc.Labels),
 	)
 	if err != nil {
-		err = fmt.Errorf("could not insert %v into services: %v", prof, err)
+		err = fmt.Errorf("could not insert %v into services: %v", svc, err)
 	}
 	return err
 }
 
-func (st *pqStorage) Update(ctx context.Context, prof *profile.Profile, r io.Reader) error {
+func (st *pqStorage) CreateProfile(ctx context.Context, prof *profile.Profile, r io.Reader) error {
 	pp, err := pprofProfile.Parse(r)
 	if err != nil {
 		return fmt.Errorf("could not parse profile: %v", err)
@@ -208,12 +208,12 @@ func getSampleLabels(sample *pprofProfile.Sample) (labels SampleLabels) {
 	return labels
 }
 
-func (st *pqStorage) Query(ctx context.Context, queryReq *profile.QueryRequest) (io.Reader, error) {
+func (st *pqStorage) ReadProfile(ctx context.Context, filter *profile.ReadProfileFilter) (io.Reader, error) {
 	defer func(t time.Time) {
-		st.logger.Debugw("query profile", "time", time.Since(t))
+		st.logger.Debugw("readProfile", "time", time.Since(t))
 	}(time.Now())
 
-	pp, err := st.getProfile(ctx, queryReq)
+	pp, err := st.getProfile(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -223,35 +223,43 @@ func (st *pqStorage) Query(ctx context.Context, queryReq *profile.QueryRequest) 
 	return &buf, err
 }
 
-func (st *pqStorage) getProfile(ctx context.Context, queryReq *profile.QueryRequest) (*pprofProfile.Profile, error) {
-	queryBuilder, err := sqlSamplesQueryBuilder(queryReq.Type)
+func (st *pqStorage) ReadRawProfile(ctx context.Context, filter *profile.ReadProfileFilter) (*pprofProfile.Profile, error) {
+	defer func(t time.Time) {
+		st.logger.Debugw("readRawProfile", "time", time.Since(t))
+	}(time.Now())
+
+	return st.getProfile(ctx, filter)
+}
+
+func (st *pqStorage) getProfile(ctx context.Context, filter *profile.ReadProfileFilter) (*pprofProfile.Profile, error) {
+	queryBuilder, err := sqlSamplesQueryBuilder(filter.Type)
 	if err != nil {
 		return nil, err
 	}
 
 	args := make([]interface{}, 0)
 	whereParts := make([]string, 0)
-	if queryReq.Service != "" {
-		args = append(args, queryReq.Service)
+	if filter.Service != "" {
+		args = append(args, filter.Service)
 		whereParts = append(whereParts, "v.name = $1") // v is for "services AS v" in select query
 	}
 
-	if !queryReq.CreatedAtMin.IsZero() && !queryReq.CreatedAtMax.IsZero() {
-		args = append(args, queryReq.CreatedAtMin, queryReq.CreatedAtMax)
+	if !filter.CreatedAtMin.IsZero() && !filter.CreatedAtMax.IsZero() {
+		args = append(args, filter.CreatedAtMin, filter.CreatedAtMax)
 		whereParts = append(whereParts, "p.created_at BETWEEN $2 AND $3") // p is for "profiles AS p" in select query
 	}
 
-	for _, label := range queryReq.Labels {
+	for _, label := range filter.Labels {
 		args = append(args, label.Value)
 		whereParts = append(whereParts, fmt.Sprintf("v.labels ->> '%s' = $%d", label.Key, len(args)))
 	}
 
-	pb := pprofutil.NewProfileBuilder(queryReq.Type)
+	pb := pprofutil.NewProfileBuilder(filter.Type)
 	// set of uniq pprof.Locations associated with samples
 	locSet := make(map[int64]*pprofProfile.Location)
 
 	query := queryBuilder.ToSelectSQL(whereParts...)
-	err = st.selectProfileSamples(ctx, queryReq.Type, pb, locSet, query, args)
+	err = st.selectProfileSamples(ctx, filter.Type, pb, locSet, query, args)
 	if err != nil {
 		return nil, err
 	}
@@ -393,7 +401,7 @@ func (st *pqStorage) selectProfileLocations(
 	return rows.Err()
 }
 
-func (st *pqStorage) Delete(ctx context.Context, prof *profile.Profile) error {
+func (st *pqStorage) DeleteProfile(ctx context.Context, prof *profile.Profile) error {
 	panic("implement me")
 }
 

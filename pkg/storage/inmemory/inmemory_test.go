@@ -69,41 +69,41 @@ func TestStorage_Query(t *testing.T) {
 	st, inProf := setupTestStorage(t)
 
 	cases := []struct {
-		query   profile.QueryRequest
+		query   profile.ReadProfileFilter
 		wantErr bool
 	}{
 		{
-			profile.QueryRequest{
+			profile.ReadProfileFilter{
 				Digest: inProf.Digest,
 			},
 			false,
 		},
 		{
-			profile.QueryRequest{
+			profile.ReadProfileFilter{
 				Service: inProf.Service,
 			},
 			false,
 		},
 		{
-			profile.QueryRequest{
+			profile.ReadProfileFilter{
 				Type: inProf.Type,
 			},
 			false,
 		},
 		{
-			profile.QueryRequest{
+			profile.ReadProfileFilter{
 				CreatedAtMin: inProf.CreatedAt.Add(-1 * time.Minute),
 			},
 			false,
 		},
 		{
-			profile.QueryRequest{
+			profile.ReadProfileFilter{
 				CreatedAtMax: inProf.CreatedAt.Add(time.Minute),
 			},
 			false,
 		},
 		{
-			profile.QueryRequest{
+			profile.ReadProfileFilter{
 				Labels: profile.Labels{
 					{"foo", "bar"},
 				},
@@ -112,7 +112,7 @@ func TestStorage_Query(t *testing.T) {
 		},
 		// fail cases
 		{
-			profile.QueryRequest{
+			profile.ReadProfileFilter{
 				Digest: "blah",
 			},
 			true,
@@ -123,15 +123,15 @@ func TestStorage_Query(t *testing.T) {
 		t.Run(fmt.Sprintf("case %d", n), func(t *testing.T) {
 			outProfs, err := st.Query(context.Background(), &tc.query)
 			if (err != nil) != tc.wantErr {
-				t.Fatalf("Query: got %v, want error %v", err, tc.wantErr)
+				t.Fatalf("ReadProfile: got %v, want error %v", err, tc.wantErr)
 			}
 
 			if tc.wantErr {
 				return
 			} else if got := len(outProfs); got != 1 {
-				t.Fatalf("Query: got %d profiles, want 1", got)
+				t.Fatalf("ReadProfile: got %d profiles, want 1", got)
 			} else if got := outProfs[0]; got != inProf {
-				t.Fatalf("Query: got %#v, want %#v", got, inProf)
+				t.Fatalf("ReadProfile: got %#v, want %#v", got, inProf)
 			}
 		})
 	}
@@ -147,7 +147,7 @@ func TestStorage_Delete(t *testing.T) {
 
 	_, err = st.Get(context.Background(), inProf.Digest)
 	if err != collector.ErrNotFound {
-		t.Fatalf("Get: got %v after Delete, want not found", err)
+		t.Fatalf("Get: got %v after DeleteProfile, want not found", err)
 	}
 
 	err = st.Delete(context.Background(), inProf.Digest)
