@@ -37,7 +37,10 @@ func main() {
 	}
 
 	// TODO: init base logger
-	baseLogger, _ := zap.NewDevelopment()
+	baseLoggerConf := zap.NewDevelopmentConfig()
+	baseLoggerConf.DisableCaller = true
+	baseLoggerConf.DisableStacktrace = true
+	baseLogger, _ := baseLoggerConf.Build()
 	defer baseLogger.Sync()
 
 	log := logger.New(baseLogger)

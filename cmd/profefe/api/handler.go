@@ -146,6 +146,8 @@ func (api *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) 
 	profReader, err := api.profilePepo.GetProfile(r.Context(), req)
 	if err == profile.ErrNotFound {
 		return StatusError(http.StatusNotFound, "nothing found", nil)
+	} else if err == profile.ErrEmpty {
+		return StatusError(http.StatusNoContent, "profile empty", nil)
 	} else if err != nil {
 		return StatusError(http.StatusServiceUnavailable, "could not get profile", err)
 	}

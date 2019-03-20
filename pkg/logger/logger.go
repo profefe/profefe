@@ -9,6 +9,8 @@ type Logger struct {
 func New(log *zap.Logger) *Logger {
 	zap.RedirectStdLog(log)
 
+	//log = log.WithOptions(zap.AddCallerSkip(1))
+
 	return &Logger{
 		base: log.Sugar(),
 	}
@@ -67,5 +69,5 @@ func (log *Logger) Fatalf(format string, args ...interface{}) {
 }
 
 func (log *Logger) Fatalw(msg string, pairs ...interface{}) {
-	log.base.Fatalf(msg, pairs...)
+	log.base.Fatalw(msg, pairs...)
 }

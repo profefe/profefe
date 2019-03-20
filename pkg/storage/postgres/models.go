@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/lib/pq/hstore"
 	"github.com/profefe/profefe/pkg/profile"
 )
 
@@ -19,11 +18,6 @@ type SampleLabel struct {
 
 // SampleLabels is jsonb implementation for pprof.Label, pprof.NumLabel
 type SampleLabels []SampleLabel
-
-var (
-	_ sql.Scanner   = (SampleLabels)(nil)
-	_ driver.Valuer = (SampleLabels)(nil)
-)
 
 func (sl SampleLabels) Scan(src interface{}) error {
 	if src == nil {
@@ -39,12 +33,45 @@ func (sl SampleLabels) Value() (driver.Value, error) {
 	return json.Marshal(sl)
 }
 
+type LocationRecord struct {
+	LocationID int64
+	Address    uint64
+	Line       int64
+}
+
+type FunctionRecord struct {
+	ID       int64
+	FuncName string
+	FileName string
+}
+
+type MappingRecord struct {
+	MemStart uint64 `json:"start,omitempty"`
+	MemLimit uint64 `json:"limit,omitempty"`
+	Offset   uint64 `json:"offset,omitempty"`
+	File     string `json:"file,omitempty"`
+	BuildID  string `json:"bid,omitempty"`
+}
+
+func (m *MappingRecord) Scan(src interface{}) error {
+	if src == nil {
+		return nil
+	}
+	return json.Unmarshal(src.([]byte), &m)
+}
+
+func (m *MappingRecord) Value() (driver.Value, error) {
+	if m == nil {
+		return nil, nil
+	}
+	return json.Marshal(m)
+}
+
 type sampleRecordValuer interface {
 	Value() []int64
 }
 
 type BaseSampleRecord struct {
-	ServiceID uint64
 	CreatedAt time.Time
 	Locations pq.Int64Array
 	Labels    SampleLabels
@@ -72,23 +99,17 @@ func (s *SampleHeapRecord) Value() []int64 {
 	return []int64{s.AllocObjects.Int64, s.AllocBytes.Int64, s.InuseObjects.Int64, s.InuseBytes.Int64}
 }
 
-type LocationRecord struct {
-	LocationID int64
-	FuncName   string
-	FileName   string
-	Line       int64
-}
+type ServiceLabels profile.Labels
 
-// converts profile.Labels to hstore
-// XXX implement sql/driver.Valuer in profile.Labels
-func hstoreFromLabels(labels profile.Labels) hstore.Hstore {
-	v := hstore.Hstore{
-		Map: make(map[string]sql.NullString, len(labels)),
+func (labels ServiceLabels) Value() (driver.Value, error) {
+	if labels == nil {
+		return nil, nil
 	}
 
+	m := make(map[string]string, len(labels))
 	for _, label := range labels {
-		v.Map[label.Key] = sql.NullString{String: label.Value, Valid: true}
+		m[label.Key] = label.Value
 	}
 
-	return v
+	return json.Marshal(m)
 }

@@ -25,9 +25,11 @@ func (pb *ProfileBuilder) AddSample(s *pprof.Sample) {
 	pb.prof.Sample = append(pb.prof.Sample, s)
 }
 
-// TODO(narqo) See profefe/profefe#1.
 func (pb *ProfileBuilder) AddMapping(m *pprof.Mapping) {
-	panic("not implemented")
+	if m.ID == 0 {
+		m.ID = nextID(len(pb.prof.Mapping))
+	}
+	pb.prof.Mapping = append(pb.prof.Mapping, m)
 }
 
 func (pb *ProfileBuilder) AddLocation(loc *pprof.Location) {
@@ -44,7 +46,7 @@ func (pb *ProfileBuilder) AddFunction(fn *pprof.Function) {
 	pb.prof.Function = append(pb.prof.Function, fn)
 }
 
-func (pb *ProfileBuilder) Build() *pprof.Profile {
+func (pb *ProfileBuilder) Build() (*pprof.Profile, error) {
 	switch pb.ptyp {
 	case profile.CPUProfile:
 		pb.buildCPU()
@@ -52,7 +54,9 @@ func (pb *ProfileBuilder) Build() *pprof.Profile {
 		pb.buildHeap()
 	}
 
-	return pb.prof
+	err := pb.prof.CheckValid()
+
+	return pb.prof, err
 }
 
 func (pb *ProfileBuilder) buildCPU() {

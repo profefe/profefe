@@ -29,7 +29,7 @@ func New(log *logger.Logger, db *sql.DB) (profile.Storage, error) {
 }
 
 func (st *pqStorage) Create(ctx context.Context, prof *profile.Profile) error {
-	st.logger.Debugw("create profile", "profile", prof)
+	st.logger.Debugw("createProfile", "profile", prof)
 
 	_, err := st.db.ExecContext(
 		ctx,
@@ -38,7 +38,7 @@ func (st *pqStorage) Create(ctx context.Context, prof *profile.Profile) error {
 		prof.Service.Token.String(),
 		prof.Service.Name,
 		prof.Service.CreatedAt,
-		hstoreFromLabels(prof.Service.Labels),
+		ServiceLabels(prof.Service.Labels),
 	)
 	if err != nil {
 		err = fmt.Errorf("could not insert %v into services: %v", prof, err)
@@ -52,17 +52,17 @@ func (st *pqStorage) Update(ctx context.Context, prof *profile.Profile, r io.Rea
 		return fmt.Errorf("could not parse profile: %v", err)
 	}
 
-	return st.updateProfile(ctx, prof, pp)
+	return st.insertProfile(ctx, prof, pp)
 }
 
-func (st *pqStorage) updateProfile(ctx context.Context, prof *profile.Profile, pp *pprofProfile.Profile) error {
+func (st *pqStorage) insertProfile(ctx context.Context, prof *profile.Profile, pp *pprofProfile.Profile) error {
 	queryBuilder, err := sqlSamplesQueryBuilder(prof.Type)
 	if err != nil {
 		return err
 	}
 
 	defer func(t time.Time) {
-		st.logger.Debugw("update profile", "profile", prof, "time", time.Since(t))
+		st.logger.Debugw("insertProfile", "profile", prof, "time", time.Since(t))
 	}(time.Now())
 
 	tx, err := st.db.Begin()
@@ -71,39 +71,34 @@ func (st *pqStorage) updateProfile(ctx context.Context, prof *profile.Profile, p
 	}
 	defer tx.Rollback()
 
-	_, err = tx.ExecContext(ctx, sqlCreateTempTable)
-	if err != nil {
-		return fmt.Errorf("could not create temp table %q: %v", sqlCreateTempTable, err)
-	}
-
-	st.logger.Debugw("copy samples", logger.MultiLine("query", sqlCopyTable))
-	copyStmt, err := tx.PrepareContext(ctx, sqlCopyTable)
-	if err != nil {
-		return fmt.Errorf("could not prepare COPY statement: %v", err)
-	}
-
-	err = st.copyProfSamples(ctx, copyStmt, pp.Sample)
+	_, err = tx.ExecContext(ctx, sqlCreateLocationsTempTable)
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.ExecContext(ctx, sqlInsertLocations)
-	if err != nil {
-		return fmt.Errorf("could not insert locations: %v", err)
-	}
-
-	sqlInsertSamples := queryBuilder.ToInsertSQL()
-	st.logger.Debugw("insert samples", logger.MultiLine("query", sqlInsertSamples))
-
-	_, err = tx.ExecContext(
+	var profID int64
+	err = tx.QueryRowContext(
 		ctx,
-		sqlInsertSamples,
+		sqlInsertProfiles,
 		prof.Service.BuildID,
 		prof.Service.Token.String(),
 		time.Unix(0, pp.TimeNanos),
-	)
+		int(prof.Type),
+		pp.Period,
+	).Scan(&profID)
 	if err != nil {
-		return fmt.Errorf("could not insert samples: %v", err)
+		return err
+	}
+
+	locIDs, err := st.insertProfLocations(ctx, tx, pp.Location)
+	if err != nil {
+		return err
+	}
+
+	sqlInsertSamples := queryBuilder.ToInsertSQL()
+	err = st.insertProfSamples(ctx, tx, sqlInsertSamples, profID, locIDs, pp.Sample)
+	if err != nil {
+		return err
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -113,34 +108,91 @@ func (st *pqStorage) updateProfile(ctx context.Context, prof *profile.Profile, p
 	return nil
 }
 
-func (st *pqStorage) copyProfSamples(ctx context.Context, stmt *sql.Stmt, samples []*pprofProfile.Sample) error {
+func (st *pqStorage) insertProfLocations(ctx context.Context, tx *sql.Tx, locs []*pprofProfile.Location) (locIDs []int64, err error) {
+	err = copyLocations(ctx, st.logger, tx, locs)
+	if err != nil {
+		return nil, fmt.Errorf("could not copy locations: %v", err)
+	}
+
+	_, err = tx.ExecContext(ctx, sqlInsertFunctions)
+	if err != nil {
+		return nil, fmt.Errorf("could not insert functions: %v", err)
+	}
+
+	_, err = tx.ExecContext(ctx, sqlInsertMappings)
+	if err != nil {
+		return nil, fmt.Errorf("could not insert mappings: %v", err)
+	}
+
+	locIDs = make([]int64, 0, len(locs))
+
 	defer func(t time.Time) {
-		st.logger.Debugw("copy samples", "nsamples", len(samples), "time", time.Since(t))
+		st.logger.Debugw("insertProfLocations", logger.MultiLine("query", sqlInsertLocations), "nlocids", len(locIDs), "time", time.Since(t))
 	}(time.Now())
 
-	for sampleID, sample := range samples {
+	rows, err := tx.QueryContext(ctx, sqlInsertLocations)
+	if err != nil {
+		return nil, fmt.Errorf("could execute locations query: %v", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var locID int64
+		err := rows.Scan(&locID)
+		if err != nil {
+			return nil, fmt.Errorf("could scan locations query: %v", err)
+		}
+		locIDs = append(locIDs, locID)
+	}
+
+	return locIDs, rows.Err()
+}
+
+func (st *pqStorage) insertProfSamples(ctx context.Context, tx *sql.Tx, query string, profID int64, locIDs pq.Int64Array, samples []*pprofProfile.Sample) error {
+	copyStmt, err := tx.PrepareContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("could not prepare statement: %v", err)
+	}
+	defer copyStmt.Close()
+
+	defer func(t time.Time) {
+		st.logger.Debugw("insert samples", logger.MultiLine("query", query), "profid", profID, "nsamples", len(samples), "time", time.Since(t))
+	}(time.Now())
+
+	var (
+		args         []interface{}
+		sampleLocIDs pq.Int64Array
+	)
+
+	for _, sample := range samples {
 		labels := getSampleLabels(sample)
 
 		for _, loc := range sample.Location {
-			for _, ln := range loc.Line {
-				_, err := stmt.ExecContext(
-					ctx,
-					sampleID,
-					ln.Function.Name,
-					ln.Function.Filename,
-					ln.Line,
-					pq.Int64Array(sample.Value),
-					labels,
-				)
-				if err != nil {
-					return fmt.Errorf("could not exec COPY statement: %v", err)
-				}
-			}
+			n := loc.ID
+			locID := locIDs[n-1]
+			sampleLocIDs = append(sampleLocIDs, locID)
 		}
+
+		args = append(args, profID, sampleLocIDs, labels)
+		for _, value := range sample.Value {
+			var v sql.NullInt64
+			if value > 0 {
+				v = sql.NullInt64{value, true}
+			}
+			args = append(args, v)
+		}
+
+		_, err = copyStmt.ExecContext(ctx, args...)
+		if err != nil {
+			return fmt.Errorf("could not exec sql statement: %v", err)
+		}
+
+		sampleLocIDs = sampleLocIDs[:0]
+		args = args[:0]
 	}
-	_, err := stmt.ExecContext(ctx)
+	_, err = copyStmt.ExecContext(ctx)
 	if err != nil {
-		err = fmt.Errorf("could not finalize COPY statement: %v", err)
+		err = fmt.Errorf("could not finalize statement: %v", err)
 	}
 	return err
 }
@@ -186,12 +238,12 @@ func (st *pqStorage) getProfile(ctx context.Context, queryReq *profile.QueryRequ
 
 	if !queryReq.CreatedAtMin.IsZero() && !queryReq.CreatedAtMax.IsZero() {
 		args = append(args, queryReq.CreatedAtMin, queryReq.CreatedAtMax)
-		whereParts = append(whereParts, "s.created_at BETWEEN $2 AND $3") // s is for "samples AS s" in select query
+		whereParts = append(whereParts, "p.created_at BETWEEN $2 AND $3") // p is for "profiles AS p" in select query
 	}
 
 	for _, label := range queryReq.Labels {
 		args = append(args, label.Value)
-		whereParts = append(whereParts, fmt.Sprintf("v.labels->'%s' = $%d", label.Key, len(args)))
+		whereParts = append(whereParts, fmt.Sprintf("v.labels ->> '%s' = $%d", label.Key, len(args)))
 	}
 
 	pb := pprofutil.NewProfileBuilder(queryReq.Type)
@@ -199,7 +251,6 @@ func (st *pqStorage) getProfile(ctx context.Context, queryReq *profile.QueryRequ
 	locSet := make(map[int64]*pprofProfile.Location)
 
 	query := queryBuilder.ToSelectSQL(whereParts...)
-
 	err = st.selectProfileSamples(ctx, queryReq.Type, pb, locSet, query, args)
 	if err != nil {
 		return nil, err
@@ -221,7 +272,7 @@ func (st *pqStorage) getProfile(ctx context.Context, queryReq *profile.QueryRequ
 		return nil, err
 	}
 
-	return pb.Build(), nil
+	return pb.Build()
 }
 
 func (st *pqStorage) selectProfileSamples(
@@ -232,7 +283,7 @@ func (st *pqStorage) selectProfileSamples(
 	query string,
 	args []interface{},
 ) error {
-	st.logger.Debugw("get profile samples", logger.MultiLine("query", query), "args", args)
+	st.logger.Debugw("selectProfileSamples", logger.MultiLine("query", query), "args", args)
 
 	rows, err := st.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -258,10 +309,7 @@ func (st *pqStorage) selectProfileSamples(
 		for _, lid := range rs.sampleRec.Locations {
 			loc := locSet[lid]
 			if loc == nil {
-				loc = &pprofProfile.Location{
-					Mapping: nil,
-					Address: 0,
-				}
+				loc = &pprofProfile.Location{}
 				pb.AddLocation(loc)
 				locSet[lid] = loc
 			}
@@ -281,7 +329,7 @@ func (st *pqStorage) selectProfileLocations(
 	query string,
 	args []interface{},
 ) error {
-	st.logger.Debugw("get profile locations", logger.MultiLine("query", query), "args", args)
+	st.logger.Debugw("selectProfileLocations", logger.MultiLine("query", query), "args", args)
 
 	rows, err := st.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -289,29 +337,55 @@ func (st *pqStorage) selectProfileLocations(
 	}
 	defer rows.Close()
 
+	funcSet := make(map[int64]*pprofProfile.Function)
+
 	for rows.Next() {
-		var l LocationRecord
-		err := rows.Scan(&l.LocationID, &l.FuncName, &l.FileName, &l.Line)
+		var (
+			lr LocationRecord
+			mr MappingRecord
+			fr FunctionRecord
+		)
+		err := rows.Scan(&lr.LocationID, &mr, &lr.Address, &lr.Line, &fr.ID, &fr.FuncName, &fr.FileName)
 		if err != nil {
 			return err
 		}
 
-		loc := locSet[l.LocationID]
+		loc := locSet[lr.LocationID]
 		if loc == nil {
-			return fmt.Errorf("found unexpected location record %v", l)
+			return fmt.Errorf("found unexpected location record %v", lr)
 		}
 
-		fn := &pprofProfile.Function{
-			Name:       l.FuncName,
-			SystemName: l.FuncName,
-			Filename:   l.FileName,
-			StartLine:  l.Line,
-		}
-		pb.AddFunction(fn)
+		if loc.Mapping == nil {
+			m := &pprofProfile.Mapping{
+				Start:   mr.MemStart,
+				Limit:   mr.MemLimit,
+				Offset:  mr.Offset,
+				File:    mr.File,
+				BuildID: mr.BuildID,
+			}
+			pb.AddMapping(m)
 
+			loc.Mapping = m
+			loc.Address = lr.Address
+		}
+
+		fn := funcSet[fr.ID]
+		if fn == nil {
+			// as for Go 1.12 Function.start_line never got populated by runtime/pprof
+			// see https://github.com/golang/go/blob/5ee1b849592787ed050ef3fbd9b2c58aabd20ff3/src/runtime/pprof/proto.go
+			fn = &pprofProfile.Function{
+				Name:       fr.FuncName,
+				SystemName: fr.FuncName,
+				Filename:   fr.FileName,
+			}
+			pb.AddFunction(fn)
+			funcSet[fr.ID] = fn
+		}
+
+		// "multiple line indicates this location has inlined functions" (see profile.proto)
 		line := pprofProfile.Line{
 			Function: fn,
-			Line:     l.Line,
+			Line:     lr.Line,
 		}
 		loc.Line = append(loc.Line, line)
 	}
@@ -348,7 +422,6 @@ func newSampleRecordsScanner(ptyp profile.ProfileType) *sampleRecordsScanner {
 	)
 
 	dest := []interface{}{
-		&rec.ServiceID,
 		&rec.CreatedAt,
 		&rec.Locations,
 		&rec.Labels,
