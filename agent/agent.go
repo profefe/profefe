@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,8 +24,8 @@ import (
 const DefaultCollectorAddr = "http://localhost:10100"
 
 const (
-	defaultDuration     = 20 * time.Second
-	defaultTickInterval = 5 * time.Second
+	defaultDuration     = 10 * time.Second
+	defaultTickInterval = time.Minute
 
 	backoffMinDelay = time.Minute
 	backoffMaxDelay = 30 * time.Minute
@@ -35,11 +36,16 @@ var (
 	globalAgentOnce sync.Once
 )
 
-func Start(name string, opts ...Option) {
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
+func Start(name string, opts ...Option) (err error) {
 	globalAgentOnce.Do(func() {
 		globalAgent = New(name, opts...)
-		globalAgent.Start(context.Background())
+		err = globalAgent.Start(context.Background())
 	})
+	return err
 }
 
 func Stop() (err error) {
@@ -96,15 +102,16 @@ func New(service string, opts ...Option) *agent {
 	return a
 }
 
-func (a *agent) Start(ctx context.Context) {
+func (a *agent) Start(ctx context.Context) error {
 	a.buildID = a.getBuildID()
 
 	if err := a.registerAgent(ctx); err != nil {
-		a.logf("failed to register agent: %v", err)
-		return
+		return fmt.Errorf("failed to register agent: %v", err)
 	}
 
 	go a.collectAndSend(ctx)
+
+	return nil
 }
 
 func (a *agent) Stop() error {
@@ -199,7 +206,7 @@ func (a *agent) collectProfile(ctx context.Context, ptype profile.ProfileType, b
 	case profile.MutexProfile:
 		fallthrough
 	default:
-		return fmt.Errorf("expected profile type %v", ptype)
+		return fmt.Errorf("unknown profile type %v", ptype)
 	}
 
 	return nil
@@ -284,7 +291,11 @@ func (a *agent) collectAndSend(ctx context.Context) {
 			}
 
 			buf.Reset()
-			timer.Reset(a.tick)
+
+			// add extra up to 10 seconds to sleep to dis-align profiles
+			noise := time.Duration(rand.Intn(10)) * time.Second
+			tick := a.tick + noise
+			timer.Reset(tick)
 		}
 	}
 }

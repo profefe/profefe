@@ -12,7 +12,7 @@ import (
 func main() {
 	agent.Start(
 		"example_server",
-		agent.WithCPUProfile(20*time.Second),
+		agent.WithCPUProfile(10*time.Second),
 		agent.WithCollector(agent.DefaultCollectorAddr),
 		agent.WithLogger(agentLogger),
 		agent.WithLabels(
