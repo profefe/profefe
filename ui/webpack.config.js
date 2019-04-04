@@ -7,7 +7,7 @@ module.exports = {
         rules: [
             {
                 test: /\.tsx?$/,
-                use: {loader: "ts-loader", options: {happyPackMode: true}},
+                loader: 'ts-loader',
                 exclude: /node_modules/
             },
             {
