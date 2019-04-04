@@ -1,9 +1,8 @@
-package api
+package handler
 
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/profefe/profefe/pkg/logger"
@@ -129,23 +128,14 @@ func (h *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) er
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
 	}
 
-	h.logger.Debugf("req %+v", req)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, "profile"))
 
-	profReader, err := h.profilePepo.GetProfile(r.Context(), req)
+	err := h.profilePepo.GetProfileTo(r.Context(), req, w)
 	if err == profile.ErrNotFound {
 		return StatusError(http.StatusNotFound, "nothing found", nil)
 	} else if err == profile.ErrEmpty {
 		return StatusError(http.StatusNoContent, "profile empty", nil)
-	} else if err != nil {
-		return StatusError(http.StatusServiceUnavailable, "could not get profile", err)
-	}
-
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, "profile"))
-
-	_, err = io.Copy(w, profReader)
-	if err != nil {
-		err = StatusError(http.StatusServiceUnavailable, "could not write profile response", err)
 	}
 	return err
 }

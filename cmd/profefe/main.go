@@ -12,7 +12,7 @@ import (
 	"syscall"
 
 	_ "github.com/lib/pq"
-	"github.com/profefe/profefe/cmd/profefe/api"
+	"github.com/profefe/profefe/cmd/profefe/handler"
 	"github.com/profefe/profefe/cmd/profefe/middleware"
 	"github.com/profefe/profefe/pkg/config"
 	"github.com/profefe/profefe/pkg/logger"
@@ -66,8 +66,11 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 	}
 
 	mux := http.NewServeMux()
-	apiHandler := api.NewAPIHandler(log, profileRepo)
+	apiHandler := handler.NewAPIHandler(log, profileRepo)
 	apiHandler.RegisterRoutes(mux)
+
+	uiHandler := handler.NewUIHandler(log, profileRepo)
+	uiHandler.RegisterRoutes(mux)
 
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)

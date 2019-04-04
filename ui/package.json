@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "build": "webpack",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "webpack-server": "NODE_ENV=development webpack-dev-server --mode development"
+    "dev": "NODE_ENV=development webpack-dev-server --mode development",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
@@ -15,6 +15,7 @@
   "author": "Vladimir Varankin <vladimir@varank.in>",
   "license": "MIT",
   "dependencies": {
+    "d3-flame-graph": "^2.0.7",
     "d3-heatmap2": "^1.0.0-alpha1",
     "d3-scale": "^3.0.0",
     "d3-selection": "^1.4.0"

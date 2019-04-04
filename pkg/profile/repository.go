@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/logger"
 )
 
@@ -83,9 +84,25 @@ func (repo *Repository) CreateProfile(ctx context.Context, req *CreateProfileReq
 		},
 	}
 
-	// TODO(narqo) cap the profile bytes with some sane defaults
-	// r = io.LimitReader(r, ??)
-	return repo.storage.CreateProfile(ctx, prof, r)
+	pp, err := profile.Parse(r)
+	if err != nil {
+		return fmt.Errorf("could not parse profile: %v", err)
+	}
+
+	return repo.storage.CreateProfile(ctx, prof, pp)
+}
+
+type GetProfilesRequest struct {
+	Service string
+	Type    ProfileType
+	From    time.Time
+	To      time.Time
+	Labels  Labels
+	Limit   int
+}
+
+func (repo *Repository) GetProfiles(ctx context.Context, req *GetProfilesRequest) ([]*profile.Profile, error) {
+	panic("not implemented")
 }
 
 type GetProfileRequest struct {
@@ -116,13 +133,28 @@ func (req *GetProfileRequest) Validate() error {
 	return nil
 }
 
-func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) (io.Reader, error) {
-	filter := &ReadProfileFilter{
+func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) (*profile.Profile, error) {
+	filter := &GetProfileFilter{
 		Service:      req.Service,
 		Type:         req.Type,
 		Labels:       req.Labels,
 		CreatedAtMin: req.From,
 		CreatedAtMax: req.To,
 	}
-	return repo.storage.ReadProfile(ctx, filter)
+	return repo.storage.GetProfile(ctx, filter)
+}
+
+func (repo *Repository) GetProfileTo(ctx context.Context, req *GetProfileRequest, w io.Writer) error {
+	filter := &GetProfileFilter{
+		Service:      req.Service,
+		Type:         req.Type,
+		Labels:       req.Labels,
+		CreatedAtMin: req.From,
+		CreatedAtMax: req.To,
+	}
+	prof, err := repo.storage.GetProfile(ctx, filter)
+	if err != nil {
+		return err
+	}
+	return prof.Write(w)
 }
