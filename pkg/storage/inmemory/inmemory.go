@@ -57,7 +57,7 @@ func (st *Storage) byDigest(_ context.Context, dgst profile.Digest) (p storageIt
 	return p, err
 }
 
-func (st *Storage) Query(ctx context.Context, query *profile.ReadProfileFilter) (profs []*profile.Profile, err error) {
+func (st *Storage) Query(ctx context.Context, query *profile.GetProfileFilter) (profs []*profile.Profile, err error) {
 	if query == nil {
 		return nil, profile.ErrNotFound
 	}

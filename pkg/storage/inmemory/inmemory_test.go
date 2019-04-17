@@ -69,41 +69,41 @@ func TestStorage_Query(t *testing.T) {
 	st, inProf := setupTestStorage(t)
 
 	cases := []struct {
-		query   profile.ReadProfileFilter
+		query   profile.GetProfileFilter
 		wantErr bool
 	}{
 		{
-			profile.ReadProfileFilter{
+			profile.GetProfileFilter{
 				Digest: inProf.Digest,
 			},
 			false,
 		},
 		{
-			profile.ReadProfileFilter{
+			profile.GetProfileFilter{
 				Service: inProf.Service,
 			},
 			false,
 		},
 		{
-			profile.ReadProfileFilter{
+			profile.GetProfileFilter{
 				Type: inProf.Type,
 			},
 			false,
 		},
 		{
-			profile.ReadProfileFilter{
+			profile.GetProfileFilter{
 				CreatedAtMin: inProf.CreatedAt.Add(-1 * time.Minute),
 			},
 			false,
 		},
 		{
-			profile.ReadProfileFilter{
+			profile.GetProfileFilter{
 				CreatedAtMax: inProf.CreatedAt.Add(time.Minute),
 			},
 			false,
 		},
 		{
-			profile.ReadProfileFilter{
+			profile.GetProfileFilter{
 				Labels: profile.Labels{
 					{"foo", "bar"},
 				},
@@ -112,7 +112,7 @@ func TestStorage_Query(t *testing.T) {
 		},
 		// fail cases
 		{
-			profile.ReadProfileFilter{
+			profile.GetProfileFilter{
 				Digest: "blah",
 			},
 			true,
@@ -123,15 +123,15 @@ func TestStorage_Query(t *testing.T) {
 		t.Run(fmt.Sprintf("case %d", n), func(t *testing.T) {
 			outProfs, err := st.Query(context.Background(), &tc.query)
 			if (err != nil) != tc.wantErr {
-				t.Fatalf("ReadProfile: got %v, want error %v", err, tc.wantErr)
+				t.Fatalf("GetProfile: got %v, want error %v", err, tc.wantErr)
 			}
 
 			if tc.wantErr {
 				return
 			} else if got := len(outProfs); got != 1 {
-				t.Fatalf("ReadProfile: got %d profiles, want 1", got)
+				t.Fatalf("GetProfile: got %d profiles, want 1", got)
 			} else if got := outProfs[0]; got != inProf {
-				t.Fatalf("ReadProfile: got %#v, want %#v", got, inProf)
+				t.Fatalf("GetProfile: got %#v, want %#v", got, inProf)
 			}
 		})
 	}

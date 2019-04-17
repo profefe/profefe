@@ -3,7 +3,6 @@ package profile
 import (
 	"context"
 	"errors"
-	"io"
 	"time"
 
 	"github.com/profefe/profefe/internal/pprof/profile"
@@ -14,7 +13,7 @@ var (
 	ErrEmpty    = errors.New("profile is empty")
 )
 
-type ReadProfileFilter struct {
+type GetProfileFilter struct {
 	Service      string
 	Type         ProfileType
 	Labels       Labels
@@ -26,8 +25,7 @@ type ReadProfileFilter struct {
 type Storage interface {
 	CreateService(ctx context.Context, service *Service) error
 
-	CreateProfile(ctx context.Context, prof *Profile, r io.Reader) error
-	ReadProfile(ctx context.Context, filter *ReadProfileFilter) (io.Reader, error)
-	ReadRawProfile(ctx context.Context, filter *ReadProfileFilter) (*profile.Profile, error)
+	CreateProfile(ctx context.Context, prof *Profile, pp *profile.Profile) error
+	GetProfile(ctx context.Context, filter *GetProfileFilter) (*profile.Profile, error)
 	DeleteProfile(ctx context.Context, prof *Profile) error
 }

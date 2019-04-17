@@ -21,10 +21,10 @@ func TestRepository_CreateProfile(t *testing.T) {
 	//require.NoError(t, err)
 	//require.NotEmptyf(t, token, "CreateService: empty token")
 	//
-	//queryReq := &profile.ReadProfileFilter{
+	//queryReq := &profile.GetProfileFilter{
 	//	Service: "test",
 	//}
-	//profs, err := st.ReadProfile(ctx, queryReq)
+	//profs, err := st.GetProfile(ctx, queryReq)
 	//require.NoError(t, err)
 	//require.Len(t, profs, 1)
 	//require.Equal(t, token, profs[0].Service.Token)
