@@ -1,0 +1,10 @@
+sudo: false
+language: go
+go:
+  - 1.x
+
+matrix:
+  allow_failures:
+    - go: tip
+
+script: make test

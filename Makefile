@@ -31,4 +31,7 @@ build-%:
 
 deploy:
 
+test:
+	$(TEST.go) -ldflags "$(LDFLAGS)" ./...
+
 .PHONY: all build deploy run test
