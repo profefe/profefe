@@ -27,11 +27,11 @@ func (token Token) String() string {
 }
 
 type Service struct {
-	Name      string
-	BuildID   string
-	Token     Token `json:",string"`
-	Labels    Labels
-	CreatedAt time.Time
+	Name      string    `json:"service,omitempty"`
+	BuildID   string    `json:"build_id,omitempty"`
+	Token     Token     `json:"-"`
+	Labels    Labels    `json:"labels,omitempty"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
 }
 
 func NewService(name, buildid string, labels Labels) *Service {

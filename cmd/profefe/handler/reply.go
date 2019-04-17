@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -14,12 +13,12 @@ type causer interface {
 
 type statusError struct {
 	code   int
-	status error
+	status string
 	cause  error
 }
 
 func (s *statusError) Error() string {
-	return s.status.Error()
+	return s.status
 }
 
 func (s *statusError) Cause() error {
@@ -29,7 +28,7 @@ func (s *statusError) Cause() error {
 func StatusError(code int, msg string, cause error) *statusError {
 	return &statusError{
 		code:   code,
-		status: errors.New(msg),
+		status: msg,
 		cause:  cause,
 	}
 }
@@ -41,14 +40,25 @@ func ReplyOK(w http.ResponseWriter) {
 	io.WriteString(w, `{"code":200}`)
 }
 
+func ReplyJSON(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+
+	json.NewEncoder(w).Encode(v)
+}
+
 func ReplyError(w http.ResponseWriter, err error) {
-	var statusCode int
+	var (
+		statusCode int
+		errMsg     string
+	)
 
 	switch err := err.(type) {
 	case *statusError:
 		statusCode = err.code
+		errMsg = err.Error()
 	default:
 		statusCode = http.StatusInternalServerError
+		errMsg = "internal error"
 	}
 
 	w.WriteHeader(statusCode)
@@ -59,7 +69,7 @@ func ReplyError(w http.ResponseWriter, err error) {
 		Error string `json:"error"`
 	}{
 		Code:  statusCode,
-		Error: err.Error(),
+		Error: errMsg,
 	}
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		io.WriteString(w, `{"code":`+strconv.Itoa(http.StatusInternalServerError)+`,"error":"`+err.Error()+`"}`)

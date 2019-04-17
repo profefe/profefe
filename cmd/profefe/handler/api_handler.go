@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -31,6 +30,8 @@ func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// TODO(narqo): maybe use github.com/go-chi/chi
 	switch r.URL.Path {
+	case "/api/0/services":
+		err = h.handleGetServices(w, r)
 	case "/api/0/profiles":
 		err = h.handleGetProfiles(w, r)
 	case "/api/0/profile":
@@ -50,6 +51,27 @@ func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handleErrorHTTP(h.logger, err, w, r)
+}
+
+func (h *APIHandler) handleGetServices(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodGet {
+		return StatusError(http.StatusMethodNotAllowed, fmt.Sprintf("bad request method: %s", r.Method), nil)
+	}
+
+	q := r.URL.Query()
+	req := &profile.GetServicesRequest{
+		Service: q.Get("service"),
+	}
+	services, err := h.profilePepo.GetServices(r.Context(), req)
+	if err == profile.ErrNotFound {
+		return StatusError(http.StatusNotFound, "nothing found", nil)
+	} else if err != nil {
+		return err
+	}
+
+	ReplyJSON(w, services)
+
+	return nil
 }
 
 func (h *APIHandler) handleGetProfiles(w http.ResponseWriter, r *http.Request) error {
@@ -82,7 +104,6 @@ func (h *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	w.Header().Set("Content-Type", "application/json")
 
 	resp := struct {
 		Code  int    `json:"code"`
@@ -91,9 +112,9 @@ func (h *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Request)
 		Code:  http.StatusCreated,
 		Token: token,
 	}
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		return err
-	}
+
+	ReplyJSON(w, resp)
+
 	return nil
 }
 
@@ -141,8 +162,6 @@ func (h *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) er
 }
 
 func (h *APIHandler) handleGetVersion(w http.ResponseWriter, r *http.Request) error {
-	w.Header().Set("Content-Type", "application/json")
-
 	resp := struct {
 		Version   string `json:"version"`
 		Commit    string `json:"commit"`
@@ -152,5 +171,8 @@ func (h *APIHandler) handleGetVersion(w http.ResponseWriter, r *http.Request) er
 		Commit:    version.Commit,
 		BuildTime: version.BuildTime,
 	}
-	return json.NewEncoder(w).Encode(resp)
+
+	ReplyJSON(w, resp)
+
+	return nil
 }

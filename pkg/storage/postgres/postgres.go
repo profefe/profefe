@@ -44,6 +44,58 @@ func (st *pqStorage) CreateService(ctx context.Context, svc *profile.Service) er
 	return err
 }
 
+func (st *pqStorage) GetServices(ctx context.Context, filter *profile.GetServicesFilter) ([]*profile.Service, error) {
+	defer func(t time.Time) {
+		st.logger.Debugw("getServices", "time", time.Since(t))
+	}(time.Now())
+
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if filter.Service == "" {
+		rows, err = st.db.QueryContext(ctx, sqlSelectServices)
+	} else {
+		rows, err = st.db.QueryContext(ctx, sqlSelectServicesByName, filter.Service)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query services (%v): %v", filter, err)
+	}
+
+	defer rows.Close()
+
+	return st.getServices(ctx, rows)
+}
+
+func (st *pqStorage) getServices(ctx context.Context, rows *sql.Rows) ([]*profile.Service, error) {
+	var svcs []*profile.Service
+	for rows.Next() {
+		var (
+			name      string
+			createdAt time.Time
+			labels    ServiceLabels
+		)
+		err := rows.Scan(&name, &createdAt, &labels)
+		if err != nil {
+			return nil, err
+		}
+
+		svc := &profile.Service{
+			Name:      name,
+			CreatedAt: createdAt,
+			Labels:    profile.Labels(labels),
+		}
+		svcs = append(svcs, svc)
+	}
+
+	if len(svcs) == 0 {
+		return nil, profile.ErrNotFound
+	}
+
+	return svcs, nil
+}
+
 func (st *pqStorage) CreateProfile(ctx context.Context, prof *profile.Profile, pp *pprofProfile.Profile) error {
 	queryBuilder, err := sqlSamplesQueryBuilder(prof.Type)
 	if err != nil {
@@ -199,7 +251,7 @@ func getSampleLabels(sample *pprofProfile.Sample) (labels SampleLabels) {
 
 func (st *pqStorage) GetProfile(ctx context.Context, filter *profile.GetProfileFilter) (*pprofProfile.Profile, error) {
 	defer func(t time.Time) {
-		st.logger.Debugw("readProfile", "time", time.Since(t))
+		st.logger.Debugw("getProfile", "time", time.Since(t))
 	}(time.Now())
 
 	return st.getProfile(ctx, filter)
