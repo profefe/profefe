@@ -1,11 +1,9 @@
 package postgres
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/lib/pq"
@@ -29,7 +27,7 @@ func New(log *logger.Logger, db *sql.DB) (profile.Storage, error) {
 }
 
 func (st *pqStorage) CreateService(ctx context.Context, svc *profile.Service) error {
-	st.logger.Debugw("createService", "profile", svc)
+	st.logger.Debugw("createService", "service", svc)
 
 	_, err := st.db.ExecContext(
 		ctx,
@@ -46,23 +44,14 @@ func (st *pqStorage) CreateService(ctx context.Context, svc *profile.Service) er
 	return err
 }
 
-func (st *pqStorage) CreateProfile(ctx context.Context, prof *profile.Profile, r io.Reader) error {
-	pp, err := pprofProfile.Parse(r)
-	if err != nil {
-		return fmt.Errorf("could not parse profile: %v", err)
-	}
-
-	return st.insertProfile(ctx, prof, pp)
-}
-
-func (st *pqStorage) insertProfile(ctx context.Context, prof *profile.Profile, pp *pprofProfile.Profile) error {
+func (st *pqStorage) CreateProfile(ctx context.Context, prof *profile.Profile, pp *pprofProfile.Profile) error {
 	queryBuilder, err := sqlSamplesQueryBuilder(prof.Type)
 	if err != nil {
 		return err
 	}
 
 	defer func(t time.Time) {
-		st.logger.Debugw("insertProfile", "profile", prof, "time", time.Since(t))
+		st.logger.Debugw("createProfile", "profile", prof, "time", time.Since(t))
 	}(time.Now())
 
 	tx, err := st.db.Begin()
@@ -156,7 +145,7 @@ func (st *pqStorage) insertProfSamples(ctx context.Context, tx *sql.Tx, query st
 	defer copyStmt.Close()
 
 	defer func(t time.Time) {
-		st.logger.Debugw("insert samples", logger.MultiLine("query", query), "profid", profID, "nsamples", len(samples), "time", time.Since(t))
+		st.logger.Debugw("insertProfSamples", logger.MultiLine("query", query), "profid", profID, "nsamples", len(samples), "time", time.Since(t))
 	}(time.Now())
 
 	var (
@@ -208,30 +197,15 @@ func getSampleLabels(sample *pprofProfile.Sample) (labels SampleLabels) {
 	return labels
 }
 
-func (st *pqStorage) ReadProfile(ctx context.Context, filter *profile.ReadProfileFilter) (io.Reader, error) {
+func (st *pqStorage) GetProfile(ctx context.Context, filter *profile.GetProfileFilter) (*pprofProfile.Profile, error) {
 	defer func(t time.Time) {
 		st.logger.Debugw("readProfile", "time", time.Since(t))
-	}(time.Now())
-
-	pp, err := st.getProfile(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-
-	var buf bytes.Buffer
-	err = pp.Write(&buf)
-	return &buf, err
-}
-
-func (st *pqStorage) ReadRawProfile(ctx context.Context, filter *profile.ReadProfileFilter) (*pprofProfile.Profile, error) {
-	defer func(t time.Time) {
-		st.logger.Debugw("readRawProfile", "time", time.Since(t))
 	}(time.Now())
 
 	return st.getProfile(ctx, filter)
 }
 
-func (st *pqStorage) getProfile(ctx context.Context, filter *profile.ReadProfileFilter) (*pprofProfile.Profile, error) {
+func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileFilter) (*pprofProfile.Profile, error) {
 	queryBuilder, err := sqlSamplesQueryBuilder(filter.Type)
 	if err != nil {
 		return nil, err
