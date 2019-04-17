@@ -152,9 +152,9 @@ func (repo *Repository) GetProfileTo(ctx context.Context, req *GetProfileRequest
 		CreatedAtMin: req.From,
 		CreatedAtMax: req.To,
 	}
-	prof, err := repo.storage.GetProfile(ctx, filter)
+	pp, err := repo.storage.GetProfile(ctx, filter)
 	if err != nil {
 		return err
 	}
-	return prof.Write(w)
+	return pp.Write(w)
 }

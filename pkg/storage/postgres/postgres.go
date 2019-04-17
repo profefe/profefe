@@ -27,7 +27,7 @@ func New(log *logger.Logger, db *sql.DB) (profile.Storage, error) {
 }
 
 func (st *pqStorage) CreateService(ctx context.Context, svc *profile.Service) error {
-	st.logger.Debugw("createService", "profile", svc)
+	st.logger.Debugw("createService", "service", svc)
 
 	_, err := st.db.ExecContext(
 		ctx,
@@ -145,7 +145,7 @@ func (st *pqStorage) insertProfSamples(ctx context.Context, tx *sql.Tx, query st
 	defer copyStmt.Close()
 
 	defer func(t time.Time) {
-		st.logger.Debugw("insert samples", logger.MultiLine("query", query), "profid", profID, "nsamples", len(samples), "time", time.Since(t))
+		st.logger.Debugw("insertProfSamples", logger.MultiLine("query", query), "profid", profID, "nsamples", len(samples), "time", time.Since(t))
 	}(time.Now())
 
 	var (
