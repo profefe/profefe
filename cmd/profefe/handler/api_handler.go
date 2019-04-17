@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -82,7 +81,6 @@ func (h *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	w.Header().Set("Content-Type", "application/json")
 
 	resp := struct {
 		Code  int    `json:"code"`
@@ -91,9 +89,9 @@ func (h *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Request)
 		Code:  http.StatusCreated,
 		Token: token,
 	}
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		return err
-	}
+
+	ReplyJSON(w, resp)
+
 	return nil
 }
 
@@ -141,8 +139,6 @@ func (h *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) er
 }
 
 func (h *APIHandler) handleGetVersion(w http.ResponseWriter, r *http.Request) error {
-	w.Header().Set("Content-Type", "application/json")
-
 	resp := struct {
 		Version   string `json:"version"`
 		Commit    string `json:"commit"`
@@ -152,5 +148,8 @@ func (h *APIHandler) handleGetVersion(w http.ResponseWriter, r *http.Request) er
 		Commit:    version.Commit,
 		BuildTime: version.BuildTime,
 	}
-	return json.NewEncoder(w).Encode(resp)
+
+	ReplyJSON(w, resp)
+
+	return nil
 }
