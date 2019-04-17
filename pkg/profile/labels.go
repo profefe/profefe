@@ -7,7 +7,8 @@ import (
 )
 
 type Label struct {
-	Key, Value string
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 type Labels []Label
@@ -17,9 +18,12 @@ func LabelsFromMap(m map[string]interface{}) Labels {
 		return nil
 	}
 
-	labels := make(Labels, len(m))
+	labels := make(Labels, 0, len(m))
 
 	for k, rawVal := range m {
+		if k == "" {
+			continue
+		}
 		val, _ := rawVal.(string)
 		labels = append(labels, Label{k, val})
 	}
@@ -27,6 +31,61 @@ func LabelsFromMap(m map[string]interface{}) Labels {
 	sort.Sort(labels)
 
 	return labels
+}
+
+func (labels Labels) Equal(labels2 Labels) bool {
+	if len(labels) != len(labels2) {
+		return false
+	}
+
+	labelsSet := make(map[string][]Label, len(labels))
+	for _, label := range labels {
+		labelsSet[label.Key] = append(labelsSet[label.Key], label)
+	}
+
+	for _, label := range labels2 {
+		v, ok := labelsSet[label.Key]
+		if !ok {
+			return false
+		}
+		ok = false
+		for _, label2 := range v {
+			if label.Value == label2.Value {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (labels Labels) Add(labels2 Labels) Labels {
+	if labels == nil {
+		return labels2
+	} else if labels2 == nil {
+		return labels
+	}
+
+	labelsIdx := make(map[string]struct{}, len(labels))
+	for _, label := range labels {
+		labelsIdx[label.Key+"~~"+label.Value] = struct{}{}
+	}
+
+	ret := make([]Label, len(labels), len(labels)+len(labels2))
+	copy(ret, labels)
+
+	for _, label2 := range labels2 {
+		_, ok := labelsIdx[label2.Key+"~~"+label2.Value]
+		if !ok {
+			ret = append(ret, label2)
+		}
+	}
+
+	return ret
 }
 
 func (labels *Labels) FromString(s string) (err error) {

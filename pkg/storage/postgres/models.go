@@ -101,6 +101,21 @@ func (s *SampleHeapRecord) Value() []int64 {
 
 type ServiceLabels profile.Labels
 
+func (labels *ServiceLabels) Scan(src interface{}) error {
+	if src == nil {
+		return nil
+	}
+
+	m := make(map[string]interface{})
+	if err := json.Unmarshal(src.([]byte), &m); err != nil {
+		return err
+	}
+
+	*labels = ServiceLabels(profile.LabelsFromMap(m))
+
+	return nil
+}
+
 func (labels ServiceLabels) Value() (driver.Value, error) {
 	if labels == nil {
 		return nil, nil

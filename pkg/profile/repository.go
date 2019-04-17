@@ -52,6 +52,46 @@ func (repo *Repository) CreateService(ctx context.Context, req *CreateServiceReq
 	return service.Token.String(), nil
 }
 
+type GetServicesRequest struct {
+	Service string
+}
+
+func (repo *Repository) GetServices(ctx context.Context, req *GetServicesRequest) ([]*Service, error) {
+	filter := &GetServicesFilter{
+		Service: req.Service,
+	}
+	services, err := repo.storage.GetServices(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	return mergeServices(services), nil
+}
+
+func mergeServices(services []*Service) []*Service {
+	if len(services) == 0 {
+		return services
+	}
+
+	servicesSet := make(map[string]*Service)
+	for _, s1 := range services {
+		if servicesSet[s1.Name] == nil {
+			servicesSet[s1.Name] = s1
+			continue
+		}
+		s2 := servicesSet[s1.Name]
+		s2.Labels = s2.Labels.Add(s1.Labels)
+	}
+
+	services = services[:0]
+
+	for _, s := range servicesSet {
+		services = append(services, s)
+	}
+
+	return services
+}
+
 type CreateProfileRequest struct {
 	ID    string
 	Token string

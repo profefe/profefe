@@ -10,7 +10,16 @@ import (
 const (
 	sqlInsertService = `
 		INSERT INTO services (build_id, token, name, created_at, labels)
-		VALUES ($1, $2, $3, $4, $5)`
+		VALUES ($1, $2, $3, $4, $5);`
+
+	sqlSelectServices = `
+		SELECT name, created_at, labels FROM services
+		ORDER BY created_at;`
+
+	sqlSelectServicesByName = `
+		SELECT name, created_at, labels FROM services
+		WHERE name = $1
+		ORDER BY created_at;`
 
 	sqlInsertProfiles = `
 		INSERT INTO pprof_profiles (service_id, created_at, type, period)
