@@ -20,11 +20,18 @@ func WithHeapProfile() Option {
 	}
 }
 
-func WithMuxProfile() Option {
-	return func(a *agent) {
-		a.MuxProfile = true
-	}
-}
+// TODO(narqo): support the rest of profile types
+//func WithBlockProfile() Option {
+//	return func(a *agent) {
+//		a.BlockProfile = true
+//	}
+//}
+//
+//func WithMuxProfile() Option {
+//	return func(a *agent) {
+//		a.MuxProfile = true
+//	}
+//}
 
 func WithCollector(addr string) Option {
 	return func(a *agent) {

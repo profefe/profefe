@@ -27,6 +27,8 @@ const (
 	defaultDuration     = 10 * time.Second
 	defaultTickInterval = time.Minute
 
+	defaultProfileType = profile.CPUProfile
+
 	backoffMinDelay = time.Minute
 	backoffMaxDelay = 30 * time.Minute
 )
@@ -63,6 +65,7 @@ type agent struct {
 	ProfileDuration time.Duration
 	CPUProfile      bool
 	HeapProfile     bool
+	BlockProfile    bool
 	MuxProfile      bool
 
 	service    string
@@ -83,6 +86,8 @@ type agent struct {
 func New(service string, opts ...Option) *agent {
 	a := &agent{
 		ProfileDuration: defaultDuration,
+
+		CPUProfile: true, // enable CPU profiling by default
 
 		service:   service,
 		labels:    make(map[string]string),
@@ -199,8 +204,13 @@ func (a *agent) collectProfile(ctx context.Context, ptype profile.ProfileType, b
 		}
 		sleep(a.ProfileDuration, ctx.Done())
 		pprof.StopCPUProfile()
+
 	case profile.HeapProfile:
-		fallthrough
+		err := pprof.WriteHeapProfile(buf)
+		if err != nil {
+			return fmt.Errorf("failed to write heap profile: %v", err)
+		}
+
 	case profile.BlockProfile:
 		fallthrough
 	case profile.MutexProfile:
@@ -271,7 +281,9 @@ func (a *agent) collectAndSend(ctx context.Context) {
 		}
 	}()
 
-	timer := time.NewTimer(a.tick)
+	var ptype profile.ProfileType
+
+	timer := time.NewTimer(tickInterval(a.tick))
 
 	var buf bytes.Buffer
 	for {
@@ -282,7 +294,7 @@ func (a *agent) collectAndSend(ctx context.Context) {
 			}
 			return
 		case <-timer.C:
-			ptype := profile.CPUProfile // hardcoded for now
+			ptype = a.nextProfileType(ptype)
 
 			if err := a.collectProfile(ctx, ptype, &buf); err != nil {
 				a.logf("failed to collect profiles: %v", err)
@@ -292,12 +304,47 @@ func (a *agent) collectAndSend(ctx context.Context) {
 
 			buf.Reset()
 
-			// add extra up to 10 seconds to sleep to dis-align profiles
-			noise := time.Duration(rand.Intn(10)) * time.Second
-			tick := a.tick + noise
-			timer.Reset(tick)
+			timer.Reset(tickInterval(a.tick))
 		}
 	}
+}
+
+func (a *agent) nextProfileType(ptype profile.ProfileType) profile.ProfileType {
+	// special case to choose initial profile type on the first call
+	if ptype == profile.UnknownProfile {
+		return defaultProfileType
+	}
+
+	for {
+		switch ptype {
+		case profile.CPUProfile:
+			ptype = profile.HeapProfile
+			if a.HeapProfile {
+				return ptype
+			}
+		case profile.HeapProfile:
+			ptype = profile.BlockProfile
+			if a.BlockProfile {
+				return ptype
+			}
+		case profile.BlockProfile:
+			ptype = profile.MutexProfile
+			if a.MuxProfile {
+				return ptype
+			}
+		case profile.MutexProfile:
+			ptype = profile.CPUProfile
+			if a.CPUProfile {
+				return ptype
+			}
+		}
+	}
+}
+
+func tickInterval(d time.Duration) time.Duration {
+	// add up to extra 10 seconds to sleep to dis-align profiles
+	noise := time.Duration(rand.Intn(10)) * time.Second
+	return d + noise
 }
 
 var timersPool = sync.Pool{}
