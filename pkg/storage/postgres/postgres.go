@@ -456,6 +456,7 @@ func newSampleRecordsScanner(ptyp profile.ProfileType) *sampleRecordsScanner {
 	)
 
 	dest := []interface{}{
+		&rec.ProfileID,
 		&rec.CreatedAt,
 		&rec.Locations,
 		&rec.Labels,

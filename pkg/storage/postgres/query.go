@@ -29,7 +29,7 @@ const (
 		RETURNING profile_id;`
 
 	sqlSelectSamplesTmpl = `
-		SELECT p.created_at, s.locations, s.labels, %[2]s
+		SELECT p.profile_id, p.created_at, s.locations, s.labels, %[2]s
 		FROM %[1]s s
 		INNER JOIN pprof_profiles p ON s.profile_id = p.profile_id
 		INNER JOIN services v ON p.service_id = v.service_id
