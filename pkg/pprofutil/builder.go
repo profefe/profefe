@@ -54,9 +54,7 @@ func (pb *ProfileBuilder) Build() (*pprof.Profile, error) {
 		pb.buildHeap()
 	}
 
-	err := pb.prof.CheckValid()
-
-	return pb.prof, err
+	return pb.prof, nil
 }
 
 func (pb *ProfileBuilder) buildCPU() {
