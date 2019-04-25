@@ -141,8 +141,35 @@ type GetProfilesRequest struct {
 	Limit   int
 }
 
+func (req *GetProfilesRequest) Validate() error {
+	if req == nil {
+		return errors.New("nil request")
+	}
+
+	if req.Service == "" {
+		return fmt.Errorf("no service: req %v", req)
+	}
+	if req.Type == UnknownProfile {
+		return fmt.Errorf("unknown profile type %s: req %v", req.Type, req)
+	}
+	if req.From.IsZero() || req.To.IsZero() {
+		return fmt.Errorf("createdAt time zero: req %v", req)
+	}
+	if req.To.Before(req.From) {
+		return fmt.Errorf("createdAt time min after max: req %v", req)
+	}
+	return nil
+}
+
 func (repo *Repository) GetProfiles(ctx context.Context, req *GetProfilesRequest) ([]*profile.Profile, error) {
-	panic("not implemented")
+	filter := &GetProfileFilter{
+		Service:      req.Service,
+		Type:         req.Type,
+		Labels:       req.Labels,
+		CreatedAtMin: req.From,
+		CreatedAtMax: req.To,
+	}
+	return repo.storage.GetProfiles(ctx, filter)
 }
 
 type GetProfileRequest struct {
