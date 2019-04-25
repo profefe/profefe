@@ -72,6 +72,7 @@ type sampleRecordValuer interface {
 }
 
 type BaseSampleRecord struct {
+	ProfileID int64
 	CreatedAt time.Time
 	Locations pq.Int64Array
 	Labels    SampleLabels

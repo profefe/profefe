@@ -17,3 +17,10 @@ func SampleAddLabel(s *profile.Sample, key string, valueStr string, valueNum int
 		s.NumLabel[key] = append(s.NumLabel[key], valueNum)
 	}
 }
+
+// Compact compacts passed profiles in-place.
+func Compact(profs []*profile.Profile) {
+	for i := 0; i < len(profs); i++ {
+		profs[i] = profs[i].Compact()
+	}
+}

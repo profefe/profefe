@@ -32,6 +32,7 @@ type Storage interface {
 	GetServices(ctx context.Context, filter *GetServicesFilter) ([]*Service, error)
 
 	CreateProfile(ctx context.Context, prof *Profile, pp *profile.Profile) error
+	GetProfiles(ctx context.Context, filter *GetProfileFilter) ([]*profile.Profile, error)
 	GetProfile(ctx context.Context, filter *GetProfileFilter) (*profile.Profile, error)
 	DeleteProfile(ctx context.Context, prof *Profile) error
 }
