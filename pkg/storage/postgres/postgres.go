@@ -258,8 +258,8 @@ func (st *pqStorage) GetProfiles(ctx context.Context, filter *profile.GetProfile
 	if err != nil {
 		return nil, err
 	}
-	pprofutil.Compact(profs)
-	return profs, nil
+	err = pprofutil.Compact(profs)
+	return profs, err
 }
 
 func (st *pqStorage) GetProfile(ctx context.Context, filter *profile.GetProfileFilter) (*pprofProfile.Profile, error) {
@@ -297,34 +297,34 @@ func (st *pqStorage) getProfiles(ctx context.Context, filter *profile.GetProfile
 		whereParts = append(whereParts, fmt.Sprintf("v.labels ->> '%s' = $%d", label.Key, len(args)))
 	}
 
-	pbs := pprofutil.NewProfileBuilders(filter.Type)
+	psb := pprofutil.NewProfilesBuilder(filter.Type)
 
 	query := queryBuilder.ToSelectSQL(whereParts...)
-	err = st.selectProfileSamples(ctx, filter.Type, pbs, query, args)
+	err = st.selectProfileSamples(ctx, filter.Type, psb, query, args)
 	if err != nil {
 		return nil, err
 	}
 
-	if pbs.IsEmpty() {
+	if psb.IsEmpty() {
 		return nil, profile.ErrEmpty
 	}
 
-	locIDs := pq.Int64Array(pprofutil.LocationIDs(pbs))
+	locIDs := pq.Int64Array(pprofutil.LocationIDs(psb))
 
 	args = args[:0]
 	args = append(args, locIDs)
-	err = st.selectProfileLocations(ctx, pbs, sqlSelectLocations, args)
+	err = st.selectProfileLocations(ctx, psb, sqlSelectLocations, args)
 	if err != nil {
 		return nil, err
 	}
 
-	return pbs.BuildAll()
+	return psb.BuildAll()
 }
 
 func (st *pqStorage) selectProfileSamples(
 	ctx context.Context,
 	ptyp profile.ProfileType,
-	pbs *pprofutil.ProfileBuilders,
+	psb *pprofutil.ProfilesBuilder,
 	query string,
 	args []interface{},
 ) error {
@@ -343,16 +343,19 @@ func (st *pqStorage) selectProfileSamples(
 			return err
 		}
 
-		sample := pbs.Sample(rs.sampleRec.ProfileID, rs.Value())
-
+		sample := &pprofProfile.Sample{
+			Value: rs.Value(),
+		}
 		for _, label := range rs.sampleRec.Labels {
 			pprofutil.SampleAddLabel(sample, label.Key, label.ValueStr, label.ValueNum)
 		}
 
 		for _, locID := range rs.sampleRec.Locations {
-			loc := pbs.Location(rs.sampleRec.ProfileID, locID)
+			loc := psb.Location(rs.sampleRec.ProfileID, locID)
 			sample.Location = append(sample.Location, loc)
 		}
+
+		psb.ProfileBuilder(rs.sampleRec.ProfileID).AddSample(sample)
 	}
 
 	return rows.Err()
@@ -360,7 +363,7 @@ func (st *pqStorage) selectProfileSamples(
 
 func (st *pqStorage) selectProfileLocations(
 	ctx context.Context,
-	pbs *pprofutil.ProfileBuilders,
+	psb *pprofutil.ProfilesBuilder,
 	query string,
 	args []interface{},
 ) error {
@@ -385,12 +388,12 @@ func (st *pqStorage) selectProfileLocations(
 			return err
 		}
 
-		loc := pprofutil.LocationByLocationID(pbs, lr.LocationID)
+		loc := psb.LocationByID(lr.LocationID)
 		if loc == nil {
 			return fmt.Errorf("found unexpected location record %v: location not found", lr)
 		}
 
-		pb := pprofutil.BuilderByLocationID(pbs, lr.LocationID)
+		pb := psb.ProfileBuilderByLocation(lr.LocationID)
 		if pb == nil {
 			return fmt.Errorf("found unexpected location record %v: profile not found", lr)
 		}
