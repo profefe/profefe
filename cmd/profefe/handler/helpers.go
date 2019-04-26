@@ -8,11 +8,12 @@ import (
 
 	"github.com/profefe/profefe/pkg/logger"
 	"github.com/profefe/profefe/pkg/profile"
+	"golang.org/x/xerrors"
 )
 
 func readGetProfileRequest(in *profile.GetProfileRequest, r *http.Request) (err error) {
 	if in == nil {
-		return fmt.Errorf("readGetProfileRequest: nil request receiver")
+		return xerrors.New("readGetProfileRequest: nil request receiver")
 	}
 
 	q := r.URL.Query()
@@ -80,8 +81,8 @@ func handleErrorHTTP(logger *logger.Logger, err error, w http.ResponseWriter, r 
 
 	ReplyError(w, err)
 
-	if origErr, _ := err.(causer); origErr != nil {
-		err = origErr.Cause()
+	if origErr := xerrors.Unwrap(err); origErr != nil {
+		err = origErr
 	}
 	if err != nil {
 		logger.Errorw("request failed", "url", r.URL.String(), "err", err)

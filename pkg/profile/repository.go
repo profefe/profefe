@@ -2,13 +2,12 @@ package profile
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"io"
 	"time"
 
 	"github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/logger"
+	"golang.org/x/xerrors"
 )
 
 type Repository struct {
@@ -31,14 +30,14 @@ type CreateServiceRequest struct {
 
 func (req *CreateServiceRequest) Validate() error {
 	if req == nil {
-		return errors.New("nil request")
+		return xerrors.New("nil request")
 	}
 
 	if req.ID == "" {
-		return fmt.Errorf("id empty: req %v", req)
+		return xerrors.Errorf("id empty: req %v", req)
 	}
 	if req.Service == "" {
-		return fmt.Errorf("service empty: req %v", req)
+		return xerrors.Errorf("service empty: req %v", req)
 	}
 	return nil
 }
@@ -100,17 +99,17 @@ type CreateProfileRequest struct {
 
 func (req *CreateProfileRequest) Validate() error {
 	if req == nil {
-		return errors.New("nil request")
+		return xerrors.New("nil request")
 	}
 
 	if req.ID == "" {
-		return fmt.Errorf("id empty: req: %v", req)
+		return xerrors.Errorf("id empty: req: %v", req)
 	}
 	if req.Token == "" {
-		return fmt.Errorf("token empty: req: %v", req)
+		return xerrors.Errorf("token empty: req: %v", req)
 	}
 	if req.Type == UnknownProfile {
-		return fmt.Errorf("unknown profile type %s: req %v", req.Type, req)
+		return xerrors.Errorf("unknown profile type %s: req %v", req.Type, req)
 	}
 	return nil
 }
@@ -126,7 +125,7 @@ func (repo *Repository) CreateProfile(ctx context.Context, req *CreateProfileReq
 
 	pp, err := profile.Parse(r)
 	if err != nil {
-		return fmt.Errorf("could not parse profile: %v", err)
+		return xerrors.Errorf("could not parse profile: %w", err)
 	}
 
 	return repo.storage.CreateProfile(ctx, prof, pp)
@@ -143,20 +142,20 @@ type GetProfilesRequest struct {
 
 func (req *GetProfilesRequest) Validate() error {
 	if req == nil {
-		return errors.New("nil request")
+		return xerrors.New("nil request")
 	}
 
 	if req.Service == "" {
-		return fmt.Errorf("no service: req %v", req)
+		return xerrors.Errorf("no service: req %v", req)
 	}
 	if req.Type == UnknownProfile {
-		return fmt.Errorf("unknown profile type %s: req %v", req.Type, req)
+		return xerrors.Errorf("unknown profile type %s: req %v", req.Type, req)
 	}
 	if req.From.IsZero() || req.To.IsZero() {
-		return fmt.Errorf("createdAt time zero: req %v", req)
+		return xerrors.Errorf("createdAt time zero: req %v", req)
 	}
 	if req.To.Before(req.From) {
-		return fmt.Errorf("createdAt time min after max: req %v", req)
+		return xerrors.Errorf("createdAt time min after max: req %v", req)
 	}
 	return nil
 }
@@ -182,20 +181,20 @@ type GetProfileRequest struct {
 
 func (req *GetProfileRequest) Validate() error {
 	if req == nil {
-		return errors.New("nil request")
+		return xerrors.New("nil request")
 	}
 
 	if req.Service == "" {
-		return fmt.Errorf("no service: req %v", req)
+		return xerrors.Errorf("no service: req %v", req)
 	}
 	if req.Type == UnknownProfile {
-		return fmt.Errorf("unknown profile type %s: req %v", req.Type, req)
+		return xerrors.Errorf("unknown profile type %s: req %v", req.Type, req)
 	}
 	if req.From.IsZero() || req.To.IsZero() {
-		return fmt.Errorf("createdAt time zero: req %v", req)
+		return xerrors.Errorf("createdAt time zero: req %v", req)
 	}
 	if req.To.Before(req.From) {
-		return fmt.Errorf("createdAt time min after max: req %v", req)
+		return xerrors.Errorf("createdAt time min after max: req %v", req)
 	}
 	return nil
 }

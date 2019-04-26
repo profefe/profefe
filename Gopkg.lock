@@ -11,11 +11,10 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:2d370ad7a48d3523291ad53a04b9b1510c182880927f800b46221cc465427800"
+  digest = "1:37ce7d7d80531b227023331002c0d42b4b4b291a96798c82a049d03a54ba79e4"
   name = "github.com/lib/pq"
   packages = [
     ".",
-    "hstore",
     "oid",
   ]
   pruneopts = "UT"
@@ -90,16 +89,28 @@
   pruneopts = "UT"
   revision = "fc8bd948cf46f9c7af0f07d34151ce25fe90e477"
 
+[[projects]]
+  branch = "master"
+  digest = "1:d9d3a231c70b17470fc134900032da48d5c146f0f4a2ce12ceb92704dae8d67d"
+  name = "golang.org/x/xerrors"
+  packages = [
+    ".",
+    "internal",
+  ]
+  pruneopts = "UT"
+  revision = "1f06c39b43733b74392b1972507822714ced3242"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
     "github.com/lib/pq",
-    "github.com/lib/pq/hstore",
     "github.com/rs/xid",
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/require",
     "go.uber.org/zap",
+    "go.uber.org/zap/zapcore",
+    "golang.org/x/xerrors",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

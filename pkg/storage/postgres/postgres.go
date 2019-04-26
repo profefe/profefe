@@ -11,6 +11,7 @@ import (
 	"github.com/profefe/profefe/pkg/logger"
 	"github.com/profefe/profefe/pkg/pprofutil"
 	"github.com/profefe/profefe/pkg/profile"
+	"golang.org/x/xerrors"
 )
 
 type pqStorage struct {
@@ -39,7 +40,7 @@ func (st *pqStorage) CreateService(ctx context.Context, svc *profile.Service) er
 		ServiceLabels(svc.Labels),
 	)
 	if err != nil {
-		err = fmt.Errorf("could not insert %v into services: %v", svc, err)
+		err = xerrors.Errorf("could not insert %v into services: %w", svc, err)
 	}
 	return err
 }
@@ -60,7 +61,7 @@ func (st *pqStorage) GetServices(ctx context.Context, filter *profile.GetService
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to query services (%v): %v", filter, err)
+		return nil, xerrors.Errorf("failed to query services (%v): %w", filter, err)
 	}
 
 	defer rows.Close()
@@ -143,7 +144,7 @@ func (st *pqStorage) CreateProfile(ctx context.Context, prof *profile.Profile, p
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("could not commit transaction: %v", err)
+		return xerrors.Errorf("could not commit transaction: %w", err)
 	}
 
 	return nil
@@ -152,17 +153,17 @@ func (st *pqStorage) CreateProfile(ctx context.Context, prof *profile.Profile, p
 func (st *pqStorage) insertProfLocations(ctx context.Context, tx *sql.Tx, locs []*pprofProfile.Location) (locIDs []int64, err error) {
 	err = copyLocations(ctx, st.logger, tx, locs)
 	if err != nil {
-		return nil, fmt.Errorf("could not copy locations: %v", err)
+		return nil, xerrors.Errorf("could not copy locations: %w", err)
 	}
 
 	_, err = tx.ExecContext(ctx, sqlInsertFunctions)
 	if err != nil {
-		return nil, fmt.Errorf("could not insert functions: %v", err)
+		return nil, xerrors.Errorf("could not insert functions: %w", err)
 	}
 
 	_, err = tx.ExecContext(ctx, sqlInsertMappings)
 	if err != nil {
-		return nil, fmt.Errorf("could not insert mappings: %v", err)
+		return nil, xerrors.Errorf("could not insert mappings: %w", err)
 	}
 
 	locIDs = make([]int64, 0, len(locs))
@@ -173,7 +174,7 @@ func (st *pqStorage) insertProfLocations(ctx context.Context, tx *sql.Tx, locs [
 
 	rows, err := tx.QueryContext(ctx, sqlInsertLocations)
 	if err != nil {
-		return nil, fmt.Errorf("could execute locations query: %v", err)
+		return nil, xerrors.Errorf("could execute locations query: %w", err)
 	}
 	defer rows.Close()
 
@@ -181,7 +182,7 @@ func (st *pqStorage) insertProfLocations(ctx context.Context, tx *sql.Tx, locs [
 		var locID int64
 		err := rows.Scan(&locID)
 		if err != nil {
-			return nil, fmt.Errorf("could scan locations query: %v", err)
+			return nil, xerrors.Errorf("could scan locations query: %w", err)
 		}
 		locIDs = append(locIDs, locID)
 	}
@@ -192,7 +193,7 @@ func (st *pqStorage) insertProfLocations(ctx context.Context, tx *sql.Tx, locs [
 func (st *pqStorage) insertProfSamples(ctx context.Context, tx *sql.Tx, query string, profID int64, locIDs pq.Int64Array, samples []*pprofProfile.Sample) error {
 	copyStmt, err := tx.PrepareContext(ctx, query)
 	if err != nil {
-		return fmt.Errorf("could not prepare statement: %v", err)
+		return xerrors.Errorf("could not prepare statement: %w", err)
 	}
 	defer copyStmt.Close()
 
@@ -225,7 +226,7 @@ func (st *pqStorage) insertProfSamples(ctx context.Context, tx *sql.Tx, query st
 
 		_, err = copyStmt.ExecContext(ctx, args...)
 		if err != nil {
-			return fmt.Errorf("could not exec sql statement: %v", err)
+			return xerrors.Errorf("could not exec sql statement: %w", err)
 		}
 
 		sampleLocIDs = sampleLocIDs[:0]
@@ -233,7 +234,7 @@ func (st *pqStorage) insertProfSamples(ctx context.Context, tx *sql.Tx, query st
 	}
 	_, err = copyStmt.ExecContext(ctx)
 	if err != nil {
-		err = fmt.Errorf("could not finalize statement: %v", err)
+		err = xerrors.Errorf("could not finalize statement: %w", err)
 	}
 	return err
 }
@@ -332,7 +333,7 @@ func (st *pqStorage) selectProfileSamples(
 
 	rows, err := st.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("faield to query samples (%v): %v", args, err)
+		return xerrors.Errorf("faield to query samples (%v): %w", args, err)
 	}
 	defer rows.Close()
 
@@ -371,7 +372,7 @@ func (st *pqStorage) selectProfileLocations(
 
 	rows, err := st.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("faield to query locations (%v): %v", args, err)
+		return xerrors.Errorf("faield to query locations (%v): %w", args, err)
 	}
 	defer rows.Close()
 
@@ -390,12 +391,12 @@ func (st *pqStorage) selectProfileLocations(
 
 		loc := psb.LocationByID(lr.LocationID)
 		if loc == nil {
-			return fmt.Errorf("found unexpected location record %v: location not found", lr)
+			return xerrors.Errorf("found unexpected location record %v: location not found", lr)
 		}
 
 		pb := psb.ProfileBuilderByLocation(lr.LocationID)
 		if pb == nil {
-			return fmt.Errorf("found unexpected location record %v: profile not found", lr)
+			return xerrors.Errorf("found unexpected location record %v: profile not found", lr)
 		}
 
 		if loc.Mapping == nil {
@@ -448,7 +449,7 @@ func sqlSamplesQueryBuilder(ptyp profile.ProfileType) (qb samplesQueryBuilder, e
 		return sqlSamplesHeap, nil
 	}
 
-	return qb, fmt.Errorf("profile type %v is not supported", ptyp)
+	return qb, xerrors.Errorf("profile type %v is not supported", ptyp)
 }
 
 type sampleRecordsScanner struct {

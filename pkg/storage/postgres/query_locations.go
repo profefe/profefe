@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/lib/pq"
 	"github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/logger"
+	"golang.org/x/xerrors"
 )
 
 const (
@@ -124,13 +124,13 @@ func copyLocations(ctx context.Context, logger *logger.Logger, tx *sql.Tx, locs 
 		}
 		_, err = copyStmt.ExecContext(ctx, locBytes)
 		if err != nil {
-			return fmt.Errorf("could not exec sql statement: %v", err)
+			return xerrors.Errorf("could not exec sql statement: %w", err)
 		}
 	}
 
 	_, err = copyStmt.Exec()
 	if err != nil {
-		err = fmt.Errorf("could not finalize statement: %v", err)
+		err = xerrors.Errorf("could not finalize statement: %w", err)
 	}
 	return err
 }
