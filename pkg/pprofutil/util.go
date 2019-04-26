@@ -1,10 +1,10 @@
 package pprofutil
 
-import "github.com/profefe/profefe/internal/pprof/profile"
+import pprof "github.com/profefe/profefe/internal/pprof/profile"
 
 // SampleAddLabel adds a key-value pair to the sample.
 // Note that, non-empty valueStr take precedence over valueNum.
-func SampleAddLabel(s *profile.Sample, key string, valueStr string, valueNum int64) {
+func SampleAddLabel(s *pprof.Sample, key, valueStr string, valueNum int64) {
 	if valueStr != "" {
 		if s.Label == nil {
 			s.Label = make(map[string][]string)
@@ -19,7 +19,7 @@ func SampleAddLabel(s *profile.Sample, key string, valueStr string, valueNum int
 }
 
 // Compact compacts passed profiles in-place.
-func Compact(profs []*profile.Profile) error {
+func Compact(profs []*pprof.Profile) error {
 	for i := 0; i < len(profs); i++ {
 		prof := profs[i].Compact()
 		if err := prof.CheckValid(); err != nil {

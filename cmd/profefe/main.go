@@ -19,6 +19,7 @@ import (
 	"github.com/profefe/profefe/pkg/profile"
 	pgstorage "github.com/profefe/profefe/pkg/storage/postgres"
 	"github.com/profefe/profefe/version"
+	"golang.org/x/xerrors"
 )
 
 func main() {
@@ -49,17 +50,17 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 	{
 		db, err := sql.Open("postgres", conf.Postgres.ConnString())
 		if err != nil {
-			return fmt.Errorf("could not connect to db: %v", err)
+			return xerrors.Errorf("could not connect to db: %w", err)
 		}
 		defer db.Close()
 
 		if err := db.Ping(); err != nil {
-			return fmt.Errorf("could not ping db: %v", err)
+			return xerrors.Errorf("could not ping db: %w", err)
 		}
 
 		pgStorage, err := pgstorage.New(log.With("svc", "pg"), db)
 		if err != nil {
-			return fmt.Errorf("could not create new pg storage: %v", err)
+			return xerrors.Errorf("could not create new pg storage: %w", err)
 		}
 
 		profileRepo = profile.NewRepository(log, pgStorage)
@@ -94,7 +95,7 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 		log.Info("exiting")
 	case err := <-errc:
 		if err != http.ErrServerClosed {
-			return fmt.Errorf("terminated: %v", err)
+			return xerrors.Errorf("terminated: %w", err)
 		}
 	}
 

@@ -72,6 +72,10 @@ func Cancel(err error) error {
 	return &cancelRetryError{err}
 }
 
+func (e *cancelRetryError) Unwrap() error {
+	return e.Err
+}
+
 func (e *cancelRetryError) Error() string {
 	return e.Err.Error()
 }

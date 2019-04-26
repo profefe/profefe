@@ -2,15 +2,15 @@ package profile
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/profefe/profefe/internal/pprof/profile"
+	"golang.org/x/xerrors"
 )
 
 var (
-	ErrNotFound = errors.New("profile not found")
-	ErrEmpty    = errors.New("profile is empty")
+	ErrNotFound = xerrors.New("profile not found")
+	ErrEmpty    = xerrors.New("profile is empty")
 )
 
 type GetServicesFilter struct {

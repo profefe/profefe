@@ -7,10 +7,6 @@ import (
 	"strconv"
 )
 
-type causer interface {
-	Cause() error
-}
-
 type statusError struct {
 	code   int
 	status string
@@ -21,7 +17,7 @@ func (s *statusError) Error() string {
 	return s.status
 }
 
-func (s *statusError) Cause() error {
+func (s *statusError) Unwrap() error {
 	return s.cause
 }
 
