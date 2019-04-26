@@ -4,7 +4,7 @@ import pprof "github.com/profefe/profefe/internal/pprof/profile"
 
 // SampleAddLabel adds a key-value pair to the sample.
 // Note that, non-empty valueStr take precedence over valueNum.
-func SampleAddLabel(s *pprof.Sample, key string, valueStr string, valueNum int64) {
+func SampleAddLabel(s *pprof.Sample, key, valueStr string, valueNum int64) {
 	if valueStr != "" {
 		if s.Label == nil {
 			s.Label = make(map[string][]string)
