@@ -281,11 +281,13 @@ func (a *agent) collectAndSend(ctx context.Context) {
 		}
 	}()
 
-	var ptype profile.ProfileType
+	var (
+		ptype = a.nextProfileType(profile.UnknownProfile)
+		timer = time.NewTimer(tickInterval(a.tick))
 
-	timer := time.NewTimer(tickInterval(a.tick))
+		buf bytes.Buffer
+	)
 
-	var buf bytes.Buffer
 	for {
 		select {
 		case <-a.stop:
@@ -294,8 +296,6 @@ func (a *agent) collectAndSend(ctx context.Context) {
 			}
 			return
 		case <-timer.C:
-			ptype = a.nextProfileType(ptype)
-
 			if err := a.collectProfile(ctx, ptype, &buf); err != nil {
 				a.logf("failed to collect profiles: %v", err)
 			} else if err := a.sendProfile(ctx, ptype, &buf); err != nil {
@@ -304,7 +304,15 @@ func (a *agent) collectAndSend(ctx context.Context) {
 
 			buf.Reset()
 
-			timer.Reset(tickInterval(a.tick))
+			ptype = a.nextProfileType(ptype)
+
+			var tick time.Duration
+			if ptype == defaultProfileType {
+				// we took the full set of profiles, sleep for the whole tick
+				tick = a.tick
+			}
+
+			timer.Reset(tickInterval(tick))
 		}
 	}
 }
