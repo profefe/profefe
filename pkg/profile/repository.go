@@ -1,7 +1,9 @@
 package profile
 
 import (
+	"archive/zip"
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -171,35 +173,28 @@ func (repo *Repository) GetProfiles(ctx context.Context, req *GetProfilesRequest
 	return repo.storage.GetProfiles(ctx, filter)
 }
 
-type GetProfileRequest struct {
-	Service string
-	Type    ProfileType
-	From    time.Time
-	To      time.Time
-	Labels  Labels
+func (repo *Repository) GetProfilesTo(ctx context.Context, req *GetProfilesRequest, w io.Writer) error {
+	pps, err := repo.GetProfiles(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	zw := zip.NewWriter(w)
+	for n, pp := range pps {
+		name := fmt.Sprintf("%s-%s-%04d.prof", req.Service, req.Type, n+1)
+		w, err := zw.Create(name)
+		if err != nil {
+			return xerrors.Errorf("could not add file %s to zip: %w", name, err)
+		}
+		if err := pp.Write(w); err != nil {
+			return err
+		}
+	}
+
+	return zw.Close()
 }
 
-func (req *GetProfileRequest) Validate() error {
-	if req == nil {
-		return xerrors.New("nil request")
-	}
-
-	if req.Service == "" {
-		return xerrors.Errorf("no service: req %v", req)
-	}
-	if req.Type == UnknownProfile {
-		return xerrors.Errorf("unknown profile type %s: req %v", req.Type, req)
-	}
-	if req.From.IsZero() || req.To.IsZero() {
-		return xerrors.Errorf("createdAt time zero: req %v", req)
-	}
-	if req.To.Before(req.From) {
-		return xerrors.Errorf("createdAt time min after max: req %v", req)
-	}
-	return nil
-}
-
-func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) (*profile.Profile, error) {
+func (repo *Repository) GetProfile(ctx context.Context, req *GetProfilesRequest) (*profile.Profile, error) {
 	filter := &GetProfileFilter{
 		Service:      req.Service,
 		Type:         req.Type,
@@ -210,15 +205,8 @@ func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) 
 	return repo.storage.GetProfile(ctx, filter)
 }
 
-func (repo *Repository) GetProfileTo(ctx context.Context, req *GetProfileRequest, w io.Writer) error {
-	filter := &GetProfileFilter{
-		Service:      req.Service,
-		Type:         req.Type,
-		Labels:       req.Labels,
-		CreatedAtMin: req.From,
-		CreatedAtMax: req.To,
-	}
-	pp, err := repo.storage.GetProfile(ctx, filter)
+func (repo *Repository) GetProfileTo(ctx context.Context, req *GetProfilesRequest, w io.Writer) error {
+	pp, err := repo.GetProfile(ctx, req)
 	if err != nil {
 		return err
 	}

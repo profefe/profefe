@@ -11,9 +11,9 @@ import (
 	"golang.org/x/xerrors"
 )
 
-func readGetProfileRequest(in *profile.GetProfileRequest, r *http.Request) (err error) {
+func readGetProfilesRequest(in *profile.GetProfilesRequest, r *http.Request) (err error) {
 	if in == nil {
-		return xerrors.New("readGetProfileRequest: nil request receiver")
+		return xerrors.New("readGetProfilesRequest: nil request receiver")
 	}
 
 	q := r.URL.Query()

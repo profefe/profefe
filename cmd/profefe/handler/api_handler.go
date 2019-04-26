@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/profefe/profefe/pkg/logger"
@@ -78,7 +80,16 @@ func (h *APIHandler) handleGetProfiles(w http.ResponseWriter, r *http.Request) e
 	if r.Method != http.MethodGet {
 		return StatusError(http.StatusMethodNotAllowed, fmt.Sprintf("bad request method: %s", r.Method), nil)
 	}
-	return StatusError(http.StatusMethodNotAllowed, "not implemented", nil)
+
+	req := &profile.GetProfilesRequest{}
+	if err := readGetProfilesRequest(req, r); err != nil {
+		return err
+	}
+	if err := req.Validate(); err != nil {
+		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
+	}
+
+	return handleGetProfiles(r.Context(), w, req, h.profilePepo.GetProfilesTo)
 }
 
 func (h *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Request) error {
@@ -141,24 +152,15 @@ func (h *APIHandler) handleUpdateProfile(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) error {
-	req := &profile.GetProfileRequest{}
-	if err := readGetProfileRequest(req, r); err != nil {
+	req := &profile.GetProfilesRequest{}
+	if err := readGetProfilesRequest(req, r); err != nil {
 		return err
 	}
 	if err := req.Validate(); err != nil {
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
 	}
 
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, "profile"))
-
-	err := h.profilePepo.GetProfileTo(r.Context(), req, w)
-	if err == profile.ErrNotFound {
-		return StatusError(http.StatusNotFound, "nothing found", nil)
-	} else if err == profile.ErrEmpty {
-		return StatusError(http.StatusNoContent, "profile empty", nil)
-	}
-	return err
+	return handleGetProfiles(r.Context(), w, req, h.profilePepo.GetProfileTo)
 }
 
 func (h *APIHandler) handleGetVersion(w http.ResponseWriter, r *http.Request) error {
@@ -175,4 +177,22 @@ func (h *APIHandler) handleGetVersion(w http.ResponseWriter, r *http.Request) er
 	ReplyJSON(w, resp)
 
 	return nil
+}
+
+func handleGetProfiles(
+	ctx context.Context,
+	w http.ResponseWriter,
+	req *profile.GetProfilesRequest,
+	getProfileToFunc func(ctx context.Context, req *profile.GetProfilesRequest, w io.Writer) error,
+) error {
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, "profile"))
+
+	err := getProfileToFunc(ctx, req, w)
+	if err == profile.ErrNotFound {
+		return StatusError(http.StatusNotFound, "nothing found", nil)
+	} else if err == profile.ErrEmpty {
+		return StatusError(http.StatusNoContent, "profile empty", nil)
+	}
+	return err
 }
