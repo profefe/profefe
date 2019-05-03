@@ -290,7 +290,7 @@ func (st *pqStorage) getProfiles(ctx context.Context, filter *profile.GetProfile
 
 	if !filter.CreatedAtMin.IsZero() && !filter.CreatedAtMax.IsZero() {
 		args = append(args, filter.CreatedAtMin, filter.CreatedAtMax)
-		whereParts = append(whereParts, "p.created_at BETWEEN $2 AND $3") // p is for "profiles AS p" in select query
+		whereParts = append(whereParts, "p.created_at >= $2 AND p.created_at < $3") // p is for "profiles AS p" in select query
 	}
 
 	for _, label := range filter.Labels {
