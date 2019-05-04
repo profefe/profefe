@@ -6,25 +6,26 @@ import (
 	"time"
 
 	"github.com/profefe/profefe/agent"
-	"github.com/profefe/profefe/version"
 )
 
+const pffCollectorAddr = "http://localhost:10100"
+
 func main() {
-	agent.Start(
+	pffAgent, err := agent.Start(
+		pffCollectorAddr,
 		"example_server",
 		agent.WithCPUProfile(10*time.Second),
-		agent.WithCollector(agent.DefaultCollectorAddr),
 		agent.WithLogger(agentLogger),
 		agent.WithLabels(
 			"az", "fra",
 			"host", "localhost",
 			"instance", "1",
-			"version", version.Version,
-			"commit", version.Commit,
-			"build-date", version.BuildTime,
 		),
 	)
-	defer agent.Stop()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer pffAgent.Stop()
 
 	time.Sleep(2 * time.Minute)
 }

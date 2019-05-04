@@ -21,8 +21,6 @@ import (
 	"github.com/profefe/profefe/pkg/retry"
 )
 
-const DefaultCollectorAddr = "http://localhost:10100"
-
 const (
 	defaultDuration     = 10 * time.Second
 	defaultTickInterval = time.Minute
@@ -33,35 +31,23 @@ const (
 	backoffMaxDelay = 30 * time.Minute
 )
 
-var (
-	globalAgent     *agent
-	globalAgentOnce sync.Once
-)
-
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func Start(name string, opts ...Option) (err error) {
-	globalAgentOnce.Do(func() {
-		globalAgent = New(name, opts...)
-		err = globalAgent.Start(context.Background())
-	})
-	return err
-}
-
-func Stop() (err error) {
-	if globalAgent != nil {
-		err = globalAgent.Stop()
+func Start(addr, service string, opts ...Option) (*Agent, error) {
+	agent := New(addr, service, opts...)
+	if err := agent.Start(context.Background()); err != nil {
+		return nil, err
 	}
-	return err
+	return agent, nil
 }
 
 type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-type agent struct {
+type Agent struct {
 	ProfileDuration time.Duration
 	CPUProfile      bool
 	HeapProfile     bool
@@ -83,15 +69,16 @@ type agent struct {
 	done chan struct{} // closed when stopping is done
 }
 
-func New(service string, opts ...Option) *agent {
-	a := &agent{
+func New(addr, service string, opts ...Option) *Agent {
+	a := &Agent{
 		ProfileDuration: defaultDuration,
 
 		CPUProfile: true, // enable CPU profiling by default
 
-		service:   service,
-		labels:    make(map[string]string),
-		rawClient: http.DefaultClient,
+		collectorAddr: addr,
+		service:       service,
+		labels:        make(map[string]string),
+		rawClient:     http.DefaultClient,
 
 		logf: func(format string, v ...interface{}) {},
 
@@ -107,8 +94,12 @@ func New(service string, opts ...Option) *agent {
 	return a
 }
 
-func (a *agent) Start(ctx context.Context) error {
+func (a *Agent) Start(ctx context.Context) error {
 	a.buildID = a.getBuildID()
+
+	if a.collectorAddr == "" {
+		return fmt.Errorf("failed to start agent: collector address is empty")
+	}
 
 	if err := a.registerAgent(ctx); err != nil {
 		return fmt.Errorf("failed to register agent: %v", err)
@@ -119,13 +110,13 @@ func (a *agent) Start(ctx context.Context) error {
 	return nil
 }
 
-func (a *agent) Stop() error {
+func (a *Agent) Stop() error {
 	close(a.stop)
 	<-a.done
 	return nil
 }
 
-func (a *agent) getBuildID() string {
+func (a *Agent) getBuildID() string {
 	prog := os.Args[0]
 	f, err := os.Open(prog)
 	if err != nil {
@@ -142,7 +133,7 @@ func (a *agent) getBuildID() string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (a *agent) registerAgent(ctx context.Context) error {
+func (a *Agent) registerAgent(ctx context.Context) error {
 	var labels bytes.Buffer
 	{
 		first := true
@@ -163,6 +154,7 @@ func (a *agent) registerAgent(ctx context.Context) error {
 	q.Set("labels", labels.String())
 
 	surl := a.collectorAddr + "/api/0/profile?" + q.Encode()
+	a.logf("register agent: %s", surl)
 	req, err := http.NewRequest(http.MethodPut, surl, nil)
 	if err != nil {
 		return err
@@ -195,7 +187,7 @@ func (a *agent) registerAgent(ctx context.Context) error {
 	return nil
 }
 
-func (a *agent) collectProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
+func (a *Agent) collectProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
 	switch ptype {
 	case profile.CPUProfile:
 		err := pprof.StartCPUProfile(buf)
@@ -222,13 +214,14 @@ func (a *agent) collectProfile(ctx context.Context, ptype profile.ProfileType, b
 	return nil
 }
 
-func (a *agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
+func (a *Agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
 	q := url.Values{}
 	q.Set("id", a.buildID)
 	q.Set("token", a.agentToken)
 	q.Set("type", ptype.String())
 
 	surl := a.collectorAddr + "/api/0/profile?" + q.Encode()
+	a.logf("send profile: %s", surl)
 	req, err := http.NewRequest(http.MethodPost, surl, buf)
 	if err != nil {
 		return err
@@ -242,7 +235,7 @@ func (a *agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf 
 	)
 }
 
-func (a *agent) doRequest(req *http.Request, v io.Writer) error {
+func (a *Agent) doRequest(req *http.Request, v io.Writer) error {
 	resp, err := a.rawClient.Do(req)
 	if err, ok := err.(*url.Error); ok && err.Err == context.Canceled {
 		return retry.Cancel(err)
@@ -270,7 +263,7 @@ func (a *agent) doRequest(req *http.Request, v io.Writer) error {
 	return nil
 }
 
-func (a *agent) collectAndSend(ctx context.Context) {
+func (a *Agent) collectAndSend(ctx context.Context) {
 	defer close(a.done)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -317,7 +310,7 @@ func (a *agent) collectAndSend(ctx context.Context) {
 	}
 }
 
-func (a *agent) nextProfileType(ptype profile.ProfileType) profile.ProfileType {
+func (a *Agent) nextProfileType(ptype profile.ProfileType) profile.ProfileType {
 	// special case to choose initial profile type on the first call
 	if ptype == profile.UnknownProfile {
 		return defaultProfileType

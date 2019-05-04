@@ -29,6 +29,7 @@ import (
 )
 
 var (
+	collectorAddr = flag.String("addr", "http://localhost:10100", "collector address")
 	// Service version to configure.
 	version = flag.String("version", "1.0.0", "service version")
 	// Skew of foo1 function over foo2, in the CPU busyloop, to simulate diff.
@@ -133,11 +134,8 @@ func load(scale int) {
 func main() {
 	flag.Parse()
 
-	err := agent.Start(
-		"hotapp-service",
-		agent.WithCollector(agent.DefaultCollectorAddr),
-		agent.WithLabels("version", *version),
-	)
+	_, err := agent.Start(*collectorAddr, "hotapp-service",
+		agent.WithLabels("version", *version))
 	if err != nil {
 		log.Fatalf("failed to start the profefe agent: %v", err)
 	}
