@@ -30,12 +30,14 @@ const (
 
 	sqlSelectSamplesTmpl = `
 		SELECT p.profile_id, p.created_at, s.locations, s.labels, %[2]s
-		FROM %[1]s s
-		INNER JOIN pprof_profiles p ON s.profile_id = p.profile_id
-		INNER JOIN services v ON p.service_id = v.service_id
-
-		-- where clause placeholder
-		%%s
+		FROM (
+			SELECT p.profile_id, p.created_at
+			FROM pprof_profiles p
+			INNER JOIN services v ON p.service_id = v.service_id
+			-- where clause placeholder
+			%%s
+		) p
+		INNER JOIN %[1]s s ON p.profile_id = s.profile_id
 		ORDER BY p.created_at;`
 )
 
