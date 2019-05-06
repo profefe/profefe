@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/profefe/profefe/pkg/logger"
@@ -52,6 +53,14 @@ func readGetProfilesRequest(in *profile.GetProfilesRequest, r *http.Request) (er
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad labels %q", q.Get("labels")), err)
 	} else {
 		in.Labels = labels
+	}
+
+	if v := q.Get("limit"); v != "" {
+		l, err := strconv.Atoi(v)
+		if err != nil {
+			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad limit %q", v), err)
+		}
+		in.Limit = l
 	}
 
 	return nil

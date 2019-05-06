@@ -169,6 +169,7 @@ func (repo *Repository) GetProfiles(ctx context.Context, req *GetProfilesRequest
 		Labels:       req.Labels,
 		CreatedAtMin: req.From,
 		CreatedAtMax: req.To,
+		Limit:        uint(req.Limit),
 	}
 	return repo.storage.GetProfiles(ctx, filter)
 }
@@ -201,6 +202,7 @@ func (repo *Repository) GetProfile(ctx context.Context, req *GetProfilesRequest)
 		Labels:       req.Labels,
 		CreatedAtMin: req.From,
 		CreatedAtMax: req.To,
+		Limit:        uint(req.Limit),
 	}
 	return repo.storage.GetProfile(ctx, filter)
 }
