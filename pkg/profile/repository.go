@@ -1,9 +1,7 @@
 package profile
 
 import (
-	"archive/zip"
 	"context"
-	"fmt"
 	"io"
 	"time"
 
@@ -133,7 +131,7 @@ func (repo *Repository) CreateProfile(ctx context.Context, req *CreateProfileReq
 	return repo.storage.CreateProfile(ctx, prof, pp)
 }
 
-type GetProfilesRequest struct {
+type GetProfileRequest struct {
 	Service string
 	Type    ProfileType
 	From    time.Time
@@ -142,7 +140,7 @@ type GetProfilesRequest struct {
 	Limit   int
 }
 
-func (req *GetProfilesRequest) Validate() error {
+func (req *GetProfileRequest) Validate() error {
 	if req == nil {
 		return xerrors.New("nil request")
 	}
@@ -162,40 +160,7 @@ func (req *GetProfilesRequest) Validate() error {
 	return nil
 }
 
-func (repo *Repository) GetProfiles(ctx context.Context, req *GetProfilesRequest) ([]*profile.Profile, error) {
-	filter := &GetProfileFilter{
-		Service:      req.Service,
-		Type:         req.Type,
-		Labels:       req.Labels,
-		CreatedAtMin: req.From,
-		CreatedAtMax: req.To,
-		Limit:        uint(req.Limit),
-	}
-	return repo.storage.GetProfiles(ctx, filter)
-}
-
-func (repo *Repository) GetProfilesTo(ctx context.Context, req *GetProfilesRequest, w io.Writer) error {
-	pps, err := repo.GetProfiles(ctx, req)
-	if err != nil {
-		return err
-	}
-
-	zw := zip.NewWriter(w)
-	for n, pp := range pps {
-		name := fmt.Sprintf("%s-%s-%04d.prof", req.Service, req.Type, n+1)
-		w, err := zw.Create(name)
-		if err != nil {
-			return xerrors.Errorf("could not add file %s to zip: %w", name, err)
-		}
-		if err := pp.Write(w); err != nil {
-			return err
-		}
-	}
-
-	return zw.Close()
-}
-
-func (repo *Repository) GetProfile(ctx context.Context, req *GetProfilesRequest) (*profile.Profile, error) {
+func (repo *Repository) GetProfile(ctx context.Context, req *GetProfileRequest) (*profile.Profile, error) {
 	filter := &GetProfileFilter{
 		Service:      req.Service,
 		Type:         req.Type,
@@ -207,7 +172,7 @@ func (repo *Repository) GetProfile(ctx context.Context, req *GetProfilesRequest)
 	return repo.storage.GetProfile(ctx, filter)
 }
 
-func (repo *Repository) GetProfileTo(ctx context.Context, req *GetProfilesRequest, w io.Writer) error {
+func (repo *Repository) GetProfileTo(ctx context.Context, req *GetProfileRequest, w io.Writer) error {
 	pp, err := repo.GetProfile(ctx, req)
 	if err != nil {
 		return err

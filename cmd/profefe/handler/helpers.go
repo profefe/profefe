@@ -12,7 +12,7 @@ import (
 	"golang.org/x/xerrors"
 )
 
-func readGetProfilesRequest(in *profile.GetProfilesRequest, r *http.Request) (err error) {
+func readGetProfilesRequest(in *profile.GetProfileRequest, r *http.Request) (err error) {
 	if in == nil {
 		return xerrors.New("readGetProfilesRequest: nil request receiver")
 	}

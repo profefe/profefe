@@ -20,8 +20,8 @@ const (
 		WITH tmp_functions AS (
 			SELECT t."Name" AS func_name, t."Filename" AS file_name
 			FROM pprof_locations_tmp,
-  				jsonb_array_elements(location -> 'Line') AS line,
-  				jsonb_to_record(line -> 'Function') AS t ("Name" text, "Filename" text)
+  				jsonb_array_elements(location -> 'Line') AS lines,
+  				jsonb_to_record(lines -> 'Function') AS t ("Name" text, "Filename" text)
 		)
 		INSERT INTO pprof_functions (func_name, file_name)
 		SELECT tmp.func_name, tmp.file_name 
@@ -43,13 +43,13 @@ const (
 		WITH tmp_locations AS (
 			SELECT
 				(tmp.location -> 'ID')::int AS lid,
-				json_agg(jsonb_build_object('func_id', f.func_id, 'line', lines -> 'Line')) AS lines,
 				(tmp.location -> 'Address')::bigint AS address,
-				tmp.location -> 'Mapping' AS mapping
+				(tmp.location -> 'Mapping')::jsonb AS mapping,
+				array_agg(ROW(f.func_id, lines -> 'Line')::pprof_frame) AS lines
 
 			FROM pprof_locations_tmp tmp,
 				jsonb_array_elements(tmp.location -> 'Line') AS lines
-			LEFT JOIN pprof_functions f
+			INNER JOIN pprof_functions f
 				ON f.func_name = lines -> 'Function' ->> 'Name'
 		    	AND f.file_name = lines -> 'Function' ->> 'Filename'
 			GROUP BY lid, address, mapping
@@ -62,25 +62,21 @@ const (
 		RETURNING location_id;`
 
 	sqlSelectLocations = `
-		WITH locations AS (
-			SELECT location_id, mapping_id, address, line
-			FROM pprof_locations,
-		    	jsonb_array_elements(lines) AS line
-			WHERE location_id = ANY($1)
-		)
-		SELECT 
+		SELECT
 			location_id,
 			mapping,
 			address,
-			(line -> 'line')::int AS line,
-			func_id,
-			func_name,
-			file_name
-		FROM locations l
+			line.line,
+			f.func_id,
+			f.func_name,
+			f.file_name
+		FROM pprof_locations l
+		LEFT JOIN unnest(lines) AS line ON TRUE
+		INNER JOIN pprof_functions f
+			ON f.func_id = line.func_id
 		INNER JOIN pprof_mappings m
 			ON m.mapping_id = l.mapping_id
-		INNER JOIN pprof_functions f
-			ON f.func_id = (l.line -> 'func_id')::int;`
+		WHERE location_id = ANY($1);`
 )
 
 var sqlCopyLocations = pq.CopyIn("pprof_locations_tmp", "location")

@@ -34,8 +34,6 @@ func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/api/0/services":
 		err = h.handleGetServices(w, r)
-	case "/api/0/profiles":
-		err = h.handleGetProfiles(w, r)
 	case "/api/0/profile":
 		switch r.Method {
 		case http.MethodPut:
@@ -74,22 +72,6 @@ func (h *APIHandler) handleGetServices(w http.ResponseWriter, r *http.Request) e
 	ReplyJSON(w, services)
 
 	return nil
-}
-
-func (h *APIHandler) handleGetProfiles(w http.ResponseWriter, r *http.Request) error {
-	if r.Method != http.MethodGet {
-		return StatusError(http.StatusMethodNotAllowed, fmt.Sprintf("bad request method: %s", r.Method), nil)
-	}
-
-	req := &profile.GetProfilesRequest{}
-	if err := readGetProfilesRequest(req, r); err != nil {
-		return err
-	}
-	if err := req.Validate(); err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
-	}
-
-	return handleGetProfiles(r.Context(), w, req, h.profilePepo.GetProfilesTo)
 }
 
 func (h *APIHandler) handleCreateProfile(w http.ResponseWriter, r *http.Request) error {
@@ -152,7 +134,7 @@ func (h *APIHandler) handleUpdateProfile(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *APIHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) error {
-	req := &profile.GetProfilesRequest{}
+	req := &profile.GetProfileRequest{}
 	if err := readGetProfilesRequest(req, r); err != nil {
 		return err
 	}
@@ -182,8 +164,8 @@ func (h *APIHandler) handleGetVersion(w http.ResponseWriter, r *http.Request) er
 func handleGetProfiles(
 	ctx context.Context,
 	w http.ResponseWriter,
-	req *profile.GetProfilesRequest,
-	getProfileToFunc func(ctx context.Context, req *profile.GetProfilesRequest, w io.Writer) error,
+	req *profile.GetProfileRequest,
+	getProfileToFunc func(ctx context.Context, req *profile.GetProfileRequest, w io.Writer) error,
 ) error {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, "profile"))
