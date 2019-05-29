@@ -64,6 +64,7 @@ const (
 	sqlSelectLocations = `
 		SELECT
 			location_id,
+			m.mapping_id,
 			mapping,
 			address,
 			line.line,
@@ -95,17 +96,18 @@ func copyLocations(ctx context.Context, logger *logger.Logger, tx *sql.Tx, locs 
 	type locationRec struct {
 		ID      uint64
 		Line    []profile.Line
-		Mapping *MappingRecord
+		Mapping *Mapping
 		Address uint64
 	}
 
 	for _, loc := range locs {
-		mapping := &MappingRecord{
-			MemStart: loc.Mapping.Start,
-			MemLimit: loc.Mapping.Limit,
-			Offset:   loc.Mapping.Offset,
-			File:     loc.Mapping.File,
-			BuildID:  loc.Mapping.BuildID,
+		mapping := &Mapping{
+			MemStart:     loc.Mapping.Start,
+			MemLimit:     loc.Mapping.Limit,
+			Offset:       loc.Mapping.Offset,
+			File:         loc.Mapping.File,
+			BuildID:      loc.Mapping.BuildID,
+			HasFunctions: loc.Mapping.HasFunctions,
 		}
 
 		locRec := locationRec{

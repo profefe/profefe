@@ -69,8 +69,6 @@ CREATE TABLE pprof_samples_cpu (
     labels        jsonb
 );
 
-CREATE INDEX ON pprof_samples_cpu (profile_id);
-
 DROP TABLE IF EXISTS pprof_samples_heap;
 
 CREATE TABLE pprof_samples_heap (
@@ -82,5 +80,3 @@ CREATE TABLE pprof_samples_heap (
     inuse_bytes   BIGINT,
     labels        jsonb
 );
-
-CREATE INDEX ON pprof_samples_heap (profile_id);

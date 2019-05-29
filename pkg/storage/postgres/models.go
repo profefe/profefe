@@ -26,7 +26,10 @@ func (sl SampleLabels) Value() (driver.Value, error) {
 	return json.Marshal(sl)
 }
 
-func (sl SampleLabels) Scan(src interface{}) error {
+func (sl *SampleLabels) Scan(src interface{}) error {
+	if sl != nil {
+		*sl = (*sl)[:0]
+	}
 	if src == nil {
 		return nil
 	}
@@ -40,27 +43,37 @@ type LocationRecord struct {
 }
 
 type FunctionRecord struct {
-	ID       int64
+	FuncID   int64
 	FuncName string
 	FileName string
 }
 
 type MappingRecord struct {
-	MemStart uint64 `json:"start,omitempty"`
-	MemLimit uint64 `json:"limit,omitempty"`
-	Offset   uint64 `json:"offset,omitempty"`
-	File     string `json:"file,omitempty"`
-	BuildID  string `json:"bid,omitempty"`
+	MappingID int64
+	Mapping   Mapping
 }
 
-func (m *MappingRecord) Scan(src interface{}) error {
+// must be aligned with pprof/profile.Mapping
+type Mapping struct {
+	MemStart        uint64 `json:"start,omitempty"`
+	MemLimit        uint64 `json:"limit,omitempty"`
+	Offset          uint64 `json:"offset,omitempty"`
+	File            string `json:"file,omitempty"`
+	BuildID         string `json:"bid,omitempty"`
+	HasFunctions    bool   `json:"has_func,omitempty"`
+	HasFilenames    bool   `json:"has_file,omitempty"`
+	HasLineNumbers  bool   `json:"has_line,omitempty"`
+	HasInlineFrames bool   `json:"has_inline,omitempty"`
+}
+
+func (m *Mapping) Scan(src interface{}) error {
 	if src == nil {
 		return nil
 	}
 	return json.Unmarshal(src.([]byte), &m)
 }
 
-func (m *MappingRecord) Value() (driver.Value, error) {
+func (m *Mapping) Value() (driver.Value, error) {
 	if m == nil {
 		return nil, nil
 	}

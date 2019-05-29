@@ -228,11 +228,12 @@ func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileF
 
 	rows, err := st.db.QueryContext(ctx, sqlSelectSamples, args...)
 	if err != nil {
-		return nil, xerrors.Errorf("failed to query samples (%v): %w", args, err)
+		return nil, xerrors.Errorf("could not query samples (%v): %w", args, err)
 	}
 	defer rows.Close()
 
 	locSet := make(map[int64]*pprofProfile.Location)
+	mapSet := make(map[int64]*pprofProfile.Mapping)
 	funcSet := make(map[int64]*pprofProfile.Function)
 	pb := pprofutil.NewProfileBuilder(filter.Type)
 
@@ -250,14 +251,14 @@ func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileF
 			pprofutil.SampleAddLabel(sample, label.Key, label.ValueStr, label.ValueNum)
 		}
 		for _, locID := range rs.sampleRec.Locations {
-			if loc, _ := locSet[locID]; loc == nil {
-				loc := &pprofProfile.Location{}
-				pb.AddLocation(loc)
-
-				sample.Location = append(sample.Location, loc)
-
+			loc := locSet[locID]
+			if loc == nil {
+				loc = &pprofProfile.Location{}
 				locSet[locID] = loc
+
+				pb.AddLocation(loc)
 			}
+			sample.Location = append(sample.Location, loc)
 		}
 
 		pb.AddSample(sample)
@@ -270,17 +271,17 @@ func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileF
 		return nil, profile.ErrEmpty
 	}
 
-	locIDs := make([]int64, 0, len(locSet))
+	locIDs := make(pq.Int64Array, 0, len(locSet))
 	for locID := range locSet {
 		locIDs = append(locIDs, locID)
 	}
 
-	args = append(args[:0], pq.Int64Array(locIDs))
+	args = append(args[:0], locIDs)
 	st.logger.Debugw("selectProfileLocations", logger.MultiLine("query", sqlSelectLocations), "args", args)
 
 	rows, err = st.db.QueryContext(ctx, sqlSelectLocations, args...)
 	if err != nil {
-		return nil, xerrors.Errorf("failed to query locations (%v): %w", args, err)
+		return nil, xerrors.Errorf("could not query locations (%v): %w", args, err)
 	}
 	defer rows.Close()
 
@@ -290,31 +291,38 @@ func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileF
 			mr MappingRecord
 			fr FunctionRecord
 		)
-		err := rows.Scan(&lr.LocationID, &mr, &lr.Address, &lr.Line, &fr.ID, &fr.FuncName, &fr.FileName)
+		err := rows.Scan(&lr.LocationID, &mr.MappingID, &mr.Mapping, &lr.Address, &lr.Line, &fr.FuncID, &fr.FuncName, &fr.FileName)
 		if err != nil {
 			return nil, err
 		}
 
 		loc := locSet[lr.LocationID]
 		if loc == nil {
-			return nil, xerrors.Errorf("found unexpected location record %v: location not found", lr)
+			return nil, xerrors.Errorf("found unexpected location record %v: location %d not found in locations set", lr, lr.LocationID)
 		}
 
-		if loc.Mapping == nil {
-			m := &pprofProfile.Mapping{
-				Start:   mr.MemStart,
-				Limit:   mr.MemLimit,
-				Offset:  mr.Offset,
-				File:    mr.File,
-				BuildID: mr.BuildID,
+		m := mapSet[mr.MappingID]
+		if m == nil {
+			m = &pprofProfile.Mapping{
+				Start:           mr.Mapping.MemStart,
+				Limit:           mr.Mapping.MemLimit,
+				Offset:          mr.Mapping.Offset,
+				File:            mr.Mapping.File,
+				BuildID:         mr.Mapping.BuildID,
+				HasFunctions:    mr.Mapping.HasFunctions,
+				HasFilenames:    mr.Mapping.HasFilenames,
+				HasLineNumbers:  mr.Mapping.HasLineNumbers,
+				HasInlineFrames: mr.Mapping.HasInlineFrames,
 			}
-			pb.AddMapping(m)
+			mapSet[mr.MappingID] = m
 
-			loc.Mapping = m
-			loc.Address = lr.Address
+			pb.AddMapping(m)
 		}
 
-		fn := funcSet[fr.ID]
+		loc.Mapping = m
+		loc.Address = lr.Address
+
+		fn := funcSet[fr.FuncID]
 		if fn == nil {
 			// as for Go 1.12 Function.start_line never got populated by runtime/pprof
 			// see https://github.com/golang/go/blob/5ee1b849592787ed050ef3fbd9b2c58aabd20ff3/src/runtime/pprof/proto.go
@@ -323,8 +331,9 @@ func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileF
 				SystemName: fr.FuncName,
 				Filename:   fr.FileName,
 			}
+			funcSet[fr.FuncID] = fn
+
 			pb.AddFunction(fn)
-			funcSet[fr.ID] = fn
 		}
 
 		// "multiple line indicates this location has inlined functions" (see pprof/profile.proto)
