@@ -12,9 +12,9 @@ import (
 	"golang.org/x/xerrors"
 )
 
-func readGetProfilesRequest(in *profile.GetProfileRequest, r *http.Request) (err error) {
+func readGetProfileRequest(in *profile.GetProfileRequest, r *http.Request) (err error) {
 	if in == nil {
-		return xerrors.New("readGetProfilesRequest: nil request receiver")
+		return xerrors.New("readGetProfileRequest: nil request receiver")
 	}
 
 	q := r.URL.Query()
@@ -22,7 +22,7 @@ func readGetProfilesRequest(in *profile.GetProfileRequest, r *http.Request) (err
 	if v := q.Get("service"); v != "" {
 		in.Service = v
 	} else {
-		return StatusError(http.StatusBadRequest, "bad request: no service", nil)
+		return StatusError(http.StatusBadRequest, "bad request: missing name", nil)
 	}
 
 	if pt, err := getProfileType(q); err != nil {
@@ -66,16 +66,23 @@ func readGetProfilesRequest(in *profile.GetProfileRequest, r *http.Request) (err
 	return nil
 }
 
-func getProfileType(q url.Values) (pt profile.ProfileType, err error) {
+func getProfileType(q url.Values) (ptype profile.ProfileType, err error) {
 	if v := q.Get("type"); v != "" {
-		if err := pt.FromString(v); err != nil {
-			return pt, err
+		if err := ptype.FromString(v); err != nil {
+			return ptype, err
 		}
-		if pt == profile.UnknownProfile {
-			err = fmt.Errorf("bad profile type %v", pt)
+		if ptype == profile.UnknownProfile {
+			err = fmt.Errorf("bad profile type %v", ptype)
 		}
 	}
-	return pt, err
+	return ptype, err
+}
+
+func getInstanceID(q url.Values) (iid profile.InstanceID, err error) {
+	if v := q.Get("instance_id"); v != "" {
+		return profile.InstanceID(v), nil
+	}
+	return iid, fmt.Errorf("bad request: bad instance id %q", q.Get("instance_id"))
 }
 
 func getLabels(q url.Values) (labels profile.Labels, err error) {

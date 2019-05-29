@@ -10,7 +10,7 @@ usuage() {
 
 service=
 labels=
-prof_id="imported-profile"
+instance_id="imported-profile"
 prof_type=
 
 while true
@@ -63,22 +63,11 @@ fi
 api_profile_url="$PROFEFE_COLLECTOR/api/0/profile"
 
 create_profile() {
-    curl -s -XPUT "$api_profile_url?id=$prof_id&service=$service&labels=$labels" | jq -r ".token"
-}
-
-update_profile() {
-    local token="$1"
-    local file_path="$2"
+    local file_path="$1"
     echo -n "uploading ${file_path}..."
-    curl -s -XPOST "$api_profile_url?id=$prof_id&token=$token&type=$prof_type" --data-binary "@$file_path" >/dev/null
+    curl -s -XPOST "$api_profile_url?service=$service&instance_id=$instance_id&type=$prof_type&labels=$labels" --data-binary "@$file_path" >/dev/null
     echo "OK"
 }
-
-token=$(create_profile)
-if [ -z "$token" ]; then
-    echo 1>&2 "$0: unable to receive profile token"
-    exit 3
-fi
 
 for prof_file in $*;
 do
@@ -86,5 +75,5 @@ do
         echo 1>&2 "$0: can't read prof file $prof_file"
         exit 1
     fi
-    update_profile "$token" "$prof_file"
+    create_profile "$prof_file"
 done

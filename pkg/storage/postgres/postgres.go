@@ -20,91 +20,21 @@ type pqStorage struct {
 }
 
 func New(log *logger.Logger, db *sql.DB) (profile.Storage, error) {
-	s := &pqStorage{
+	st := &pqStorage{
 		logger: log,
 		db:     db,
 	}
-	return s, nil
+	return st, nil
 }
 
-func (st *pqStorage) CreateService(ctx context.Context, svc *profile.Service) error {
-	st.logger.Debugw("createService", "service", svc)
-
-	_, err := st.db.ExecContext(
-		ctx,
-		sqlInsertService,
-		svc.BuildID,
-		svc.Token.String(),
-		svc.Name,
-		svc.CreatedAt,
-		ServiceLabels(svc.Labels),
-	)
-	if err != nil {
-		err = xerrors.Errorf("could not insert %v into services: %w", svc, err)
-	}
-	return err
-}
-
-func (st *pqStorage) GetServices(ctx context.Context, filter *profile.GetServicesFilter) ([]*profile.Service, error) {
-	defer func(t time.Time) {
-		st.logger.Debugw("getServices", "time", time.Since(t))
-	}(time.Now())
-
-	var (
-		rows *sql.Rows
-		err  error
-	)
-	if filter.Service == "" {
-		rows, err = st.db.QueryContext(ctx, sqlSelectServices)
-	} else {
-		rows, err = st.db.QueryContext(ctx, sqlSelectServicesByName, filter.Service)
-	}
-
-	if err != nil {
-		return nil, xerrors.Errorf("failed to query services (%v): %w", filter, err)
-	}
-
-	defer rows.Close()
-
-	return st.getServices(ctx, rows)
-}
-
-func (st *pqStorage) getServices(ctx context.Context, rows *sql.Rows) ([]*profile.Service, error) {
-	var svcs []*profile.Service
-	for rows.Next() {
-		var (
-			name      string
-			createdAt time.Time
-			labels    ServiceLabels
-		)
-		err := rows.Scan(&name, &createdAt, &labels)
-		if err != nil {
-			return nil, err
-		}
-
-		svc := &profile.Service{
-			Name:      name,
-			CreatedAt: createdAt,
-			Labels:    profile.Labels(labels),
-		}
-		svcs = append(svcs, svc)
-	}
-
-	if len(svcs) == 0 {
-		return nil, profile.ErrNotFound
-	}
-
-	return svcs, nil
-}
-
-func (st *pqStorage) CreateProfile(ctx context.Context, prof *profile.Profile, pp *pprofProfile.Profile) error {
-	queryBuilder, err := sqlSamplesQueryBuilder(prof.Type)
+func (st *pqStorage) CreateProfile(ctx context.Context, ptype profile.ProfileType, meta *profile.ProfileMeta, pp *pprofProfile.Profile) error {
+	queryBuilder, err := sqlSamplesQueryBuilder(ptype)
 	if err != nil {
 		return err
 	}
 
 	defer func(t time.Time) {
-		st.logger.Debugw("createProfile", "profile", prof, "time", time.Since(t))
+		st.logger.Debugw("createProfile", "time", time.Since(t))
 	}(time.Now())
 
 	tx, err := st.db.Begin()
@@ -118,15 +48,27 @@ func (st *pqStorage) CreateProfile(ctx context.Context, prof *profile.Profile, p
 		return err
 	}
 
+	var labelsID int64
+	err = tx.QueryRowContext(
+		ctx,
+		sqlSOIProfileLabels,
+		meta.Service,
+		meta.InstanceID,
+		ProfileLabels(meta.Labels),
+	).Scan(&labelsID)
+	if err != nil {
+		return err
+	}
+
 	var profID int64
 	err = tx.QueryRowContext(
 		ctx,
 		sqlInsertProfiles,
-		prof.Service.BuildID,
-		prof.Service.Token.String(),
 		time.Unix(0, pp.TimeNanos),
-		int(prof.Type),
+		meta.CreatedAt,
+		int(ptype),
 		pp.Period,
+		labelsID,
 	).Scan(&profID)
 	if err != nil {
 		return err
@@ -268,7 +210,7 @@ func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileF
 	whereParts := make([]string, 0)
 	if filter.Service != "" {
 		args = append(args, filter.Service)
-		whereParts = append(whereParts, "v.name = $1") // v is for "services AS v" in select query
+		whereParts = append(whereParts, "v.service = $1") // v is for "pprof_profile_labels AS v" in select query
 	}
 
 	if !filter.CreatedAtMin.IsZero() && !filter.CreatedAtMax.IsZero() {
@@ -399,9 +341,9 @@ func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileF
 	return pb.Build()
 }
 
-func (st *pqStorage) DeleteProfile(ctx context.Context, prof *profile.Profile) error {
-	panic("implement me")
-}
+//func (st *pqStorage) DeleteProfile(ctx context.Context, prof *profile.Profile) error {
+//	panic("implement me")
+//}
 
 func sqlSamplesQueryBuilder(ptyp profile.ProfileType) (qb samplesQueryBuilder, err error) {
 	switch ptyp {

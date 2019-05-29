@@ -19,18 +19,18 @@ type SampleLabel struct {
 // SampleLabels is jsonb implementation for pprof.Label, pprof.NumLabel
 type SampleLabels []SampleLabel
 
-func (sl SampleLabels) Scan(src interface{}) error {
-	if src == nil {
-		return nil
-	}
-	return json.Unmarshal(src.([]byte), &sl)
-}
-
 func (sl SampleLabels) Value() (driver.Value, error) {
 	if sl == nil {
 		return nil, nil
 	}
 	return json.Marshal(sl)
+}
+
+func (sl SampleLabels) Scan(src interface{}) error {
+	if src == nil {
+		return nil
+	}
+	return json.Unmarshal(src.([]byte), &sl)
 }
 
 type LocationRecord struct {
@@ -100,24 +100,9 @@ func (s *SampleHeapRecord) Value() []int64 {
 	return []int64{s.AllocObjects.Int64, s.AllocBytes.Int64, s.InuseObjects.Int64, s.InuseBytes.Int64}
 }
 
-type ServiceLabels profile.Labels
+type ProfileLabels profile.Labels
 
-func (labels *ServiceLabels) Scan(src interface{}) error {
-	if src == nil {
-		return nil
-	}
-
-	m := make(map[string]interface{})
-	if err := json.Unmarshal(src.([]byte), &m); err != nil {
-		return err
-	}
-
-	*labels = ServiceLabels(profile.LabelsFromMap(m))
-
-	return nil
-}
-
-func (labels ServiceLabels) Value() (driver.Value, error) {
+func (labels ProfileLabels) Value() (driver.Value, error) {
 	if labels == nil {
 		return nil, nil
 	}
@@ -128,4 +113,19 @@ func (labels ServiceLabels) Value() (driver.Value, error) {
 	}
 
 	return json.Marshal(m)
+}
+
+func (labels *ProfileLabels) Scan(src interface{}) error {
+	if src == nil {
+		return nil
+	}
+
+	m := make(map[string]interface{})
+	if err := json.Unmarshal(src.([]byte), &m); err != nil {
+		return err
+	}
+
+	*labels = ProfileLabels(profile.LabelsFromMap(m))
+
+	return nil
 }

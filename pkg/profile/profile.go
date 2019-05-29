@@ -6,40 +6,28 @@ import (
 	"github.com/rs/xid"
 )
 
-type Profile struct {
-	Type    ProfileType
-	Service *Service
+type InstanceID string
+
+func NewInstanceID() InstanceID {
+	return InstanceID(xid.New().String())
 }
 
-type Token xid.ID
-
-func TokenFromString(s string) Token {
-	token, _ := xid.FromString(s)
-	return Token(token)
+func (iid InstanceID) IsNil() bool {
+	return iid == ""
 }
 
-func (token Token) MarshalJSON() ([]byte, error) {
-	return xid.ID(token).MarshalJSON()
+type ProfileMeta struct {
+	Service    string     `json:"service"`
+	InstanceID InstanceID `json:"instance_id"`
+	Labels     Labels     `json:"labels,omitempty"`
+	CreatedAt  time.Time  `json:"created_at,omitempty"`
 }
 
-func (token Token) String() string {
-	return xid.ID(token).String()
-}
-
-type Service struct {
-	Name      string    `json:"service,omitempty"`
-	BuildID   string    `json:"build_id,omitempty"`
-	Token     Token     `json:"-"`
-	Labels    Labels    `json:"labels,omitempty"`
-	CreatedAt time.Time `json:"created_at,omitempty"`
-}
-
-func NewService(name, buildid string, labels Labels) *Service {
-	return &Service{
-		Name:      name,
-		BuildID:   buildid,
-		Token:     Token(xid.New()),
-		Labels:    labels,
-		CreatedAt: time.Now().UTC(),
+func NewProfileMeta(service string, iid InstanceID, labels Labels) *ProfileMeta {
+	return &ProfileMeta{
+		Service:    service,
+		InstanceID: iid,
+		Labels:     labels,
+		CreatedAt:  time.Now().UTC(),
 	}
 }

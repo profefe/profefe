@@ -22,79 +22,11 @@ func NewRepository(log *logger.Logger, st Storage) *Repository {
 	}
 }
 
-type CreateServiceRequest struct {
-	ID      string
-	Service string
-	Labels  Labels
-}
-
-func (req *CreateServiceRequest) Validate() error {
-	if req == nil {
-		return xerrors.New("nil request")
-	}
-
-	if req.ID == "" {
-		return xerrors.Errorf("id empty: req %v", req)
-	}
-	if req.Service == "" {
-		return xerrors.Errorf("service empty: req %v", req)
-	}
-	return nil
-}
-
-func (repo *Repository) CreateService(ctx context.Context, req *CreateServiceRequest) (token string, err error) {
-	service := NewService(req.Service, req.ID, req.Labels)
-
-	if err := repo.storage.CreateService(ctx, service); err != nil {
-		return "", err
-	}
-	return service.Token.String(), nil
-}
-
-type GetServicesRequest struct {
-	Service string
-}
-
-func (repo *Repository) GetServices(ctx context.Context, req *GetServicesRequest) ([]*Service, error) {
-	filter := &GetServicesFilter{
-		Service: req.Service,
-	}
-	services, err := repo.storage.GetServices(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-
-	return mergeServices(services), nil
-}
-
-func mergeServices(services []*Service) []*Service {
-	if len(services) == 0 {
-		return services
-	}
-
-	servicesSet := make(map[string]*Service)
-	for _, s1 := range services {
-		if servicesSet[s1.Name] == nil {
-			servicesSet[s1.Name] = s1
-			continue
-		}
-		s2 := servicesSet[s1.Name]
-		s2.Labels = s2.Labels.Add(s1.Labels)
-	}
-
-	services = services[:0]
-
-	for _, s := range servicesSet {
-		services = append(services, s)
-	}
-
-	return services
-}
-
 type CreateProfileRequest struct {
-	ID    string
-	Token string
-	Type  ProfileType
+	Service    string
+	InstanceID InstanceID
+	Type       ProfileType
+	Labels     Labels
 }
 
 func (req *CreateProfileRequest) Validate() error {
@@ -102,11 +34,11 @@ func (req *CreateProfileRequest) Validate() error {
 		return xerrors.New("nil request")
 	}
 
-	if req.ID == "" {
-		return xerrors.Errorf("id empty: req: %v", req)
+	if req.Service == "" {
+		return xerrors.Errorf("service empty: req %v", req)
 	}
-	if req.Token == "" {
-		return xerrors.Errorf("token empty: req: %v", req)
+	if req.InstanceID.IsNil() {
+		return xerrors.Errorf("instance_id empty: req: %v", req)
 	}
 	if req.Type == UnknownProfile {
 		return xerrors.Errorf("unknown profile type %s: req %v", req.Type, req)
@@ -115,20 +47,13 @@ func (req *CreateProfileRequest) Validate() error {
 }
 
 func (repo *Repository) CreateProfile(ctx context.Context, req *CreateProfileRequest, r io.Reader) error {
-	prof := &Profile{
-		Type: req.Type,
-		Service: &Service{
-			BuildID: req.ID,
-			Token:   TokenFromString(req.Token),
-		},
-	}
-
 	pp, err := profile.Parse(r)
 	if err != nil {
 		return xerrors.Errorf("could not parse profile: %w", err)
 	}
 
-	return repo.storage.CreateProfile(ctx, prof, pp)
+	meta := NewProfileMeta(req.Service, req.InstanceID, req.Labels)
+	return repo.storage.CreateProfile(ctx, req.Type, meta, pp)
 }
 
 type GetProfileRequest struct {
@@ -146,7 +71,7 @@ func (req *GetProfileRequest) Validate() error {
 	}
 
 	if req.Service == "" {
-		return xerrors.Errorf("no service: req %v", req)
+		return xerrors.Errorf("service empty: req %v", req)
 	}
 	if req.Type == UnknownProfile {
 		return xerrors.Errorf("unknown profile type %s: req %v", req.Type, req)
