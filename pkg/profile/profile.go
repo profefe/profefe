@@ -16,6 +16,10 @@ func (iid InstanceID) IsNil() bool {
 	return iid == ""
 }
 
+func (iid InstanceID) String() string {
+	return string(iid)
+}
+
 type ProfileMeta struct {
 	Service    string     `json:"service"`
 	InstanceID InstanceID `json:"instance_id"`
