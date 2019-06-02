@@ -64,7 +64,7 @@
   version = "v1.1.0"
 
 [[projects]]
-  digest = "1:c52caf7bd44f92e54627a31b85baf06a68333a196b3d8d241480a774733dcf8b"
+  digest = "1:d0786a018883b4b84c06e8b5d75b6f2797a4b8e489f860c587f57a43a7459108"
   name = "go.uber.org/zap"
   packages = [
     ".",
@@ -72,7 +72,9 @@
     "internal/bufferpool",
     "internal/color",
     "internal/exit",
+    "internal/ztest",
     "zapcore",
+    "zaptest",
   ]
   pruneopts = "UT"
   revision = "ff33455a0e382e8a81d14dd7c922020b6b5e7982"
@@ -110,6 +112,7 @@
     "github.com/stretchr/testify/require",
     "go.uber.org/zap",
     "go.uber.org/zap/zapcore",
+    "go.uber.org/zap/zaptest",
     "golang.org/x/xerrors",
   ]
   solver-name = "gps-cdcl"
