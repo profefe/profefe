@@ -66,10 +66,10 @@ type samplesQueryBuilder struct {
 }
 
 func newSamplesQueryBuilder(table string, cols ...string) samplesQueryBuilder {
-	var s samplesQueryBuilder
-	s.insertQuery = buildInsertSamplesSQL(table, cols...)
-	s.selectQuery = buildSelectSamplesSQL(table, cols...)
-	return s
+	return samplesQueryBuilder{
+		insertQuery: buildInsertSamplesSQL(table, cols...),
+		selectQuery: buildSelectSamplesSQL(table, cols...),
+	}
 }
 
 func (s samplesQueryBuilder) ToInsertSQL() string {

@@ -24,14 +24,20 @@ SHELL := /bin/bash
 BUILD.go = $(GO) build $(GOFLAGS)
 TEST.go  = $(GO) test $(TESTFLAGS)
 
+.PHONY: all
 all: build-profefe
 
 build-%:
-	$(BUILD.go) -ldflags "$(LDFLAGS)" -o $(BUILDDIR)/$(*) $(PKG)/cmd/$(*)
+	$(BUILD.go) -ldflags "$(LDFLAGS)" -o $(BUILDDIR)/$(*) ./cmd/$(*)
 
+.PHONY: deploy
 deploy:
 
+.PHONY: test
 test:
 	$(TEST.go) -ldflags "$(LDFLAGS)" ./...
 
-.PHONY: all build deploy run test
+.PHONY: storage-integration-test
+storage-integration-test:
+	-$(GO) clean -testcache
+	$(TEST.go) -ldflags "$(LDFLAGS)" -tags=integration ./pkg/storage/... $(STORAGEFLAGS)

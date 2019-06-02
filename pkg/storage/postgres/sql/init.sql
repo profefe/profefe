@@ -21,7 +21,7 @@ CREATE TABLE pprof_profiles (
     received_at TIMESTAMPTZ NOT NULL,
     type        SMALLINT    NOT NULL,
     period      BIGINT,
-    labels_id   INTEGER REFERENCES pprof_profile_labels
+    labels_id   INTEGER REFERENCES pprof_profile_labels (id)
 );
 
 CREATE INDEX pprof_profiles_created_at_idx ON pprof_profiles (created_at DESC);

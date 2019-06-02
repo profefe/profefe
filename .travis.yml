@@ -3,8 +3,18 @@ language: go
 go:
   - 1.x
 
-matrix:
-  allow_failures:
-    - go: tip
+jobs:
+  include:
+    - stage: test
+      script: make test
 
-script: make test
+    - stage: test
+      dist: xenial
+      addons:
+        postgresql: 10
+      env:
+        - POSTGRES_DB=testdb
+      before_script:
+        - psql -c "create database $POSTGRES_DB;" -U postgres
+        - psql -d "$POSTGRES_DB" -f ${TRAVIS_BUILD_DIR}/pkg/storage/postgres/sql/init.sql -U postgres
+      script: make storage-integration-test STORAGEFLAGS="-test.pg.dsn=postgresql://localhost:5432/${POSTGRES_DB}"
