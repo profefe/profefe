@@ -42,10 +42,10 @@ const (
 	sqlInsertLocations = `
 		WITH tmp_locations AS (
 			SELECT
-				(tmp.location -> 'ID')::int AS lid,
-				(tmp.location -> 'Address')::bigint AS address,
-				(tmp.location -> 'Mapping')::jsonb AS mapping,
-				array_agg(ROW(f.func_id, lines -> 'Line')::pprof_frame) AS lines
+				(tmp.location ->> 'ID')::int AS lid,
+				(tmp.location ->> 'Address')::bigint AS address,
+				tmp.location -> 'Mapping' AS mapping,
+				array_agg(ROW(f.func_id, lines ->> 'Line')::pprof_frame) AS lines
 
 			FROM pprof_locations_tmp tmp,
 				jsonb_array_elements(tmp.location -> 'Line') AS lines
