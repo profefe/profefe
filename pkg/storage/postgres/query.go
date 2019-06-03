@@ -8,24 +8,21 @@ import (
 )
 
 const (
-	sqlInsertService = `
-		INSERT INTO services (build_id, token, name, created_at, labels)
-		VALUES ($1, $2, $3, $4, $5);`
-
-	sqlSelectServices = `
-		SELECT name, created_at, labels FROM services
-		ORDER BY created_at;`
-
-	sqlSelectServicesByName = `
-		SELECT name, created_at, labels FROM services
-		WHERE name = $1
-		ORDER BY created_at;`
+	sqlSOIProfileLabels = `
+		WITH new_labels (id) AS (
+			INSERT INTO pprof_profile_labels (service, instance_id, labels)
+			VALUES ($1, $2, $3)
+			ON CONFLICT DO NOTHING
+			RETURNING id
+		)
+		SELECT id FROM pprof_profile_labels
+		WHERE service = $1 AND instance_id = $2 AND labels = $3
+		UNION ALL
+		SELECT id FROM new_labels;`
 
 	sqlInsertProfiles = `
-		INSERT INTO pprof_profiles (service_id, created_at, type, period)
-		SELECT * FROM
-			(SELECT service_id FROM services WHERE build_id = $1 AND token = $2) AS v,
-			(VALUES ($3::timestamp, $4::smallint, $5::bigint)) AS d (created_at, type, period)
+		INSERT INTO pprof_profiles (created_at, received_at, type, period, labels_id)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING profile_id;`
 
 	sqlSelectSamplesTmpl = `
@@ -33,7 +30,7 @@ const (
 		FROM (
 			SELECT p.profile_id, p.created_at
 			FROM pprof_profiles p
-			INNER JOIN services v ON p.service_id = v.service_id
+			INNER JOIN pprof_profile_labels v ON p.labels_id = v.id
 			-- where clause placeholder
 			%%s
 		) p
@@ -69,10 +66,10 @@ type samplesQueryBuilder struct {
 }
 
 func newSamplesQueryBuilder(table string, cols ...string) samplesQueryBuilder {
-	var s samplesQueryBuilder
-	s.insertQuery = buildInsertSamplesSQL(table, cols...)
-	s.selectQuery = buildSelectSamplesSQL(table, cols...)
-	return s
+	return samplesQueryBuilder{
+		insertQuery: buildInsertSamplesSQL(table, cols...),
+		selectQuery: buildSelectSamplesSQL(table, cols...),
+	}
 }
 
 func (s samplesQueryBuilder) ToInsertSQL() string {

@@ -20,6 +20,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"runtime"
 	"sync"
@@ -135,7 +136,10 @@ func main() {
 	flag.Parse()
 
 	_, err := agent.Start(*collectorAddr, "hotapp-service",
-		agent.WithLabels("version", *version))
+		agent.WithLabels("version", *version),
+		agent.WithLogger(func(s string, v ...interface{}) {
+			log.Println(fmt.Sprintf(s, v...))
+		}))
 	if err != nil {
 		log.Fatalf("failed to start the profefe agent: %v", err)
 	}

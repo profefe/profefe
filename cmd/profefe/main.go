@@ -73,12 +73,12 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 
-	handler := middleware.LoggingHandler(os.Stdout, mux)
-	handler = middleware.RecoveryHandler(handler)
+	h := middleware.LoggingHandler(os.Stdout, mux)
+	h = middleware.RecoveryHandler(h)
 
 	server := http.Server{
 		Addr:    conf.Addr,
-		Handler: handler,
+		Handler: h,
 	}
 
 	errc := make(chan error, 1)

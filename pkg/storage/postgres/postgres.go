@@ -20,91 +20,21 @@ type pqStorage struct {
 }
 
 func New(log *logger.Logger, db *sql.DB) (profile.Storage, error) {
-	s := &pqStorage{
+	st := &pqStorage{
 		logger: log,
 		db:     db,
 	}
-	return s, nil
+	return st, nil
 }
 
-func (st *pqStorage) CreateService(ctx context.Context, svc *profile.Service) error {
-	st.logger.Debugw("createService", "service", svc)
-
-	_, err := st.db.ExecContext(
-		ctx,
-		sqlInsertService,
-		svc.BuildID,
-		svc.Token.String(),
-		svc.Name,
-		svc.CreatedAt,
-		ServiceLabels(svc.Labels),
-	)
-	if err != nil {
-		err = xerrors.Errorf("could not insert %v into services: %w", svc, err)
-	}
-	return err
-}
-
-func (st *pqStorage) GetServices(ctx context.Context, filter *profile.GetServicesFilter) ([]*profile.Service, error) {
-	defer func(t time.Time) {
-		st.logger.Debugw("getServices", "time", time.Since(t))
-	}(time.Now())
-
-	var (
-		rows *sql.Rows
-		err  error
-	)
-	if filter.Service == "" {
-		rows, err = st.db.QueryContext(ctx, sqlSelectServices)
-	} else {
-		rows, err = st.db.QueryContext(ctx, sqlSelectServicesByName, filter.Service)
-	}
-
-	if err != nil {
-		return nil, xerrors.Errorf("failed to query services (%v): %w", filter, err)
-	}
-
-	defer rows.Close()
-
-	return st.getServices(ctx, rows)
-}
-
-func (st *pqStorage) getServices(ctx context.Context, rows *sql.Rows) ([]*profile.Service, error) {
-	var svcs []*profile.Service
-	for rows.Next() {
-		var (
-			name      string
-			createdAt time.Time
-			labels    ServiceLabels
-		)
-		err := rows.Scan(&name, &createdAt, &labels)
-		if err != nil {
-			return nil, err
-		}
-
-		svc := &profile.Service{
-			Name:      name,
-			CreatedAt: createdAt,
-			Labels:    profile.Labels(labels),
-		}
-		svcs = append(svcs, svc)
-	}
-
-	if len(svcs) == 0 {
-		return nil, profile.ErrNotFound
-	}
-
-	return svcs, nil
-}
-
-func (st *pqStorage) CreateProfile(ctx context.Context, prof *profile.Profile, pp *pprofProfile.Profile) error {
-	queryBuilder, err := sqlSamplesQueryBuilder(prof.Type)
+func (st *pqStorage) CreateProfile(ctx context.Context, ptype profile.ProfileType, meta *profile.ProfileMeta, pp *pprofProfile.Profile) error {
+	queryBuilder, err := sqlSamplesQueryBuilder(ptype)
 	if err != nil {
 		return err
 	}
 
 	defer func(t time.Time) {
-		st.logger.Debugw("createProfile", "profile", prof, "time", time.Since(t))
+		st.logger.Debugw("createProfile", "time", time.Since(t))
 	}(time.Now())
 
 	tx, err := st.db.Begin()
@@ -118,15 +48,27 @@ func (st *pqStorage) CreateProfile(ctx context.Context, prof *profile.Profile, p
 		return err
 	}
 
+	var labelsID int64
+	err = tx.QueryRowContext(
+		ctx,
+		sqlSOIProfileLabels,
+		meta.Service,
+		meta.InstanceID,
+		ProfileLabels(meta.Labels),
+	).Scan(&labelsID)
+	if err != nil {
+		return err
+	}
+
 	var profID int64
 	err = tx.QueryRowContext(
 		ctx,
 		sqlInsertProfiles,
-		prof.Service.BuildID,
-		prof.Service.Token.String(),
 		time.Unix(0, pp.TimeNanos),
-		int(prof.Type),
+		meta.CreatedAt,
+		int(ptype),
 		pp.Period,
+		labelsID,
 	).Scan(&profID)
 	if err != nil {
 		return err
@@ -174,7 +116,7 @@ func (st *pqStorage) insertProfLocations(ctx context.Context, tx *sql.Tx, locs [
 
 	rows, err := tx.QueryContext(ctx, sqlInsertLocations)
 	if err != nil {
-		return nil, xerrors.Errorf("could execute locations query: %w", err)
+		return nil, xerrors.Errorf("could not execute locations query: %w", err)
 	}
 	defer rows.Close()
 
@@ -182,7 +124,7 @@ func (st *pqStorage) insertProfLocations(ctx context.Context, tx *sql.Tx, locs [
 		var locID int64
 		err := rows.Scan(&locID)
 		if err != nil {
-			return nil, xerrors.Errorf("could scan locations query: %w", err)
+			return nil, xerrors.Errorf("could not scan locations query: %w", err)
 		}
 		locIDs = append(locIDs, locID)
 	}
@@ -250,32 +192,15 @@ func getSampleLabels(sample *pprofProfile.Sample) (labels SampleLabels) {
 	return labels
 }
 
-func (st *pqStorage) GetProfiles(ctx context.Context, filter *profile.GetProfileFilter) ([]*pprofProfile.Profile, error) {
-	defer func(t time.Time) {
-		st.logger.Debugw("getProfiles", "time", time.Since(t))
-	}(time.Now())
-
-	profs, err := st.getProfiles(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	err = pprofutil.Compact(profs)
-	return profs, err
-}
-
 func (st *pqStorage) GetProfile(ctx context.Context, filter *profile.GetProfileFilter) (*pprofProfile.Profile, error) {
 	defer func(t time.Time) {
 		st.logger.Debugw("getProfile", "time", time.Since(t))
 	}(time.Now())
 
-	profs, err := st.getProfiles(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	return pprofProfile.Merge(profs)
+	return st.getProfile(ctx, filter)
 }
 
-func (st *pqStorage) getProfiles(ctx context.Context, filter *profile.GetProfileFilter) ([]*pprofProfile.Profile, error) {
+func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileFilter) (*pprofProfile.Profile, error) {
 	queryBuilder, err := sqlSamplesQueryBuilder(filter.Type)
 	if err != nil {
 		return nil, err
@@ -285,7 +210,7 @@ func (st *pqStorage) getProfiles(ctx context.Context, filter *profile.GetProfile
 	whereParts := make([]string, 0)
 	if filter.Service != "" {
 		args = append(args, filter.Service)
-		whereParts = append(whereParts, "v.name = $1") // v is for "services AS v" in select query
+		whereParts = append(whereParts, "v.service = $1") // v is for "pprof_profile_labels AS v" in select query
 	}
 
 	if !filter.CreatedAtMin.IsZero() && !filter.CreatedAtMax.IsZero() {
@@ -298,50 +223,25 @@ func (st *pqStorage) getProfiles(ctx context.Context, filter *profile.GetProfile
 		whereParts = append(whereParts, fmt.Sprintf("v.labels ->> '%s' = $%d", label.Key, len(args)))
 	}
 
-	psb := pprofutil.NewProfilesBuilder(filter.Type)
+	sqlSelectSamples := queryBuilder.ToSelectSQL(whereParts...)
+	st.logger.Debugw("selectProfileSamples", logger.MultiLine("query", sqlSelectSamples), "args", args)
 
-	query := queryBuilder.ToSelectSQL(whereParts...)
-	err = st.selectProfileSamples(ctx, filter.Type, psb, query, args)
+	rows, err := st.db.QueryContext(ctx, sqlSelectSamples, args...)
 	if err != nil {
-		return nil, err
-	}
-
-	if psb.IsEmpty() {
-		return nil, profile.ErrEmpty
-	}
-
-	locIDs := pq.Int64Array(pprofutil.LocationIDs(psb))
-
-	args = args[:0]
-	args = append(args, locIDs)
-	err = st.selectProfileLocations(ctx, psb, sqlSelectLocations, args)
-	if err != nil {
-		return nil, err
-	}
-
-	return psb.BuildAll()
-}
-
-func (st *pqStorage) selectProfileSamples(
-	ctx context.Context,
-	ptyp profile.ProfileType,
-	psb *pprofutil.ProfilesBuilder,
-	query string,
-	args []interface{},
-) error {
-	st.logger.Debugw("selectProfileSamples", logger.MultiLine("query", query), "args", args)
-
-	rows, err := st.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return xerrors.Errorf("faield to query samples (%v): %w", args, err)
+		return nil, xerrors.Errorf("could not query samples (%v): %w", args, err)
 	}
 	defer rows.Close()
 
-	rs := newSampleRecordsScanner(ptyp)
+	locSet := make(map[int64]*pprofProfile.Location)
+	mapSet := make(map[int64]*pprofProfile.Mapping)
+	funcSet := make(map[int64]*pprofProfile.Function)
+	pb := pprofutil.NewProfileBuilder(filter.Type)
+
+	rs := newSampleRecordsScanner(filter.Type)
 	for rows.Next() {
 		err := rs.ScanFrom(rows)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		sample := &pprofProfile.Sample{
@@ -350,33 +250,40 @@ func (st *pqStorage) selectProfileSamples(
 		for _, label := range rs.sampleRec.Labels {
 			pprofutil.SampleAddLabel(sample, label.Key, label.ValueStr, label.ValueNum)
 		}
-
 		for _, locID := range rs.sampleRec.Locations {
-			loc := psb.Location(rs.sampleRec.ProfileID, locID)
+			loc := locSet[locID]
+			if loc == nil {
+				loc = &pprofProfile.Location{}
+				locSet[locID] = loc
+
+				pb.AddLocation(loc)
+			}
 			sample.Location = append(sample.Location, loc)
 		}
 
-		psb.ProfileBuilder(rs.sampleRec.ProfileID).AddSample(sample)
+		pb.AddSample(sample)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
-	return rows.Err()
-}
+	if pb.IsEmpty() {
+		return nil, profile.ErrEmpty
+	}
 
-func (st *pqStorage) selectProfileLocations(
-	ctx context.Context,
-	psb *pprofutil.ProfilesBuilder,
-	query string,
-	args []interface{},
-) error {
-	st.logger.Debugw("selectProfileLocations", logger.MultiLine("query", query), "args", args)
+	locIDs := make(pq.Int64Array, 0, len(locSet))
+	for locID := range locSet {
+		locIDs = append(locIDs, locID)
+	}
 
-	rows, err := st.db.QueryContext(ctx, query, args...)
+	args = append(args[:0], locIDs)
+	st.logger.Debugw("selectProfileLocations", logger.MultiLine("query", sqlSelectLocations), "args", args)
+
+	rows, err = st.db.QueryContext(ctx, sqlSelectLocations, args...)
 	if err != nil {
-		return xerrors.Errorf("faield to query locations (%v): %w", args, err)
+		return nil, xerrors.Errorf("could not query locations (%v): %w", args, err)
 	}
 	defer rows.Close()
-
-	funcSet := make(map[int64]*pprofProfile.Function)
 
 	for rows.Next() {
 		var (
@@ -384,36 +291,38 @@ func (st *pqStorage) selectProfileLocations(
 			mr MappingRecord
 			fr FunctionRecord
 		)
-		err := rows.Scan(&lr.LocationID, &mr, &lr.Address, &lr.Line, &fr.ID, &fr.FuncName, &fr.FileName)
+		err := rows.Scan(&lr.LocationID, &mr.MappingID, &mr.Mapping, &lr.Address, &lr.Line, &fr.FuncID, &fr.FuncName, &fr.FileName)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		loc := psb.LocationByID(lr.LocationID)
+		loc := locSet[lr.LocationID]
 		if loc == nil {
-			return xerrors.Errorf("found unexpected location record %v: location not found", lr)
+			return nil, xerrors.Errorf("found unexpected location record %v: location %d not found in locations set", lr, lr.LocationID)
 		}
 
-		pb := psb.ProfileBuilderByLocation(lr.LocationID)
-		if pb == nil {
-			return xerrors.Errorf("found unexpected location record %v: profile not found", lr)
-		}
-
-		if loc.Mapping == nil {
-			m := &pprofProfile.Mapping{
-				Start:   mr.MemStart,
-				Limit:   mr.MemLimit,
-				Offset:  mr.Offset,
-				File:    mr.File,
-				BuildID: mr.BuildID,
+		m := mapSet[mr.MappingID]
+		if m == nil {
+			m = &pprofProfile.Mapping{
+				Start:           mr.Mapping.MemStart,
+				Limit:           mr.Mapping.MemLimit,
+				Offset:          mr.Mapping.Offset,
+				File:            mr.Mapping.File,
+				BuildID:         mr.Mapping.BuildID,
+				HasFunctions:    mr.Mapping.HasFunctions,
+				HasFilenames:    mr.Mapping.HasFilenames,
+				HasLineNumbers:  mr.Mapping.HasLineNumbers,
+				HasInlineFrames: mr.Mapping.HasInlineFrames,
 			}
-			pb.AddMapping(m)
+			mapSet[mr.MappingID] = m
 
-			loc.Mapping = m
-			loc.Address = lr.Address
+			pb.AddMapping(m)
 		}
 
-		fn := funcSet[fr.ID]
+		loc.Mapping = m
+		loc.Address = lr.Address
+
+		fn := funcSet[fr.FuncID]
 		if fn == nil {
 			// as for Go 1.12 Function.start_line never got populated by runtime/pprof
 			// see https://github.com/golang/go/blob/5ee1b849592787ed050ef3fbd9b2c58aabd20ff3/src/runtime/pprof/proto.go
@@ -422,24 +331,28 @@ func (st *pqStorage) selectProfileLocations(
 				SystemName: fr.FuncName,
 				Filename:   fr.FileName,
 			}
+			funcSet[fr.FuncID] = fn
+
 			pb.AddFunction(fn)
-			funcSet[fr.ID] = fn
 		}
 
-		// "multiple line indicates this location has inlined functions" (see profile.proto)
+		// "multiple line indicates this location has inlined functions" (see pprof/profile.proto)
 		line := pprofProfile.Line{
 			Function: fn,
 			Line:     lr.Line,
 		}
 		loc.Line = append(loc.Line, line)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
-	return rows.Err()
+	return pb.Build()
 }
 
-func (st *pqStorage) DeleteProfile(ctx context.Context, prof *profile.Profile) error {
-	panic("implement me")
-}
+//func (st *pqStorage) DeleteProfile(ctx context.Context, prof *profile.Profile) error {
+//	panic("implement me")
+//}
 
 func sqlSamplesQueryBuilder(ptyp profile.ProfileType) (qb samplesQueryBuilder, err error) {
 	switch ptyp {

@@ -3,9 +3,8 @@ package agent
 import (
 	"bytes"
 	"context"
-	"crypto/sha1"
+	"crypto/md5"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"runtime/pprof"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,16 +48,15 @@ type httpClient interface {
 }
 
 type Agent struct {
-	ProfileDuration time.Duration
-	CPUProfile      bool
-	HeapProfile     bool
-	BlockProfile    bool
-	MuxProfile      bool
+	CPUProfile         bool
+	CPUProfileDuration time.Duration
+	HeapProfile        bool
+	BlockProfile       bool
+	MuxProfile         bool
 
 	service    string
-	buildID    string
-	agentToken string
-	labels     map[string]string
+	instanceID profile.InstanceID
+	rawLabels  strings.Builder
 
 	logf func(format string, v ...interface{})
 
@@ -71,16 +70,14 @@ type Agent struct {
 
 func New(addr, service string, opts ...Option) *Agent {
 	a := &Agent{
-		ProfileDuration: defaultDuration,
-
-		CPUProfile: true, // enable CPU profiling by default
+		CPUProfile:         true, // enable CPU profiling by default
+		CPUProfileDuration: defaultDuration,
 
 		collectorAddr: addr,
 		service:       service,
-		labels:        make(map[string]string),
-		rawClient:     http.DefaultClient,
 
-		logf: func(format string, v ...interface{}) {},
+		rawClient: http.DefaultClient,
+		logf:      func(format string, v ...interface{}) {},
 
 		tick: defaultTickInterval,
 		stop: make(chan struct{}),
@@ -91,18 +88,14 @@ func New(addr, service string, opts ...Option) *Agent {
 		opt(a)
 	}
 
+	a.instanceID = a.getInstanceID()
+
 	return a
 }
 
 func (a *Agent) Start(ctx context.Context) error {
-	a.buildID = a.getBuildID()
-
 	if a.collectorAddr == "" {
 		return fmt.Errorf("failed to start agent: collector address is empty")
-	}
-
-	if err := a.registerAgent(ctx); err != nil {
-		return fmt.Errorf("failed to register agent: %v", err)
 	}
 
 	go a.collectAndSend(ctx)
@@ -116,75 +109,21 @@ func (a *Agent) Stop() error {
 	return nil
 }
 
-func (a *Agent) getBuildID() string {
+func (a *Agent) getInstanceID() profile.InstanceID {
 	prog := os.Args[0]
 	f, err := os.Open(prog)
 	if err != nil {
 		a.logf("failed to read binary %s: %v", prog, err)
-		return "x1"
+		return profile.NewInstanceID()
 	}
 	defer f.Close()
 
-	h := sha1.New()
+	h := md5.New()
 	if _, err := io.Copy(h, f); err != nil {
-		a.logf("failed to generate sha1 from binary %s: %v", prog, err)
-		return "x2"
+		a.logf("failed to generate hash from binary %s: %v", prog, err)
+		return profile.NewInstanceID()
 	}
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-func (a *Agent) registerAgent(ctx context.Context) error {
-	var labels bytes.Buffer
-	{
-		first := true
-		for k, v := range a.labels {
-			if !first {
-				labels.WriteByte(',')
-			}
-			first = false
-			labels.WriteString(url.QueryEscape(k))
-			labels.WriteByte('=')
-			labels.WriteString(url.QueryEscape(v))
-		}
-	}
-
-	q := url.Values{}
-	q.Set("service", a.service)
-	q.Set("id", a.buildID)
-	q.Set("labels", labels.String())
-
-	surl := a.collectorAddr + "/api/0/profile?" + q.Encode()
-	a.logf("register agent: %s", surl)
-	req, err := http.NewRequest(http.MethodPut, surl, nil)
-	if err != nil {
-		return err
-	}
-
-	var rawResp bytes.Buffer
-
-	req = req.WithContext(ctx)
-	err = retry.Do(
-		backoffMinDelay,
-		backoffMaxDelay,
-		func() error { return a.doRequest(req, &rawResp) },
-	)
-	if err != nil {
-		return err
-	}
-
-	resp := struct {
-		Token string `json:"token"`
-	}{}
-	if err := json.NewDecoder(&rawResp).Decode(&resp); err != nil {
-		return fmt.Errorf("could not decode response: %v", err)
-	}
-	if resp.Token == "" {
-		return fmt.Errorf("empty token in response: %s", rawResp.String())
-	}
-
-	a.agentToken = resp.Token
-
-	return nil
+	return profile.InstanceID(hex.EncodeToString(h.Sum(nil)))
 }
 
 func (a *Agent) collectProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
@@ -194,7 +133,7 @@ func (a *Agent) collectProfile(ctx context.Context, ptype profile.ProfileType, b
 		if err != nil {
 			return fmt.Errorf("failed to start CPU profile: %v", err)
 		}
-		sleep(a.ProfileDuration, ctx.Done())
+		sleep(a.CPUProfileDuration, ctx.Done())
 		pprof.StopCPUProfile()
 
 	case profile.HeapProfile:
@@ -216,8 +155,9 @@ func (a *Agent) collectProfile(ctx context.Context, ptype profile.ProfileType, b
 
 func (a *Agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
 	q := url.Values{}
-	q.Set("id", a.buildID)
-	q.Set("token", a.agentToken)
+	q.Set("service", a.service)
+	q.Set("instance_id", a.instanceID.String())
+	q.Set("labels", a.rawLabels.String())
 	q.Set("type", ptype.String())
 
 	surl := a.collectorAddr + "/api/0/profile?" + q.Encode()
@@ -276,7 +216,7 @@ func (a *Agent) collectAndSend(ctx context.Context) {
 
 	var (
 		ptype = a.nextProfileType(profile.UnknownProfile)
-		timer = time.NewTimer(tickInterval(a.tick))
+		timer = time.NewTimer(tickInterval(0))
 
 		buf bytes.Buffer
 	)
@@ -343,8 +283,8 @@ func (a *Agent) nextProfileType(ptype profile.ProfileType) profile.ProfileType {
 }
 
 func tickInterval(d time.Duration) time.Duration {
-	// add up to extra 10 seconds to sleep to dis-align profiles
-	noise := time.Duration(rand.Intn(10)) * time.Second
+	// add up to extra 10 seconds to sleep to dis-align profiles of different instances
+	noise := time.Second + time.Duration(rand.Intn(9))*time.Second
 	return d + noise
 }
 

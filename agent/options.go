@@ -2,6 +2,7 @@ package agent
 
 import (
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -10,7 +11,7 @@ type Option func(a *Agent)
 func WithCPUProfile(duration time.Duration) Option {
 	return func(a *Agent) {
 		a.CPUProfile = true
-		a.ProfileDuration = duration
+		a.CPUProfileDuration = duration
 	}
 }
 
@@ -38,8 +39,16 @@ func WithLabels(args ...string) Option {
 		panic("agent.WithLabels: uneven number of arguments, expected key-value pairs")
 	}
 	return func(a *Agent) {
+		first := true
 		for i := 0; i+1 < len(args); i += 2 {
-			a.labels[args[i]] = args[i+1]
+			if !first {
+				a.rawLabels.WriteByte(',')
+			}
+			first = false
+			k, v := args[i], args[i+1]
+			a.rawLabels.WriteString(url.QueryEscape(k))
+			a.rawLabels.WriteByte('=')
+			a.rawLabels.WriteString(url.QueryEscape(v))
 		}
 	}
 }
