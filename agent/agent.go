@@ -179,7 +179,8 @@ func (a *Agent) doRequest(req *http.Request, v io.Writer) error {
 	resp, err := a.rawClient.Do(req)
 	if err, ok := err.(*url.Error); ok && err.Err == context.Canceled {
 		return retry.Cancel(err)
-	} else if err != nil {
+	}
+	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
