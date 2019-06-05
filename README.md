@@ -3,10 +3,14 @@
 [![Build Status](https://travis-ci.org/profefe/profefe.svg?branch=master)](https://travis-ci.org/profefe/profefe)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/profefe/profefe/master/LICENSE)
 
-**The project is still in the early prototyping stage. Things will change, opinions and contributions are welcome.**
-
 *profefe* allows to continuously collect profiling data from a running Go service and provides an API for querying
 the profiling samples base on metadata associated with the service.
+
+---
+
+**The project is still in the early prototyping stage. Things will change. Opinions and contributions are welcome.**
+
+---
 
 ## Why do we need it?
 
