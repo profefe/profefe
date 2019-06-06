@@ -125,14 +125,15 @@ GET /api/0/profile?service=<service>&type=[cpu|heap]&from=<created_from>&to=<cre
 
 ## Feedback
 
-While the motivation behind the project was very much described in the "Why do we need it?" section (which is very much describes the state of development in one of my ex-employers), I still have [some][tw1] [doubts][tw2] on
-how much a project like that is needed for a broad audience.
+The motivation behind the project showed in the "Why do we need it?" section pretty much describes the state
+of development in one of my ex-employers company, but I still have [some][tw1] [doubts][tw2] on
+how much a project like this is needed for other people.
 
 The feedback and contribution are always welcome.
 
 ## Further reading
 
-*profefe*, in it's current state, was very much inspired by:
+*profefe*, as it's now, was very much inspired by:
 
 - [Stackdriver profiler][3]
 - [Google-Wide Profiling: A Continuous Profiling Infrastructure for Data Centers](https://ai.google/research/pubs/pub36575) (paper)
