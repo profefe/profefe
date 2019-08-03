@@ -46,7 +46,7 @@ func main() {
 }
 
 func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
-	var profileRepo *profile.Repository
+	var st profile.Storage
 	{
 		db, err := sql.Open("postgres", conf.Postgres.ConnString())
 		if err != nil {
@@ -58,13 +58,13 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 			return xerrors.Errorf("could not ping db: %w", err)
 		}
 
-		pgStorage, err := pgstorage.New(log.With("svc", "pg"), db)
+		st, err = pgstorage.New(log.With("storage", "pg"), db)
 		if err != nil {
 			return xerrors.Errorf("could not create new pg storage: %w", err)
 		}
-
-		profileRepo = profile.NewRepository(log, pgStorage)
 	}
+
+	profileRepo := profile.NewRepository(log, st)
 
 	mux := http.NewServeMux()
 	apiHandler := handler.NewAPIHandler(log, profileRepo)
@@ -87,7 +87,7 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 		errc <- server.ListenAndServe()
 	}()
 
-	sigs := make(chan os.Signal, 1)
+	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
 	select {
