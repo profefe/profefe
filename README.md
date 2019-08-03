@@ -133,9 +133,13 @@ The feedback and contribution are always welcome.
 
 ## Further reading
 
+While the topic of continuous profiling in the production is a bit unrepresented in the public internet, some
+research or commercial projects are already exist
+
 - [Stackdriver profiler][3]
 - [Google-Wide Profiling: A Continuous Profiling Infrastructure for Data Centers](https://ai.google/research/pubs/pub36575) (paper)
 - [StackImpact](https://stackimpact.com/docs/go-profiling/)
+- [conprof](https://github.com/conprof/conprof)
 - [Opsian - Continuous Profiling for JVM](https://opsian.com) (provides on-premises plan for enterprise customers)
 - [Liveprof - Continuous Profiling for PHP](https://habr.com/ru/company/badoo/blog/436364/) (RUS)
 - [FlameScope](https://github.com/Netflix/flamescope)
