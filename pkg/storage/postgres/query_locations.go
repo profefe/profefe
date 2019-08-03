@@ -8,7 +8,7 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/profefe/profefe/internal/pprof/profile"
-	"github.com/profefe/profefe/pkg/logger"
+	"github.com/profefe/profefe/pkg/log"
 	"golang.org/x/xerrors"
 )
 
@@ -82,7 +82,7 @@ const (
 
 var sqlCopyLocations = pq.CopyIn("pprof_locations_tmp", "location")
 
-func copyLocations(ctx context.Context, logger *logger.Logger, tx *sql.Tx, locs []*profile.Location) error {
+func copyLocations(ctx context.Context, logger *log.Logger, tx *sql.Tx, locs []*profile.Location) error {
 	copyStmt, err := tx.PrepareContext(ctx, sqlCopyLocations)
 	if err != nil {
 		return err

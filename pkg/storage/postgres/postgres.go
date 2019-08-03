@@ -8,20 +8,20 @@ import (
 
 	"github.com/lib/pq"
 	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
-	"github.com/profefe/profefe/pkg/logger"
+	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/pprofutil"
 	"github.com/profefe/profefe/pkg/profile"
 	"golang.org/x/xerrors"
 )
 
 type pqStorage struct {
-	logger *logger.Logger
+	logger *log.Logger
 	db     *sql.DB
 }
 
-func New(log *logger.Logger, db *sql.DB) (profile.Storage, error) {
+func New(logger *log.Logger, db *sql.DB) (profile.Storage, error) {
 	st := &pqStorage{
-		logger: log,
+		logger: logger,
 		db:     db,
 	}
 	return st, nil
@@ -111,7 +111,7 @@ func (st *pqStorage) insertProfLocations(ctx context.Context, tx *sql.Tx, locs [
 	locIDs = make([]int64, 0, len(locs))
 
 	defer func(t time.Time) {
-		st.logger.Debugw("insertProfLocations", logger.MultiLine("query", sqlInsertLocations), "nlocids", len(locIDs), "time", time.Since(t))
+		st.logger.Debugw("insertProfLocations", log.MultiLine("query", sqlInsertLocations), "nlocids", len(locIDs), "time", time.Since(t))
 	}(time.Now())
 
 	rows, err := tx.QueryContext(ctx, sqlInsertLocations)
@@ -140,7 +140,7 @@ func (st *pqStorage) insertProfSamples(ctx context.Context, tx *sql.Tx, query st
 	defer copyStmt.Close()
 
 	defer func(t time.Time) {
-		st.logger.Debugw("insertProfSamples", logger.MultiLine("query", query), "profid", profID, "nsamples", len(samples), "time", time.Since(t))
+		st.logger.Debugw("insertProfSamples", log.MultiLine("query", query), "profid", profID, "nsamples", len(samples), "time", time.Since(t))
 	}(time.Now())
 
 	var (
@@ -224,7 +224,7 @@ func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileF
 	}
 
 	sqlSelectSamples := queryBuilder.ToSelectSQL(whereParts...)
-	st.logger.Debugw("selectProfileSamples", logger.MultiLine("query", sqlSelectSamples), "args", args)
+	st.logger.Debugw("selectProfileSamples", log.MultiLine("query", sqlSelectSamples), "args", args)
 
 	rows, err := st.db.QueryContext(ctx, sqlSelectSamples, args...)
 	if err != nil {
@@ -277,7 +277,7 @@ func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileF
 	}
 
 	args = append(args[:0], locIDs)
-	st.logger.Debugw("selectProfileLocations", logger.MultiLine("query", sqlSelectLocations), "args", args)
+	st.logger.Debugw("selectProfileLocations", log.MultiLine("query", sqlSelectLocations), "args", args)
 
 	rows, err = st.db.QueryContext(ctx, sqlSelectLocations, args...)
 	if err != nil {

@@ -4,19 +4,19 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/profefe/profefe/pkg/logger"
+	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/version"
 )
 
 type APIHandler struct {
-	logger      *logger.Logger
+	logger      *log.Logger
 	profilePepo *profile.Repository
 }
 
-func NewAPIHandler(log *logger.Logger, profileRepo *profile.Repository) *APIHandler {
+func NewAPIHandler(logger *log.Logger, profileRepo *profile.Repository) *APIHandler {
 	return &APIHandler{
-		logger:      log,
+		logger:      logger,
 		profilePepo: profileRepo,
 	}
 }

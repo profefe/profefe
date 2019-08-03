@@ -6,18 +6,18 @@ import (
 	"time"
 
 	"github.com/profefe/profefe/internal/pprof/profile"
-	"github.com/profefe/profefe/pkg/logger"
+	"github.com/profefe/profefe/pkg/log"
 	"golang.org/x/xerrors"
 )
 
 type Repository struct {
-	logger  *logger.Logger
+	logger  *log.Logger
 	storage Storage
 }
 
-func NewRepository(log *logger.Logger, st Storage) *Repository {
+func NewRepository(logger *log.Logger, st Storage) *Repository {
 	return &Repository{
-		logger:  log,
+		logger:  logger,
 		storage: st,
 	}
 }

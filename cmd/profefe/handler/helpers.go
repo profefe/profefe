@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/profefe/profefe/pkg/logger"
+	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"golang.org/x/xerrors"
 )
@@ -90,7 +90,7 @@ func getLabels(q url.Values) (labels profile.Labels, err error) {
 	return labels, err
 }
 
-func handleErrorHTTP(logger *logger.Logger, err error, w http.ResponseWriter, r *http.Request) {
+func handleErrorHTTP(logger *log.Logger, err error, w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		return
 	}

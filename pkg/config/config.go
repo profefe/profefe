@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/profefe/profefe/pkg/logger"
+	"github.com/profefe/profefe/pkg/log"
 )
 
 const (
@@ -16,7 +16,7 @@ const (
 type Config struct {
 	Addr        string
 	ExitTimeout time.Duration
-	Logger      logger.Config
+	Logger      log.Config
 	Postgres    PostgresConfig
 }
 
