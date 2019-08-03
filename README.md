@@ -133,13 +133,12 @@ The feedback and contribution are always welcome.
 
 ## Further reading
 
-*profefe*, as it's now, was very much inspired by:
-
 - [Stackdriver profiler][3]
 - [Google-Wide Profiling: A Continuous Profiling Infrastructure for Data Centers](https://ai.google/research/pubs/pub36575) (paper)
 - [StackImpact](https://stackimpact.com/docs/go-profiling/)
+- [Opsian - Continuous Profiling for JVM](https://opsian.com) (provides on-premises plan for enterprise customers)
+- [Liveprof - Continuous Profiling for PHP](https://habr.com/ru/company/badoo/blog/436364/) (RUS)
 - [FlameScope](https://github.com/Netflix/flamescope)
-- [Liveprof](https://habr.com/ru/company/badoo/blog/436364/) (RUS) — a similar project for PHP
 
 ## License
 
