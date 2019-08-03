@@ -15,7 +15,7 @@ import (
 	"github.com/profefe/profefe/cmd/profefe/handler"
 	"github.com/profefe/profefe/cmd/profefe/middleware"
 	"github.com/profefe/profefe/pkg/config"
-	"github.com/profefe/profefe/pkg/logger"
+	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	pgstorage "github.com/profefe/profefe/pkg/storage/postgres"
 	"github.com/profefe/profefe/version"
@@ -35,17 +35,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	log, err := conf.Logger.Build()
+	logger, err := conf.Logger.Build()
 	if err != nil {
 		panic(err)
 	}
 
-	if err := run(context.Background(), log, conf); err != nil {
-		log.Error(err)
+	if err := run(context.Background(), logger, conf); err != nil {
+		logger.Error(err)
 	}
 }
 
-func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
+func run(ctx context.Context, logger *log.Logger, conf config.Config) error {
 	var st profile.Storage
 	{
 		db, err := sql.Open("postgres", conf.Postgres.ConnString())
@@ -58,16 +58,16 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 			return xerrors.Errorf("could not ping db: %w", err)
 		}
 
-		st, err = pgstorage.New(log.With("storage", "pg"), db)
+		st, err = pgstorage.New(logger.With("storage", "pg"), db)
 		if err != nil {
 			return xerrors.Errorf("could not create new pg storage: %w", err)
 		}
 	}
 
-	profileRepo := profile.NewRepository(log, st)
+	profileRepo := profile.NewRepository(logger, st)
 
 	mux := http.NewServeMux()
-	apiHandler := handler.NewAPIHandler(log, profileRepo)
+	apiHandler := handler.NewAPIHandler(logger, profileRepo)
 	apiHandler.RegisterRoutes(mux)
 
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -83,7 +83,7 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 
 	errc := make(chan error, 1)
 	go func() {
-		log.Infow("server is running", "addr", server.Addr)
+		logger.Infow("server is running", "addr", server.Addr)
 		errc <- server.ListenAndServe()
 	}()
 
@@ -92,7 +92,7 @@ func run(ctx context.Context, log *logger.Logger, conf config.Config) error {
 
 	select {
 	case <-sigs:
-		log.Info("exiting")
+		logger.Info("exiting")
 	case err := <-errc:
 		if err != http.ErrServerClosed {
 			return xerrors.Errorf("terminated: %w", err)

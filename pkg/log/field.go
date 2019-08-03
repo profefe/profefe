@@ -1,7 +1,6 @@
-package logger
+package log
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -12,10 +11,6 @@ var whitespaceRe = regexp.MustCompile("\\s+")
 
 type multiLineString struct {
 	string
-}
-
-func MultiLineStringer(s string) fmt.Stringer {
-	return multiLineString{s}
 }
 
 func (s multiLineString) String() string {

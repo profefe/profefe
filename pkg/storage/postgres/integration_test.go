@@ -9,7 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
+	stdlog "log"
 	"os"
 	"os/exec"
 	"strings"
@@ -19,7 +19,7 @@ import (
 	_ "github.com/lib/pq"
 
 	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
-	"github.com/profefe/profefe/pkg/logger"
+	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage/postgres"
 	"github.com/stretchr/testify/assert"
@@ -49,12 +49,12 @@ func runTestMain(m *testing.M) int {
 
 	db, err := sql.Open("postgres", ts.dsn)
 	if err != nil {
-		log.Fatal(err)
+		stdlog.Fatal(err)
 	}
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {
-		log.Fatalf("unable to pind database: %v", err)
+		stdlog.Fatalf("unable to ping database: %v", err)
 	}
 
 	ts.db = db
@@ -69,7 +69,7 @@ func TestPqStorage(t *testing.T) {
 	defer cancel()
 
 	testLogger := zaptest.NewLogger(t)
-	st, _ := postgres.New(logger.New(testLogger), ts.db)
+	st, _ := postgres.New(log.New(testLogger), ts.db)
 
 	now := time.Now()
 	iid := profile.NewInstanceID()
