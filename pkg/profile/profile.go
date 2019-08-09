@@ -6,6 +6,8 @@ import (
 	"github.com/rs/xid"
 )
 
+type ProfileID []byte
+
 type InstanceID string
 
 func NewInstanceID() InstanceID {

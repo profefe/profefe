@@ -11,6 +11,7 @@ import (
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/pprofutil"
 	"github.com/profefe/profefe/pkg/profile"
+	"github.com/profefe/profefe/pkg/storage"
 	"golang.org/x/xerrors"
 )
 
@@ -19,7 +20,7 @@ type pqStorage struct {
 	db     *sql.DB
 }
 
-func New(logger *log.Logger, db *sql.DB) (profile.Storage, error) {
+func New(logger *log.Logger, db *sql.DB) (storage.Storage, error) {
 	st := &pqStorage{
 		logger: logger,
 		db:     db,
@@ -27,7 +28,7 @@ func New(logger *log.Logger, db *sql.DB) (profile.Storage, error) {
 	return st, nil
 }
 
-func (st *pqStorage) CreateProfile(ctx context.Context, ptype profile.ProfileType, meta *profile.ProfileMeta, pp *pprofProfile.Profile) error {
+func (st *pqStorage) WriteProfile(ctx context.Context, ptype profile.ProfileType, meta *profile.ProfileMeta, pp *pprofProfile.Profile) error {
 	queryBuilder, err := sqlSamplesQueryBuilder(ptype)
 	if err != nil {
 		return err
@@ -192,33 +193,37 @@ func getSampleLabels(sample *pprofProfile.Sample) (labels SampleLabels) {
 	return labels
 }
 
-func (st *pqStorage) GetProfile(ctx context.Context, filter *profile.GetProfileFilter) (*pprofProfile.Profile, error) {
-	defer func(t time.Time) {
-		st.logger.Debugw("getProfile", "time", time.Since(t))
-	}(time.Now())
-
-	return st.getProfile(ctx, filter)
+func (st *pqStorage) GetProfile(ctx context.Context, pid profile.ProfileID) (*pprofProfile.Profile, error) {
+	panic("implement me")
 }
 
-func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileFilter) (*pprofProfile.Profile, error) {
-	queryBuilder, err := sqlSamplesQueryBuilder(filter.Type)
+func (st *pqStorage) FindProfile(ctx context.Context, req *storage.FindProfileRequest) (*pprofProfile.Profile, error) {
+	defer func(t time.Time) {
+		st.logger.Debugw("findProfile", "time", time.Since(t))
+	}(time.Now())
+
+	return st.findProfile(ctx, req)
+}
+
+func (st *pqStorage) findProfile(ctx context.Context, req *storage.FindProfileRequest) (*pprofProfile.Profile, error) {
+	queryBuilder, err := sqlSamplesQueryBuilder(req.Type)
 	if err != nil {
 		return nil, err
 	}
 
 	args := make([]interface{}, 0)
 	whereParts := make([]string, 0)
-	if filter.Service != "" {
-		args = append(args, filter.Service)
+	if req.Service != "" {
+		args = append(args, req.Service)
 		whereParts = append(whereParts, "v.service = $1") // v is for "pprof_profile_labels AS v" in select query
 	}
 
-	if !filter.CreatedAtMin.IsZero() && !filter.CreatedAtMax.IsZero() {
-		args = append(args, filter.CreatedAtMin, filter.CreatedAtMax)
+	if !req.CreatedAtMin.IsZero() && !req.CreatedAtMax.IsZero() {
+		args = append(args, req.CreatedAtMin, req.CreatedAtMax)
 		whereParts = append(whereParts, "p.created_at >= $2 AND p.created_at < $3") // p is for "profiles AS p" in select query
 	}
 
-	for _, label := range filter.Labels {
+	for _, label := range req.Labels {
 		args = append(args, label.Value)
 		whereParts = append(whereParts, fmt.Sprintf("v.labels ->> '%s' = $%d", label.Key, len(args)))
 	}
@@ -235,9 +240,9 @@ func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileF
 	locSet := make(map[int64]*pprofProfile.Location)
 	mapSet := make(map[int64]*pprofProfile.Mapping)
 	funcSet := make(map[int64]*pprofProfile.Function)
-	pb := pprofutil.NewProfileBuilder(filter.Type)
+	pb := pprofutil.NewProfileBuilder(req.Type)
 
-	rs := newSampleRecordsScanner(filter.Type)
+	rs := newSampleRecordsScanner(req.Type)
 	for rows.Next() {
 		err := rs.ScanFrom(rows)
 		if err != nil {
@@ -268,7 +273,7 @@ func (st *pqStorage) getProfile(ctx context.Context, filter *profile.GetProfileF
 	}
 
 	if pb.IsEmpty() {
-		return nil, profile.ErrEmpty
+		return nil, storage.ErrEmpty
 	}
 
 	locIDs := make(pq.Int64Array, 0, len(locSet))

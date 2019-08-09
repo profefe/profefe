@@ -12,11 +12,11 @@ import (
 	"syscall"
 
 	_ "github.com/lib/pq"
-	"github.com/profefe/profefe/cmd/profefe/handler"
-	"github.com/profefe/profefe/cmd/profefe/middleware"
 	"github.com/profefe/profefe/pkg/config"
 	"github.com/profefe/profefe/pkg/log"
-	"github.com/profefe/profefe/pkg/profile"
+	"github.com/profefe/profefe/pkg/middleware"
+	"github.com/profefe/profefe/pkg/profefe"
+	"github.com/profefe/profefe/pkg/storage"
 	pgstorage "github.com/profefe/profefe/pkg/storage/postgres"
 	"github.com/profefe/profefe/version"
 	"golang.org/x/xerrors"
@@ -46,7 +46,7 @@ func main() {
 }
 
 func run(ctx context.Context, logger *log.Logger, conf config.Config) error {
-	var st profile.Storage
+	var st storage.Storage
 	{
 		db, err := sql.Open("postgres", conf.Postgres.ConnString())
 		if err != nil {
@@ -64,11 +64,10 @@ func run(ctx context.Context, logger *log.Logger, conf config.Config) error {
 		}
 	}
 
-	profileRepo := profile.NewRepository(logger, st)
-
 	mux := http.NewServeMux()
-	apiHandler := handler.NewAPIHandler(logger, profileRepo)
-	apiHandler.RegisterRoutes(mux)
+
+	mux.Handle("/api/0/profile", profefe.NewProfileHandler(logger, st))
+	mux.HandleFunc("/api/0/version", profefe.VersionHandler)
 
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)

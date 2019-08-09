@@ -17,6 +17,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/profefe/profefe/pkg/storage"
 
 	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/log"
@@ -85,15 +86,15 @@ func TestPqStorage(t *testing.T) {
 	pp, err := pprofProfile.ParseData(data)
 	require.NoError(t, err)
 
-	err = st.CreateProfile(ctx, profile.CPUProfile, meta, pp)
+	err = st.WriteProfile(ctx, profile.CPUProfile, meta, pp)
 	require.NoError(t, err)
 
-	filter := &profile.GetProfileFilter{
+	req := &storage.FindProfileRequest{
 		Service:      service,
 		Type:         profile.CPUProfile,
 		CreatedAtMin: now,
 	}
-	gotpp, err := st.GetProfile(ctx, filter)
+	gotpp, err := st.FindProfile(ctx, req)
 	require.NoError(t, err)
 
 	assert.Equal(t, pp.PeriodType, gotpp.PeriodType)

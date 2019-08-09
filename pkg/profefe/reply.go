@@ -1,33 +1,14 @@
-package handler
+package profefe
 
 import (
 	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
+
+	"github.com/profefe/profefe/pkg/log"
+	"golang.org/x/xerrors"
 )
-
-type statusError struct {
-	code   int
-	status string
-	cause  error
-}
-
-func (s *statusError) Error() string {
-	return s.status
-}
-
-func (s *statusError) Unwrap() error {
-	return s.cause
-}
-
-func StatusError(code int, msg string, cause error) *statusError {
-	return &statusError{
-		code:   code,
-		status: msg,
-		cause:  cause,
-	}
-}
 
 func ReplyOK(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
@@ -69,5 +50,42 @@ func ReplyError(w http.ResponseWriter, err error) {
 	}
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		io.WriteString(w, `{"code":`+strconv.Itoa(http.StatusInternalServerError)+`,"error":"`+err.Error()+`"}`)
+	}
+}
+
+func HandleErrorHTTP(logger *log.Logger, err error, w http.ResponseWriter, r *http.Request) {
+	if err == nil {
+		return
+	}
+
+	ReplyError(w, err)
+
+	if origErr := xerrors.Unwrap(err); origErr != nil {
+		err = origErr
+	}
+	if err != nil {
+		logger.Errorw("request failed", "url", r.URL.String(), "err", err)
+	}
+}
+
+type statusError struct {
+	code   int
+	status string
+	cause  error
+}
+
+func (s *statusError) Error() string {
+	return s.status
+}
+
+func (s *statusError) Unwrap() error {
+	return s.cause
+}
+
+func StatusError(code int, msg string, cause error) *statusError {
+	return &statusError{
+		code:   code,
+		status: msg,
+		cause:  cause,
 	}
 }
