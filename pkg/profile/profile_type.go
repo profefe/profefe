@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-type ProfileType int
+type ProfileType int8
 
 const (
 	UnknownProfile ProfileType = iota

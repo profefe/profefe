@@ -5,7 +5,6 @@ import (
 	"io"
 	"time"
 
-	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/profile"
 	"golang.org/x/xerrors"
 )
@@ -16,12 +15,12 @@ var (
 )
 
 type Writer interface {
-	WriteProfile(ctx context.Context, ptype profile.ProfileType, meta *profile.ProfileMeta, pp *pprofProfile.Profile) error
+	WriteProfile(ctx context.Context, ptype profile.ProfileType, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error
 }
 
 type Reader interface {
-	GetProfile(ctx context.Context, pid profile.ProfileID) (*pprofProfile.Profile, error)
-	FindProfile(ctx context.Context, req *FindProfileRequest) (*pprofProfile.Profile, error)
+	GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error)
+	FindProfile(ctx context.Context, req *FindProfileRequest) (*profile.ProfileFactory, error)
 }
 
 type Storage interface {
@@ -82,21 +81,16 @@ func (req *WriteProfileRequest) Validate() error {
 	return nil
 }
 
-func WriteProfileFrom(ctx context.Context, r io.Reader, pw Writer, req *WriteProfileRequest) error {
-	pp, err := pprofProfile.Parse(r)
-	if err != nil {
-		return xerrors.Errorf("could not parse profile: %w", err)
-	}
-
+func WriteProfileFrom(ctx context.Context, src io.Reader, pw Writer, req *WriteProfileRequest) error {
+	pf := profile.NewProfileFactoryFrom(src)
 	meta := profile.NewProfileMeta(req.Service, req.InstanceID, req.Labels)
-
-	return pw.WriteProfile(ctx, req.Type, meta, pp)
+	return pw.WriteProfile(ctx, req.Type, meta, pf)
 }
 
-func FindProfileTo(ctx context.Context, w io.Writer, pr Reader, req *FindProfileRequest) error {
-	pp, err := pr.FindProfile(ctx, req)
+func FindProfileTo(ctx context.Context, dst io.Writer, pr Reader, req *FindProfileRequest) error {
+	pf, err := pr.FindProfile(ctx, req)
 	if err != nil {
 		return err
 	}
-	return pp.Write(w)
+	return pf.WriteTo(dst)
 }

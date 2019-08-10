@@ -86,7 +86,9 @@ func TestPqStorage(t *testing.T) {
 	pp, err := pprofProfile.ParseData(data)
 	require.NoError(t, err)
 
-	err = st.WriteProfile(ctx, profile.CPUProfile, meta, pp)
+	pf := profile.NewProfileFactory(pp)
+
+	err = st.WriteProfile(ctx, profile.CPUProfile, meta, pf)
 	require.NoError(t, err)
 
 	req := &storage.FindProfileRequest{
@@ -94,7 +96,10 @@ func TestPqStorage(t *testing.T) {
 		Type:         profile.CPUProfile,
 		CreatedAtMin: now,
 	}
-	gotpp, err := st.FindProfile(ctx, req)
+	gotpf, err := st.FindProfile(ctx, req)
+	require.NoError(t, err)
+
+	gotpp, err := gotpf.Profile()
 	require.NoError(t, err)
 
 	assert.Equal(t, pp.PeriodType, gotpp.PeriodType)

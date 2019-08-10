@@ -2,12 +2,59 @@
 
 
 [[projects]]
+  branch = "master"
+  digest = "1:6716c9fe6333591128e72848f246fc01dc72240e1e64185d8b4e124e7280b35d"
+  name = "github.com/AndreasBriese/bbloom"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "e2d15f34fcf99d5dbb871c820ec73f710fca9815"
+
+[[projects]]
   digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
   pruneopts = "UT"
   revision = "8991bc29aa16c548c550c7ff78260e27b9ab7c73"
   version = "v1.1.1"
+
+[[projects]]
+  digest = "1:6be8582a4f52ba2851d8a039eb9c3a3b90334b2820563d71e97de35580da128e"
+  name = "github.com/dgraph-io/badger"
+  packages = [
+    ".",
+    "options",
+    "pb",
+    "skl",
+    "table",
+    "y",
+  ]
+  pruneopts = "UT"
+  revision = "2fa005c9d4bf695277ab5214c1fbce3735b9562a"
+  version = "v1.6.0"
+
+[[projects]]
+  branch = "master"
+  digest = "1:6e8109ce247a59ab1eeb5330166c12735f6590de99c9647b6162d11518d32c9a"
+  name = "github.com/dgryski/go-farm"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "6a90982ecee230ff6cba02d5bd386acc030be9d3"
+
+[[projects]]
+  digest = "1:6f9339c912bbdda81302633ad7e99a28dfa5a639c864061f1929510a9a64aa74"
+  name = "github.com/dustin/go-humanize"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "9f541cc9db5d55bce703bd99987c9d5cb8eea45e"
+  version = "v1.0.0"
+
+[[projects]]
+  digest = "1:573ca21d3669500ff845bdebee890eb7fc7f0f50c59f2132f2a0c6b03d85086a"
+  name = "github.com/golang/protobuf"
+  packages = ["proto"]
+  pruneopts = "UT"
+  revision = "6c65a5562fc06764971b7c5d05c76c75e84bdbf7"
+  version = "v1.3.2"
 
 [[projects]]
   digest = "1:bdd53b87de8185da386bae179c84d4848854c6870bacacf6a154fe63e2e750f7"
@@ -20,6 +67,36 @@
   pruneopts = "UT"
   revision = "bc6a3c0594130b1e34005880bc600b6d3f49fa7f"
   version = "v1.1.1"
+
+[[projects]]
+  branch = "master"
+  digest = "1:7e8b852581596acce37bcb939a05d7d5ff27156045b50057e659e299c16fc1ca"
+  name = "github.com/mmcloughlin/avo"
+  packages = [
+    "attr",
+    "build",
+    "buildtags",
+    "gotypes",
+    "internal/prnt",
+    "internal/stack",
+    "ir",
+    "operand",
+    "pass",
+    "printer",
+    "reg",
+    "src",
+    "x86",
+  ]
+  pruneopts = "UT"
+  revision = "bb615f61ce85790a1667efc145c66e917cce1a39"
+
+[[projects]]
+  digest = "1:cf31692c14422fa27c83a05292eb5cbe0fb2775972e8f1f8446a71549bd8980b"
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
+  version = "v0.8.1"
 
 [[projects]]
   digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
@@ -83,6 +160,17 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:e0efd295a10a5703f556a97b7f90f9b3a02ee5080b26ee5374d100a6131aea68"
+  name = "golang.org/x/net"
+  packages = [
+    "internal/timeseries",
+    "trace",
+  ]
+  pruneopts = "UT"
+  revision = "ca1201d0de80cfde86cb01aea620983605dfe99b"
+
+[[projects]]
+  branch = "master"
   digest = "1:a17927b3d78603ae6691d5bf8d3d91467a6edd4ca43c9509347e016a54477f96"
   name = "golang.org/x/sys"
   packages = [
@@ -91,6 +179,24 @@
   ]
   pruneopts = "UT"
   revision = "fc8bd948cf46f9c7af0f07d34151ce25fe90e477"
+
+[[projects]]
+  branch = "master"
+  digest = "1:cae808060cdebccfca735739ba810353891a9b665e4b867df150700d91ab2038"
+  name = "golang.org/x/tools"
+  packages = [
+    "go/ast/astutil",
+    "go/gcexportdata",
+    "go/internal/gcimporter",
+    "go/internal/packagesdriver",
+    "go/packages",
+    "go/types/typeutil",
+    "internal/fastwalk",
+    "internal/gopathwalk",
+    "internal/semver",
+  ]
+  pruneopts = "UT"
+  revision = "6d4652c779c4add9e1a69db058dabafddba21c37"
 
 [[projects]]
   branch = "master"
@@ -107,6 +213,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/dgraph-io/badger",
     "github.com/lib/pq",
     "github.com/rs/xid",
     "github.com/stretchr/testify/assert",

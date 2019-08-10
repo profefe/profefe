@@ -5,18 +5,21 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/dgraph-io/badger"
 	_ "github.com/lib/pq"
 	"github.com/profefe/profefe/pkg/config"
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/middleware"
 	"github.com/profefe/profefe/pkg/profefe"
 	"github.com/profefe/profefe/pkg/storage"
+	badgerstorage "github.com/profefe/profefe/pkg/storage/badger"
 	pgstorage "github.com/profefe/profefe/pkg/storage/postgres"
 	"github.com/profefe/profefe/version"
 	"golang.org/x/xerrors"
@@ -46,23 +49,11 @@ func main() {
 }
 
 func run(ctx context.Context, logger *log.Logger, conf config.Config) error {
-	var st storage.Storage
-	{
-		db, err := sql.Open("postgres", conf.Postgres.ConnString())
-		if err != nil {
-			return xerrors.Errorf("could not connect to db: %w", err)
-		}
-		defer db.Close()
-
-		if err := db.Ping(); err != nil {
-			return xerrors.Errorf("could not ping db: %w", err)
-		}
-
-		st, err = pgstorage.New(logger.With("storage", "pg"), db)
-		if err != nil {
-			return xerrors.Errorf("could not create new pg storage: %w", err)
-		}
+	st, closer, err := initBadgerStorage(logger, conf)
+	if err != nil {
+		return err
 	}
+	defer closer.Close()
 
 	mux := http.NewServeMux()
 
@@ -102,4 +93,32 @@ func run(ctx context.Context, logger *log.Logger, conf config.Config) error {
 	defer cancel()
 
 	return server.Shutdown(ctx)
+}
+
+func initBadgerStorage(logger *log.Logger, conf config.Config) (storage.Storage, io.Closer, error) {
+	opt := badger.DefaultOptions(conf.Badger.Dir)
+	db, err := badger.Open(opt)
+	if err != nil {
+		return nil, nil, xerrors.Errorf("could not open db: %w", err)
+	}
+
+	st := badgerstorage.New(logger, db, conf.Badger.ProfileTTL)
+	return st, db, nil
+}
+
+func initPgStorage(logger *log.Logger, conf config.Config) (storage.Storage, io.Closer, error) {
+	db, err := sql.Open("postgres", conf.Postgres.ConnString())
+	if err != nil {
+		return nil, nil, xerrors.Errorf("could not connect to db: %w", err)
+	}
+
+	if err := db.Ping(); err != nil {
+		return nil, nil, xerrors.Errorf("could not ping db: %w", err)
+	}
+
+	st, err := pgstorage.New(logger.With("storage", "pg"), db)
+	if err != nil {
+		return nil, nil, xerrors.Errorf("could not create new pg storage: %w", err)
+	}
+	return st, db, nil
 }

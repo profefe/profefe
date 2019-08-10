@@ -22,3 +22,7 @@
 [[constraint]]
   branch = "master"
   name = "golang.org/x/xerrors"
+
+[[constraint]]
+  name = "github.com/dgraph-io/badger"
+  version = "1.6.0"
