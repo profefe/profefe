@@ -37,14 +37,14 @@ func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 	return &Storage{
 		logger: logger,
 		db:     db,
+		ttl:    ttl,
 	}
 }
 
 func (st *Storage) WriteProfile(ctx context.Context, ptype profile.ProfileType, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error {
 	entries := make([]*badger.Entry, 0, 1+2+len(meta.Labels)) // 1 for profile entry, 2 for general indexes
 
-	pid := profile.NewProfileID()
-	pKey, pVal, err := createProfileKV(pid, meta, pf)
+	pKey, pVal, err := createProfileKV(meta, pf)
 	if err != nil {
 		return xerrors.Errorf("could not create key-value pair for profile: %w", err)
 	}
@@ -54,20 +54,21 @@ func (st *Storage) WriteProfile(ctx context.Context, ptype profile.ProfileType, 
 	entries = append(entries, st.newBadgerEntry(pKey, pVal))
 
 	// add indexes
-	entries = append(entries, st.newBadgerEntry(createIndexKey(serviceIndexID, []byte(meta.Service), pp.TimeNanos, pid), nil))
+	entries = append(entries, st.newBadgerEntry(createIndexKey(serviceIndexID, []byte(meta.Service), pp.TimeNanos, meta.ProfileID), nil))
+
 	{
 		indexVal := append(make([]byte, 0, len(meta.Service)+1), meta.Service...)
 		indexVal = append(indexVal, byte(ptype))
-		entries = append(entries, st.newBadgerEntry(createIndexKey(typeIndexID, indexVal, pp.TimeNanos, pid), nil))
+		entries = append(entries, st.newBadgerEntry(createIndexKey(typeIndexID, indexVal, pp.TimeNanos, meta.ProfileID), nil))
 	}
 
 	for _, label := range meta.Labels {
-		entries = append(entries, st.newBadgerEntry(createIndexKey(labelsIndexID, []byte(meta.Service+label.Key+label.Value), pp.TimeNanos, pid), nil))
+		entries = append(entries, st.newBadgerEntry(createIndexKey(labelsIndexID, []byte(meta.Service+label.Key+label.Value), pp.TimeNanos, meta.ProfileID), nil))
 	}
 
 	return st.db.Update(func(txn *badger.Txn) error {
 		for i := range entries {
-			st.logger.Debugw("writeProfile: set entry", "pid", pid, "pk", entries[i].Key, "expires_at", entries[i].ExpiresAt)
+			st.logger.Debugw("writeProfile: set entry", "pid", meta.ProfileID, "pk", entries[i].Key, "expires_at", entries[i].ExpiresAt)
 			if err := txn.SetEntry(entries[i]); err != nil {
 				return xerrors.Errorf("could not write entry: %w", err)
 			}
@@ -85,7 +86,7 @@ func (st *Storage) newBadgerEntry(key, val []byte) *badger.Entry {
 }
 
 // key is profilePrefix<pid><created-at><instance-id>, value encoded pprof data
-func createProfileKV(pid profile.ProfileID, meta *profile.ProfileMeta, pf *profile.ProfileFactory) ([]byte, []byte, error) {
+func createProfileKV(meta *profile.ProfileMeta, pf *profile.ProfileFactory) ([]byte, []byte, error) {
 	// writeTo parses profile from internal reader if profile data isn't available yet
 	var buf bytes.Buffer
 	if err := pf.WriteTo(&buf); err != nil {
@@ -97,9 +98,9 @@ func createProfileKV(pid profile.ProfileID, meta *profile.ProfileMeta, pf *profi
 		return nil, nil, err
 	}
 
-	key := make([]byte, 0, len(pid)+len(meta.InstanceID)+1+8) // 1 for prefix, 8 for created-at nanos
+	key := make([]byte, 0, len(meta.ProfileID)+len(meta.InstanceID)+1+8) // 1 for prefix, 8 for created-at nanos
 	key = append(key, profilePrefix)
-	key = append(key, pid...)
+	key = append(key, meta.ProfileID...)
 	{
 		tb := make([]byte, 8)
 		binary.BigEndian.PutUint64(tb, uint64(pp.TimeNanos))
@@ -272,7 +273,7 @@ func (st *Storage) FindProfileIDs(ctx context.Context, req *storage.FindProfileR
 		return nil, storage.ErrNotFound
 	}
 
-	return mergeProfileIDs(ids, req), nil
+	return mergeJoinProfileIDs(ids, req), nil
 }
 
 func (st *Storage) scanIndexKeys(indexKey []byte, createdAtMin, createdAtMax time.Time) (keys [][]byte, err error) {
@@ -281,18 +282,18 @@ func (st *Storage) scanIndexKeys(indexKey []byte, createdAtMin, createdAtMax tim
 
 	err = st.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false // we're interested in keys only
-
-		it := txn.NewIterator(opts)
-		defer it.Close()
+		opts.PrefetchValues = false // we're iterating over keys only
 
 		// key to start scan from
 		key := append([]byte{}, indexKey...)
 		key = append(key, createdAtBytes...)
 
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
 		st.logger.Debugw("scanIndexKeys", "key", key)
 
-		for it.Seek(key); isScanIteratorValid(it, indexKey, uint64(createdAtMax.UnixNano())); it.Next() {
+		for it.Seek(key); scanIteratorValid(it, indexKey, createdAtMax.UnixNano()); it.Next() {
 			item := it.Item()
 
 			// check if item's key chunk before the timestamp is equal indexKey
@@ -313,19 +314,20 @@ func (st *Storage) scanIndexKeys(indexKey []byte, createdAtMin, createdAtMax tim
 	return keys, err
 }
 
-func isScanIteratorValid(it *badger.Iterator, prefix []byte, tsEnd uint64) bool {
-	if !it.Valid() || it.Item() == nil {
+func scanIteratorValid(it *badger.Iterator, prefix []byte, tsMax int64) bool {
+	if !it.ValidForPrefix(prefix) {
 		return false
 	}
 
-	tsStartPos := len(it.Item().Key()) - sizeOfProfileID - 8 // 8 is for created-at nanos
-	ts := binary.BigEndian.Uint64(it.Item().Key()[tsStartPos:])
+	// parse created-at from item's key
+	tsPos := len(it.Item().Key()) - sizeOfProfileID - 8 // 8 is for created-at nanos
+	ts := binary.BigEndian.Uint64(it.Item().Key()[tsPos:])
 
-	return it.ValidForPrefix(prefix) && ts <= tsEnd
+	return ts <= uint64(tsMax)
 }
 
 // does merge part of sort-merge join
-func mergeProfileIDs(ids [][]profile.ProfileID, req *storage.FindProfileRequest) (res []profile.ProfileID) {
+func mergeJoinProfileIDs(ids [][]profile.ProfileID, req *storage.FindProfileRequest) (res []profile.ProfileID) {
 	mergedIDs := ids[0]
 
 	if len(ids) > 1 {

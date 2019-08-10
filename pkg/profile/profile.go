@@ -30,6 +30,7 @@ func (iid InstanceID) String() string {
 }
 
 type ProfileMeta struct {
+	ProfileID  ProfileID  `json:"profile_id"`
 	Service    string     `json:"service"`
 	InstanceID InstanceID `json:"instance_id"`
 	Labels     Labels     `json:"labels,omitempty"`
@@ -38,6 +39,7 @@ type ProfileMeta struct {
 
 func NewProfileMeta(service string, iid InstanceID, labels Labels) *ProfileMeta {
 	return &ProfileMeta{
+		ProfileID:  NewProfileID(),
 		Service:    service,
 		InstanceID: iid,
 		Labels:     labels,
