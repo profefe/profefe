@@ -15,20 +15,24 @@ import (
 	"golang.org/x/xerrors"
 )
 
-type pqStorage struct {
+// DEPRECATED
+// The implementation of storage on top of PostgreSQL is too inefficient and complex.
+// It's left as is (likely incompatible with pkg/storage.Storage interface) only for references.
+// See the description of https://github.com/profefe/profefe/pull/28 for "deprecation" background.
+type Storage struct {
 	logger *log.Logger
 	db     *sql.DB
 }
 
-func New(logger *log.Logger, db *sql.DB) (storage.Storage, error) {
-	st := &pqStorage{
+func New(logger *log.Logger, db *sql.DB) (*Storage, error) {
+	st := &Storage{
 		logger: logger,
 		db:     db,
 	}
 	return st, nil
 }
 
-func (st *pqStorage) WriteProfile(ctx context.Context, ptype profile.ProfileType, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error {
+func (st *Storage) WriteProfile(ctx context.Context, ptype profile.ProfileType, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error {
 	pp, err := pf.Profile()
 	if err != nil {
 		return err
@@ -98,7 +102,7 @@ func (st *pqStorage) WriteProfile(ctx context.Context, ptype profile.ProfileType
 	return nil
 }
 
-func (st *pqStorage) insertProfLocations(ctx context.Context, tx *sql.Tx, locs []*pprofProfile.Location) (locIDs []int64, err error) {
+func (st *Storage) insertProfLocations(ctx context.Context, tx *sql.Tx, locs []*pprofProfile.Location) (locIDs []int64, err error) {
 	err = copyLocations(ctx, st.logger, tx, locs)
 	if err != nil {
 		return nil, xerrors.Errorf("could not copy locations: %w", err)
@@ -138,7 +142,7 @@ func (st *pqStorage) insertProfLocations(ctx context.Context, tx *sql.Tx, locs [
 	return locIDs, rows.Err()
 }
 
-func (st *pqStorage) insertProfSamples(ctx context.Context, tx *sql.Tx, query string, profID int64, locIDs pq.Int64Array, samples []*pprofProfile.Sample) error {
+func (st *Storage) insertProfSamples(ctx context.Context, tx *sql.Tx, query string, profID int64, locIDs pq.Int64Array, samples []*pprofProfile.Sample) error {
 	copyStmt, err := tx.PrepareContext(ctx, query)
 	if err != nil {
 		return xerrors.Errorf("could not prepare statement: %w", err)
@@ -198,11 +202,11 @@ func getSampleLabels(sample *pprofProfile.Sample) (labels SampleLabels) {
 	return labels
 }
 
-func (st *pqStorage) GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error) {
+func (st *Storage) GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error) {
 	panic("implement me")
 }
 
-func (st *pqStorage) FindProfile(ctx context.Context, req *storage.FindProfileRequest) (*profile.ProfileFactory, error) {
+func (st *Storage) FindProfile(ctx context.Context, req *storage.FindProfileRequest) (*profile.ProfileFactory, error) {
 	defer func(t time.Time) {
 		st.logger.Debugw("findProfile", "time", time.Since(t))
 	}(time.Now())
@@ -214,7 +218,7 @@ func (st *pqStorage) FindProfile(ctx context.Context, req *storage.FindProfileRe
 	return profile.NewProfileFactory(pp), nil
 }
 
-func (st *pqStorage) findProfile(ctx context.Context, req *storage.FindProfileRequest) (*pprofProfile.Profile, error) {
+func (st *Storage) findProfile(ctx context.Context, req *storage.FindProfileRequest) (*pprofProfile.Profile, error) {
 	queryBuilder, err := sqlSamplesQueryBuilder(req.Type)
 	if err != nil {
 		return nil, err
@@ -364,7 +368,7 @@ func (st *pqStorage) findProfile(ctx context.Context, req *storage.FindProfileRe
 	return pb.Build()
 }
 
-//func (st *pqStorage) DeleteProfile(ctx context.Context, prof *profile.Profile) error {
+//func (st *Storage) DeleteProfile(ctx context.Context, prof *profile.Profile) error {
 //	panic("implement me")
 //}
 

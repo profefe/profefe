@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"flag"
 	"fmt"
 	"io"
@@ -19,8 +18,7 @@ import (
 	"github.com/profefe/profefe/pkg/middleware"
 	"github.com/profefe/profefe/pkg/profefe"
 	"github.com/profefe/profefe/pkg/storage"
-	badgerstorage "github.com/profefe/profefe/pkg/storage/badger"
-	pgstorage "github.com/profefe/profefe/pkg/storage/postgres"
+	badgerStorage "github.com/profefe/profefe/pkg/storage/badger"
 	"github.com/profefe/profefe/version"
 	"golang.org/x/xerrors"
 )
@@ -102,10 +100,11 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (storage.Storage,
 		return nil, nil, xerrors.Errorf("could not open db: %w", err)
 	}
 
-	st := badgerstorage.New(logger, db, conf.Badger.ProfileTTL)
+	st := badgerStorage.New(logger, db, conf.Badger.ProfileTTL)
 	return st, db, nil
 }
 
+/*
 func initPgStorage(logger *log.Logger, conf config.Config) (storage.Storage, io.Closer, error) {
 	db, err := sql.Open("postgres", conf.Postgres.ConnString())
 	if err != nil {
@@ -122,3 +121,4 @@ func initPgStorage(logger *log.Logger, conf config.Config) (storage.Storage, io.
 	}
 	return st, db, nil
 }
+*/
