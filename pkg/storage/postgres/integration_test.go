@@ -3,7 +3,6 @@
 package postgres_test
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"flag"
@@ -11,12 +10,13 @@ import (
 	"io/ioutil"
 	stdlog "log"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/profefe/profefe/pkg/pprofutil"
+	"github.com/profefe/profefe/pkg/storage"
 
 	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/log"
@@ -62,7 +62,7 @@ func runTestMain(m *testing.M) int {
 	return m.Run()
 }
 
-func TestPqStorage(t *testing.T) {
+func TestStorage(t *testing.T) {
 	TruncateDB(t, ts.db)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -85,44 +85,24 @@ func TestPqStorage(t *testing.T) {
 	pp, err := pprofProfile.ParseData(data)
 	require.NoError(t, err)
 
-	err = st.CreateProfile(ctx, profile.CPUProfile, meta, pp)
+	pf := profile.NewProfileFactory(pp)
+
+	err = st.WriteProfile(ctx, profile.CPUProfile, meta, pf)
 	require.NoError(t, err)
 
-	filter := &profile.GetProfileFilter{
+	req := &storage.FindProfileRequest{
 		Service:      service,
 		Type:         profile.CPUProfile,
 		CreatedAtMin: now,
 	}
-	gotpp, err := st.GetProfile(ctx, filter)
+	gotpf, err := st.FindProfile(ctx, req)
+	require.NoError(t, err)
+
+	gotpp, err := gotpf.Profile()
 	require.NoError(t, err)
 
 	assert.Equal(t, pp.PeriodType, gotpp.PeriodType)
-
-	want := getProfileString(t, pp)
-	got := getProfileString(t, gotpp)
-	//t.Logf("got\n%s\n===\nwant\n%s\n", want, got)
-	assert.Equal(t, want, got)
-}
-
-// returns a string representation of a profile that we can use to check profiles are equal
-func getProfileString(t *testing.T, pp *pprofProfile.Profile) string {
-	f, err := ioutil.TempFile("", "")
-	require.NoError(t, err)
-	defer os.Remove(f.Name())
-
-	pp.Compact().WriteUncompressed(f)
-
-	var buf bytes.Buffer
-	cmd := exec.Command("go", "tool", "pprof", "-top", f.Name())
-	cmd.Stdout = &buf
-	require.NoError(t, cmd.Run())
-
-	s := buf.String()
-	// strip profile header
-	if n := strings.Index(s, "Showing nodes"); n > 0 {
-		return s[n:]
-	}
-	return s
+	assert.True(t, pprofutil.ProfilesEqual(pp, gotpp))
 }
 
 func TruncateDB(tb testing.TB, db *sql.DB) {

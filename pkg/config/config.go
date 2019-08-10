@@ -18,6 +18,7 @@ type Config struct {
 	ExitTimeout time.Duration
 	Logger      log.Config
 	Postgres    PostgresConfig
+	Badger      BadgerConfig
 }
 
 func (conf *Config) RegisterFlags(f *flag.FlagSet) {
@@ -26,6 +27,7 @@ func (conf *Config) RegisterFlags(f *flag.FlagSet) {
 
 	conf.Logger.RegisterFlags(f)
 	conf.Postgres.RegisterFlags(f)
+	conf.Badger.RegisterFlags(f)
 }
 
 type PostgresConfig struct {
@@ -56,4 +58,14 @@ func (conf *PostgresConfig) ConnString() string {
 		conf.Database,
 		conf.SSLMode,
 	)
+}
+
+type BadgerConfig struct {
+	Dir        string
+	ProfileTTL time.Duration
+}
+
+func (conf *BadgerConfig) RegisterFlags(f *flag.FlagSet) {
+	f.StringVar(&conf.Dir, "badger.dir", "data", "badger data dir")
+	f.DurationVar(&conf.ProfileTTL, "badger.profile-ttl", 3*24*time.Hour, "badger profile data ttl")
 }

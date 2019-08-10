@@ -1,10 +1,19 @@
 package profile
 
 import (
+	"io"
 	"time"
 
+	"github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/rs/xid"
+	"golang.org/x/xerrors"
 )
+
+type ProfileID []byte
+
+func NewProfileID() ProfileID {
+	return ProfileID(xid.New().Bytes())
+}
 
 type InstanceID string
 
@@ -21,6 +30,7 @@ func (iid InstanceID) String() string {
 }
 
 type ProfileMeta struct {
+	ProfileID  ProfileID  `json:"profile_id"`
 	Service    string     `json:"service"`
 	InstanceID InstanceID `json:"instance_id"`
 	Labels     Labels     `json:"labels,omitempty"`
@@ -29,9 +39,50 @@ type ProfileMeta struct {
 
 func NewProfileMeta(service string, iid InstanceID, labels Labels) *ProfileMeta {
 	return &ProfileMeta{
+		ProfileID:  NewProfileID(),
 		Service:    service,
 		InstanceID: iid,
 		Labels:     labels,
 		CreatedAt:  time.Now().UTC(),
 	}
+}
+
+type ProfileFactory struct {
+	pp *profile.Profile
+	r  io.Reader
+}
+
+func NewProfileFactory(pp *profile.Profile) *ProfileFactory {
+	return &ProfileFactory{pp: pp}
+}
+
+func NewProfileFactoryFrom(r io.Reader) *ProfileFactory {
+	return &ProfileFactory{r: r}
+}
+
+func (p *ProfileFactory) Profile() (*profile.Profile, error) {
+	if p.pp != nil {
+		return p.pp, nil
+	}
+	err := p.parse(p.r)
+	return p.pp, err
+}
+
+func (p *ProfileFactory) WriteTo(dst io.Writer) error {
+	if p.pp != nil {
+		return p.pp.Write(dst)
+	}
+	return p.parse(io.TeeReader(p.r, dst))
+}
+
+func (p *ProfileFactory) parse(r io.Reader) (err error) {
+	if p.pp != nil {
+		return nil
+	}
+	// TODO(narqo): check if profile.Profile.Compact make any sense here
+	p.pp, err = profile.Parse(r)
+	if err != nil {
+		err = xerrors.Errorf("could not parse profile: %w", err)
+	}
+	return err
 }
