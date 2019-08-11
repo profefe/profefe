@@ -32,7 +32,7 @@ func (h *ProfileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		err = h.HandleCreateProfile(w, r)
 	case http.MethodGet:
-		err = h.HandlerGetProfile(w, r)
+		err = h.HandleFindProfile(w, r)
 	}
 
 	HandleErrorHTTP(h.logger, err, w, r)
@@ -54,7 +54,7 @@ func (h *ProfileHandler) HandleCreateProfile(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
-func (h *ProfileHandler) HandlerGetProfile(w http.ResponseWriter, r *http.Request) error {
+func (h *ProfileHandler) HandleFindProfile(w http.ResponseWriter, r *http.Request) error {
 	req := &storage.FindProfilesParams{}
 	if err := parseFindProfileParams(req, r); err != nil {
 		return err

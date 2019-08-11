@@ -6,6 +6,7 @@ import (
 
 	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/log"
+	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
 	"golang.org/x/xerrors"
 )
@@ -20,6 +21,10 @@ func NewQuerier(logger *log.Logger, pr storage.Reader) *Querier {
 		pr:     pr,
 		logger: logger,
 	}
+}
+
+func (q *Querier) GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error) {
+	return q.pr.GetProfile(ctx, pid)
 }
 
 func (q *Querier) FindProfileTo(ctx context.Context, dst io.Writer, req *storage.FindProfilesParams) error {
