@@ -40,32 +40,30 @@ annotating metrics with labels.
 
 *profefe* consists of:
 
-- Agent — a library that must be integrated into the project. Its goal is to scrap pprof data from the running instance and send it to the collector.
-- Collector — a service that receives profiles from the agent, stores it in the persistent storage, and provides an API for querying profile samples.
+- Collector — a service that receives profiles from the agent, stores them in the persistent storage, and provides an API for querying profiles.
+- Agent — an optional library that can be integrated into your project. Its goal is to scrap pprof data from the running instance periodically and send it to the collector.
+
+*Note*: it's tempting to split collector into two separate parts (collector and querier) to inctease scalability. This
+is the subject of future research.
 
 ## Quickstart
 
 **TODO add quickstart**
 
-Collector requires a storage to keep the profiling data. Currently, the only supported storage is PostgreSQL.
-
-The project includes `docker-compose.yml` that starts PostgreSQL database with the proper schema:
-
-```
-> docker-compose up -d -V postgres
-```
+Collector requires a storage to keep the profiling data. Currently, the only supported storage is [Badger](https://github.com/dgraph-io/badger).
 
 To build and start the collector, run:
 
 ```
 > make
 
-> ./BUILD/profefe -log.level debug -pg.database profiles -pg.password postgres
+> ./BUILD/profefe -log.level debug -badger.dir /tmp/profefe
 
 2019-06-06T00:07:58.499+0200    info    profefe/main.go:86    server is running    {"addr": ":10100"}
 ```
 
-The project includes a fork of [Stackdriver's example application][5], modified to send profiles to the local collector.
+The project includes a fork of [Stackdriver's example application][5], modified to use profefe's agent and send profiles
+to the local collector.
 To start the example, in a separate terminal window run:
 
 ```
@@ -80,7 +78,7 @@ send profile: http://localhost:10100/api/0/profile?instance_id=87cdc549c84507f24
 send profile: http://localhost:10100/api/0/profile?instance_id=87cdc549c84507f24944793b1ddbdc34&labels=version%3D1.0.0&service=hotapp-service&type=cpu
 ```
 
-## Querying
+## Querying Profiles
 
 Querying the profiling data is an HTTP call to collector's `/api/0/profile`:
 
