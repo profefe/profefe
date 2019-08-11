@@ -123,10 +123,6 @@ GET /api/0/profile?service=<service>&type=[cpu|heap]&from=<created_from>&to=<cre
 
 ## Feedback
 
-The motivation behind the project showed in the "Why do we need it?" section pretty much describes the state
-of development in one of my ex-employers company, but I still have [some][tw1] [doubts][tw2] on
-how much a project like this is needed for other people.
-
 The feedback and contribution are always welcome.
 
 ## Further reading
