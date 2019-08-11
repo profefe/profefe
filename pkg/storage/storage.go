@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"io"
 	"time"
 
 	"github.com/profefe/profefe/pkg/profile"
@@ -15,20 +14,16 @@ var (
 )
 
 type Writer interface {
-	WriteProfile(ctx context.Context, ptype profile.ProfileType, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error
+	WriteProfile(ctx context.Context, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error
 }
 
 type Reader interface {
 	GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error)
-	FindProfile(ctx context.Context, req *FindProfileRequest) (*profile.ProfileFactory, error)
+	FindProfiles(ctx context.Context, params *FindProfilesParams) ([]*profile.ProfileFactory, error)
+	FindProfileIDs(ctx context.Context, params *FindProfilesParams) ([]profile.ProfileID, error)
 }
 
-type Storage interface {
-	Writer
-	Reader
-}
-
-type FindProfileRequest struct {
+type FindProfilesParams struct {
 	Service      string
 	Type         profile.ProfileType
 	Labels       profile.Labels
@@ -37,7 +32,7 @@ type FindProfileRequest struct {
 	Limit        int
 }
 
-func (filter *FindProfileRequest) Validate() error {
+func (filter *FindProfilesParams) Validate() error {
 	if filter == nil {
 		return xerrors.New("nil request")
 	}
@@ -55,42 +50,4 @@ func (filter *FindProfileRequest) Validate() error {
 		return xerrors.Errorf("createdAt time min after max: filter %v", filter)
 	}
 	return nil
-}
-
-type WriteProfileRequest struct {
-	Service    string
-	InstanceID profile.InstanceID
-	Type       profile.ProfileType
-	Labels     profile.Labels
-}
-
-func (req *WriteProfileRequest) Validate() error {
-	if req == nil {
-		return xerrors.New("nil request")
-	}
-
-	if req.Service == "" {
-		return xerrors.Errorf("service empty: req %v", req)
-	}
-	if req.InstanceID.IsNil() {
-		return xerrors.Errorf("instance_id empty: req: %v", req)
-	}
-	if req.Type == profile.UnknownProfile {
-		return xerrors.Errorf("unknown profile type %s: req %v", req.Type, req)
-	}
-	return nil
-}
-
-func WriteProfileFrom(ctx context.Context, src io.Reader, pw Writer, req *WriteProfileRequest) error {
-	pf := profile.NewProfileFactoryFrom(src)
-	meta := profile.NewProfileMeta(req.Service, req.InstanceID, req.Labels)
-	return pw.WriteProfile(ctx, req.Type, meta, pf)
-}
-
-func FindProfileTo(ctx context.Context, dst io.Writer, pr Reader, req *FindProfileRequest) error {
-	pf, err := pr.FindProfile(ctx, req)
-	if err != nil {
-		return err
-	}
-	return pf.WriteTo(dst)
 }

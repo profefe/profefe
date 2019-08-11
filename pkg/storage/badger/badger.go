@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger"
-	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
@@ -31,7 +30,8 @@ type Storage struct {
 	ttl    time.Duration
 }
 
-var _ storage.Storage = (*Storage)(nil)
+var _ storage.Reader = (*Storage)(nil)
+var _ storage.Writer = (*Storage)(nil)
 
 func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 	return &Storage{
@@ -41,7 +41,7 @@ func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 	}
 }
 
-func (st *Storage) WriteProfile(ctx context.Context, ptype profile.ProfileType, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error {
+func (st *Storage) WriteProfile(ctx context.Context, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error {
 	entries := make([]*badger.Entry, 0, 1+2+len(meta.Labels)) // 1 for profile entry, 2 for general indexes
 
 	pKey, pVal, err := createProfileKV(meta, pf)
@@ -58,7 +58,7 @@ func (st *Storage) WriteProfile(ctx context.Context, ptype profile.ProfileType, 
 
 	{
 		indexVal := append(make([]byte, 0, len(meta.Service)+1), meta.Service...)
-		indexVal = append(indexVal, byte(ptype))
+		indexVal = append(indexVal, byte(meta.Type))
 		entries = append(entries, st.newBadgerEntry(createIndexKey(typeIndexID, indexVal, pp.TimeNanos, meta.ProfileID), nil))
 	}
 
@@ -185,67 +185,40 @@ func (st *Storage) getProfiles(ctx context.Context, pids []profile.ProfileID) ([
 	return ppf, err
 }
 
-func (st *Storage) FindProfile(ctx context.Context, req *storage.FindProfileRequest) (*profile.ProfileFactory, error) {
-	pids, err := st.FindProfileIDs(ctx, req)
+func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]*profile.ProfileFactory, error) {
+	pids, err := st.FindProfileIDs(ctx, params)
 	if err != nil {
 		return nil, err
 	}
-
-	ppf, err := st.getProfiles(ctx, pids)
-	if err != nil {
-		return nil, err
-	}
-
-	pps := make([]*pprofProfile.Profile, len(ppf))
-	for i, pf := range ppf {
-		pps[i], err = pf.Profile()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	pp, err := pprofProfile.Merge(pps)
-	if err != nil {
-		return nil, xerrors.Errorf("could not merge %d profiles: %w", len(ppf), err)
-	}
-	return profile.NewProfileFactory(pp), nil
-}
-
-func (st *Storage) FindProfiles(ctx context.Context, req *storage.FindProfileRequest) ([]*profile.ProfileFactory, error) {
-	pids, err := st.FindProfileIDs(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
 	return st.getProfiles(ctx, pids)
 }
 
-func (st *Storage) FindProfileIDs(ctx context.Context, req *storage.FindProfileRequest) ([]profile.ProfileID, error) {
-	if req.Service == "" {
+func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfilesParams) ([]profile.ProfileID, error) {
+	if params.Service == "" {
 		return nil, xerrors.New("empty service")
 	}
 
 	indexesToScan := make([][]byte, 0, 1)
 	{
 		indexKey := make([]byte, 0, 64)
-		if req.Type != profile.UnknownProfile {
+		if params.Type != profile.UnknownProfile {
 			// by-service-type
 			indexKey = append(indexKey, typeIndexID)
-			indexKey = append(indexKey, req.Service...)
-			indexKey = append(indexKey, byte(req.Type))
+			indexKey = append(indexKey, params.Service...)
+			indexKey = append(indexKey, byte(params.Type))
 		} else {
 			// by-service
 			indexKey = append(indexKey, serviceIndexID)
-			indexKey = append(indexKey, req.Service...)
+			indexKey = append(indexKey, params.Service...)
 		}
 
 		indexesToScan = append(indexesToScan, indexKey)
 
 		// by-service-type-labels
-		for _, label := range req.Labels {
-			indexKey := make([]byte, 0, 1+len(req.Service)+len(label.Key)+len(label.Value))
+		for _, label := range params.Labels {
+			indexKey := make([]byte, 0, 1+len(params.Service)+len(label.Key)+len(label.Value))
 			indexKey = append(indexKey, labelsIndexID)
-			indexKey = append(indexKey, req.Service...)
+			indexKey = append(indexKey, params.Service...)
 			indexKey = append(indexKey, label.Key...)
 			indexKey = append(indexKey, label.Value...)
 			indexesToScan = append(indexesToScan, indexKey)
@@ -256,7 +229,7 @@ func (st *Storage) FindProfileIDs(ctx context.Context, req *storage.FindProfileR
 
 	// scan prepared indexes
 	for i, s := range indexesToScan {
-		keys, err := st.scanIndexKeys(s, req.CreatedAtMin, req.CreatedAtMax)
+		keys, err := st.scanIndexKeys(s, params.CreatedAtMin, params.CreatedAtMax)
 		if err != nil {
 			return nil, err
 		}
@@ -273,7 +246,7 @@ func (st *Storage) FindProfileIDs(ctx context.Context, req *storage.FindProfileR
 		return nil, storage.ErrNotFound
 	}
 
-	return mergeJoinProfileIDs(ids, req), nil
+	return mergeJoinProfileIDs(ids, params), nil
 }
 
 func (st *Storage) scanIndexKeys(indexKey []byte, createdAtMin, createdAtMax time.Time) (keys [][]byte, err error) {
@@ -327,7 +300,7 @@ func scanIteratorValid(it *badger.Iterator, prefix []byte, tsMax int64) bool {
 }
 
 // does merge part of sort-merge join
-func mergeJoinProfileIDs(ids [][]profile.ProfileID, req *storage.FindProfileRequest) (res []profile.ProfileID) {
+func mergeJoinProfileIDs(ids [][]profile.ProfileID, params *storage.FindProfilesParams) (res []profile.ProfileID) {
 	mergedIDs := ids[0]
 
 	if len(ids) > 1 {
@@ -353,8 +326,8 @@ func mergeJoinProfileIDs(ids [][]profile.ProfileID, req *storage.FindProfileRequ
 	}
 
 	// by this point the order of ids in mergedIDs is reversed, e.g. badger uses ASC
-	if req.Limit > 0 && len(mergedIDs) > req.Limit {
-		mergedIDs = mergedIDs[len(mergedIDs)-req.Limit:]
+	if params.Limit > 0 && len(mergedIDs) > params.Limit {
+		mergedIDs = mergedIDs[len(mergedIDs)-params.Limit:]
 	}
 
 	// reverse ids

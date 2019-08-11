@@ -17,7 +17,6 @@ import (
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/middleware"
 	"github.com/profefe/profefe/pkg/profefe"
-	"github.com/profefe/profefe/pkg/storage"
 	badgerStorage "github.com/profefe/profefe/pkg/storage/badger"
 	"github.com/profefe/profefe/version"
 	"golang.org/x/xerrors"
@@ -53,9 +52,12 @@ func run(ctx context.Context, logger *log.Logger, conf config.Config) error {
 	}
 	defer closer.Close()
 
+	profilesQuerier := profefe.NewQuerier(logger, st)
+	profilesCollector := profefe.NewCollector(logger, st)
+
 	mux := http.NewServeMux()
 
-	mux.Handle("/api/0/profile", profefe.NewProfileHandler(logger, st))
+	mux.Handle("/api/0/profile", profefe.NewProfileHandler(logger, profilesCollector, profilesQuerier))
 	mux.HandleFunc("/api/0/version", profefe.VersionHandler)
 
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -93,7 +95,7 @@ func run(ctx context.Context, logger *log.Logger, conf config.Config) error {
 	return server.Shutdown(ctx)
 }
 
-func initBadgerStorage(logger *log.Logger, conf config.Config) (storage.Storage, io.Closer, error) {
+func initBadgerStorage(logger *log.Logger, conf config.Config) (*badgerStorage.Storage, io.Closer, error) {
 	opt := badger.DefaultOptions(conf.Badger.Dir)
 	db, err := badger.Open(opt)
 	if err != nil {

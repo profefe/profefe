@@ -30,17 +30,19 @@ func (iid InstanceID) String() string {
 }
 
 type ProfileMeta struct {
-	ProfileID  ProfileID  `json:"profile_id"`
-	Service    string     `json:"service"`
-	InstanceID InstanceID `json:"instance_id"`
-	Labels     Labels     `json:"labels,omitempty"`
-	CreatedAt  time.Time  `json:"created_at,omitempty"`
+	ProfileID  ProfileID   `json:"profile_id"`
+	Service    string      `json:"service"`
+	Type       ProfileType `json:"type"`
+	InstanceID InstanceID  `json:"instance_id"`
+	Labels     Labels      `json:"labels,omitempty"`
+	CreatedAt  time.Time   `json:"created_at,omitempty"`
 }
 
-func NewProfileMeta(service string, iid InstanceID, labels Labels) *ProfileMeta {
+func NewProfileMeta(service string, ptyp ProfileType, iid InstanceID, labels Labels) *ProfileMeta {
 	return &ProfileMeta{
 		ProfileID:  NewProfileID(),
 		Service:    service,
+		Type:       ptyp,
 		InstanceID: iid,
 		Labels:     labels,
 		CreatedAt:  time.Now().UTC(),
