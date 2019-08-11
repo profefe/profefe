@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/profefe/profefe.svg?branch=master)](https://travis-ci.org/profefe/profefe)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/profefe/profefe/master/LICENSE)
 
-*profefe* allows to continuously collect profiling data from a running Go service and provides an API for querying
+*profefe* continuously collects profiling data from a running Go service and provides an API for querying
 the profiling samples base on metadata associated with the service.
 
 ---
@@ -12,7 +12,7 @@ the profiling samples base on metadata associated with the service.
 
 ---
 
-## Why do we need it?
+## Why Continues Profiling?
 
 Profiling a single instance of a running Go service [is very easy][1]: one adds `net/http/pprof` to the list of
 imports and a "magical" `/debug/pprof/` route is registered to the services' default HTTP server.
@@ -78,9 +78,9 @@ send profile: http://localhost:10100/api/0/profile?instance_id=87cdc549c84507f24
 send profile: http://localhost:10100/api/0/profile?instance_id=87cdc549c84507f24944793b1ddbdc34&labels=version%3D1.0.0&service=hotapp-service&type=cpu
 ```
 
-## Querying Profiles
+### Querying Profiles
 
-Querying the profiling data is an HTTP call to collector's `/api/0/profile`:
+Querying the profiling data is an HTTP call to collector's `/api/0/profile` endpoint:
 
 ```
 > go tool pprof 'http://localhost:10100/api/0/profile?service=hotapp-service&type=cpu&from=2019-05-30T11:49:00&to=2019-05-30T12:49:00&labels=version=1.0.0'
@@ -106,24 +106,34 @@ Showing top 10 nodes out of 12
          0     0% 99.15%     1020ms  2.35%  runtime.mstart
 ```
 
-## API
+## HTTP API
 
-Save pprof data:
+### Save pprof data
 
 ```
 POST /api/0/profile?service=<service>&instance_id=<iid>&type=[cpu|heap]&labels=<key=value,key=value>
 body pprof.pb.gz
 ```
 
-Query pprof data:
+- `service` — service name (string)
+- `instance_id` — an identifier of running instance (string) (*TODO: do we need iid?*)
+- `type` — profile type (cpu, heap, block, or mutex)
+- `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
+
+### Query pprof data
 
 ```
 GET /api/0/profile?service=<service>&type=[cpu|heap]&from=<created_from>&to=<created_to>&labels=<key=value,key=value>
 ```
 
+- `service` — service name
+- `type` — profile type
+- `from`, `to` — a time window between which pprof data was collected
+- `labels` — a set of key-value pairs
+
 ## Feedback
 
-The feedback and contribution are always welcome.
+The feedback and contribution are very welcome.
 
 ## Further reading
 
