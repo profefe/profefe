@@ -7,20 +7,21 @@ import (
 	"time"
 
 	"github.com/profefe/profefe/pkg/log"
-	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
 	"golang.org/x/xerrors"
 )
 
 type ProfileHandler struct {
-	logger *log.Logger
-	st     storage.Storage
+	logger    *log.Logger
+	collector *Collector
+	querier   *Querier
 }
 
-func NewProfileHandler(logger *log.Logger, st storage.Storage) *ProfileHandler {
+func NewProfileHandler(logger *log.Logger, collector *Collector, querier *Querier) *ProfileHandler {
 	return &ProfileHandler{
-		logger: logger,
-		st:     st,
+		logger:    logger,
+		collector: collector,
+		querier:   querier,
 	}
 }
 
@@ -38,36 +39,12 @@ func (h *ProfileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProfileHandler) HandleCreateProfile(w http.ResponseWriter, r *http.Request) error {
-	q := r.URL.Query()
-	req := &storage.WriteProfileRequest{
-		Service: q.Get("service"),
-		Type:    profile.UnknownProfile,
-		Labels:  nil,
-	}
-
-	iid, err := getInstanceID(q)
-	if err != nil {
+	req := &WriteProfileRequest{}
+	if err := req.UnmarshalURL(r.URL.Query()); err != nil {
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %v", err), nil)
 	}
-	req.InstanceID = iid
 
-	ptype, err := getProfileType(q)
-	if err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %v", err), nil)
-	}
-	req.Type = ptype
-
-	labels, err := getLabels(q)
-	if err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %v", err), nil)
-	}
-	req.Labels = labels
-
-	if err := req.Validate(); err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %v", err), err)
-	}
-
-	err = storage.WriteProfileFrom(r.Context(), r.Body, h.st, req)
+	err := h.collector.CollectProfileFrom(r.Context(), r.Body, req)
 	if err != nil {
 		return StatusError(http.StatusInternalServerError, "failed to create profile", err)
 	}
@@ -78,8 +55,8 @@ func (h *ProfileHandler) HandleCreateProfile(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *ProfileHandler) HandlerGetProfile(w http.ResponseWriter, r *http.Request) error {
-	req := &storage.FindProfileRequest{}
-	if err := readFindProfileRequest(req, r); err != nil {
+	req := &storage.FindProfilesParams{}
+	if err := parseFindProfileParams(req, r); err != nil {
 		return err
 	}
 
@@ -90,19 +67,18 @@ func (h *ProfileHandler) HandlerGetProfile(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, "profile"))
 
-	err := storage.FindProfileTo(r.Context(), w, h.st, req)
+	err := h.querier.FindProfileTo(r.Context(), w, req)
 	if err == storage.ErrNotFound {
 		return StatusError(http.StatusNotFound, "nothing found", nil)
 	} else if err == storage.ErrEmpty {
 		return StatusError(http.StatusNoContent, "profile empty", nil)
 	}
-
 	return err
 }
 
-func readFindProfileRequest(in *storage.FindProfileRequest, r *http.Request) (err error) {
+func parseFindProfileParams(in *storage.FindProfilesParams, r *http.Request) (err error) {
 	if in == nil {
-		return xerrors.New("readGetProfileRequest: nil request receiver")
+		return xerrors.New("parseFindProfileParams: nil request receiver")
 	}
 
 	q := r.URL.Query()

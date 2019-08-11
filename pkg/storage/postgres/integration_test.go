@@ -76,6 +76,7 @@ func TestStorage(t *testing.T) {
 	service := fmt.Sprintf("test-service-%s", iid)
 	meta := &profile.ProfileMeta{
 		Service:    service,
+		Type:       profile.CPUProfile,
 		InstanceID: iid,
 		Labels:     profile.Labels{{"key1", "val2"}},
 	}
@@ -87,10 +88,10 @@ func TestStorage(t *testing.T) {
 
 	pf := profile.NewProfileFactory(pp)
 
-	err = st.WriteProfile(ctx, profile.CPUProfile, meta, pf)
+	err = st.WriteProfile(ctx, meta, pf)
 	require.NoError(t, err)
 
-	req := &storage.FindProfileRequest{
+	req := &storage.FindProfilesParams{
 		Service:      service,
 		Type:         profile.CPUProfile,
 		CreatedAtMin: now,

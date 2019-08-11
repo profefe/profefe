@@ -32,13 +32,13 @@ func New(logger *log.Logger, db *sql.DB) (*Storage, error) {
 	return st, nil
 }
 
-func (st *Storage) WriteProfile(ctx context.Context, ptype profile.ProfileType, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error {
+func (st *Storage) WriteProfile(ctx context.Context, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error {
 	pp, err := pf.Profile()
 	if err != nil {
 		return err
 	}
 
-	queryBuilder, err := sqlSamplesQueryBuilder(ptype)
+	queryBuilder, err := sqlSamplesQueryBuilder(meta.Type)
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (st *Storage) WriteProfile(ctx context.Context, ptype profile.ProfileType, 
 		sqlInsertProfiles,
 		time.Unix(0, pp.TimeNanos),
 		meta.CreatedAt,
-		int(ptype),
+		int(meta.Type),
 		pp.Period,
 		labelsID,
 	).Scan(&profID)
@@ -206,7 +206,7 @@ func (st *Storage) GetProfile(ctx context.Context, pid profile.ProfileID) (*prof
 	panic("implement me")
 }
 
-func (st *Storage) FindProfile(ctx context.Context, req *storage.FindProfileRequest) (*profile.ProfileFactory, error) {
+func (st *Storage) FindProfile(ctx context.Context, req *storage.FindProfilesParams) (*profile.ProfileFactory, error) {
 	defer func(t time.Time) {
 		st.logger.Debugw("findProfile", "time", time.Since(t))
 	}(time.Now())
@@ -218,7 +218,7 @@ func (st *Storage) FindProfile(ctx context.Context, req *storage.FindProfileRequ
 	return profile.NewProfileFactory(pp), nil
 }
 
-func (st *Storage) findProfile(ctx context.Context, req *storage.FindProfileRequest) (*pprofProfile.Profile, error) {
+func (st *Storage) findProfile(ctx context.Context, req *storage.FindProfilesParams) (*pprofProfile.Profile, error) {
 	queryBuilder, err := sqlSamplesQueryBuilder(req.Type)
 	if err != nil {
 		return nil, err
