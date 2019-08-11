@@ -70,16 +70,16 @@ func (labels Labels) Add(labels2 Labels) Labels {
 		return labels
 	}
 
-	labelsIdx := make(map[string]struct{}, len(labels))
+	labelsIdx := make(map[Label]struct{}, len(labels))
 	for _, label := range labels {
-		labelsIdx[label.Key+"~~"+label.Value] = struct{}{}
+		labelsIdx[label] = struct{}{}
 	}
 
 	ret := make([]Label, len(labels), len(labels)+len(labels2))
 	copy(ret, labels)
 
 	for _, label2 := range labels2 {
-		_, ok := labelsIdx[label2.Key+"~~"+label2.Value]
+		_, ok := labelsIdx[label2]
 		if !ok {
 			ret = append(ret, label2)
 		}
