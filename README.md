@@ -147,6 +147,4 @@ MIT
 [3]: https://stackimpact.com/
 [4]: https://prometheus.io/
 [5]: https://github.com/GoogleCloudPlatform/golang-samples/tree/master/profiler/hotapp
-[tw1]: https://twitter.com/tvii/status/1090633702252527617
-[tw2]: https://twitter.com/tvii/status/1124323719923601408
 [pprof]:https://github.com/google/pprof/
