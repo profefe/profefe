@@ -52,13 +52,9 @@ func run(ctx context.Context, logger *log.Logger, conf config.Config) error {
 	}
 	defer closer.Close()
 
-	profilesQuerier := profefe.NewQuerier(logger, st)
-	profilesCollector := profefe.NewCollector(logger, st)
-
 	mux := http.NewServeMux()
 
-	mux.Handle("/api/0/profile", profefe.NewProfileHandler(logger, profilesCollector, profilesQuerier))
-	mux.HandleFunc("/api/0/version", profefe.VersionHandler)
+	profefe.RegisterRoutes(mux, logger, st, st)
 
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)

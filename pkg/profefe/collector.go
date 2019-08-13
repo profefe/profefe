@@ -13,19 +13,19 @@ import (
 
 type Collector struct {
 	logger *log.Logger
-	pw     storage.Writer
+	sw     storage.Writer
 }
 
-func NewCollector(logger *log.Logger, pw storage.Writer) *Collector {
+func NewCollector(logger *log.Logger, sw storage.Writer) *Collector {
 	return &Collector{
 		logger: logger,
-		pw:     pw,
+		sw:     sw,
 	}
 }
 
 func (c *Collector) CollectProfileFrom(ctx context.Context, src io.Reader, req *WriteProfileRequest) error {
 	pf := profile.NewProfileFactoryFrom(src)
-	return c.pw.WriteProfile(ctx, req.NewProfileMeta(), pf)
+	return c.sw.WriteProfile(ctx, req.NewProfileMeta(), pf)
 }
 
 type WriteProfileRequest struct {

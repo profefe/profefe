@@ -3,10 +3,13 @@ package profefe
 import (
 	"fmt"
 	"net/http"
+	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/profefe/profefe/pkg/log"
+	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
 	"golang.org/x/xerrors"
 )
@@ -28,11 +31,15 @@ func NewProfileHandler(logger *log.Logger, collector *Collector, querier *Querie
 func (h *ProfileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 
-	switch r.Method {
-	case http.MethodPost:
-		err = h.HandleCreateProfile(w, r)
-	case http.MethodGet:
-		err = h.HandleFindProfile(w, r)
+	if p := path.Clean(r.URL.Path); p == apiProfilePath {
+		switch r.Method {
+		case http.MethodPost:
+			err = h.HandleCreateProfile(w, r)
+		case http.MethodGet:
+			err = h.HandleFindProfile(w, r)
+		}
+	} else if len(p) > len(apiProfilePath) {
+		err = h.HandleGetProfile(w, r)
 	}
 
 	HandleErrorHTTP(h.logger, err, w, r)
@@ -54,6 +61,30 @@ func (h *ProfileHandler) HandleCreateProfile(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
+func (h *ProfileHandler) HandleGetProfile(w http.ResponseWriter, r *http.Request) error {
+	rawPid := r.URL.Path[len(apiProfilePath):] // id part of the path
+	rawPid = strings.Trim(rawPid, "/")
+	if rawPid == "" {
+		return StatusError(http.StatusBadRequest, "no profile id", nil)
+	}
+
+	var pid profile.ProfileID
+	if err := pid.FromString(rawPid); err != nil {
+		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad profile id %q", rawPid), err)
+	}
+
+	pf, err := h.querier.GetProfile(r.Context(), pid)
+	if err == storage.ErrNotFound {
+		return StatusError(http.StatusNotFound, "nothing found", nil)
+	} else if err != nil {
+		return xerrors.Errorf("could not get profile by id %v: %w", pid, err)
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+
+	return pf.WriteTo(w)
+}
+
 func (h *ProfileHandler) HandleFindProfile(w http.ResponseWriter, r *http.Request) error {
 	req := &storage.FindProfilesParams{}
 	if err := parseFindProfileParams(req, r); err != nil {
@@ -65,7 +96,6 @@ func (h *ProfileHandler) HandleFindProfile(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, "profile"))
 
 	err := h.querier.FindProfileTo(r.Context(), w, req)
 	if err == storage.ErrNotFound {
