@@ -15,6 +15,20 @@ func NewProfileID() ProfileID {
 	return ProfileID(xid.New().Bytes())
 }
 
+func (pid *ProfileID) FromString(s string) error {
+	id, err := xid.FromString(s)
+	if err != nil {
+		return err
+	}
+	*pid = id.Bytes()
+	return nil
+}
+
+func (pid ProfileID) String() string {
+	id, _ := xid.FromBytes([]byte(pid))
+	return id.String()
+}
+
 type InstanceID string
 
 func NewInstanceID() InstanceID {

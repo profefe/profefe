@@ -13,22 +13,22 @@ import (
 
 type Querier struct {
 	logger *log.Logger
-	pr     storage.Reader
+	sr     storage.Reader
 }
 
-func NewQuerier(logger *log.Logger, pr storage.Reader) *Querier {
+func NewQuerier(logger *log.Logger, sr storage.Reader) *Querier {
 	return &Querier{
-		pr:     pr,
+		sr:     sr,
 		logger: logger,
 	}
 }
 
 func (q *Querier) GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error) {
-	return q.pr.GetProfile(ctx, pid)
+	return q.sr.GetProfile(ctx, pid)
 }
 
 func (q *Querier) FindProfileTo(ctx context.Context, dst io.Writer, req *storage.FindProfilesParams) error {
-	ppf, err := q.pr.FindProfiles(ctx, req)
+	ppf, err := q.sr.FindProfiles(ctx, req)
 	if err != nil {
 		return err
 	}

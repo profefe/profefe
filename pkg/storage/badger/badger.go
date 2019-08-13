@@ -160,18 +160,17 @@ func (st *Storage) getProfiles(ctx context.Context, pids []profile.ProfileID) ([
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
+		var val []byte
 		for _, prefix := range prefixes {
 			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-				err := it.Item().Value(func(val []byte) error {
-					// it's important to copy value to the buffer
-					var buf bytes.Buffer
-					buf.Write(val)
-					ppf = append(ppf, profile.NewProfileFactoryFrom(&buf))
-					return nil
-				})
+				var err error
+				val, err = it.Item().ValueCopy(val)
 				if err != nil {
 					return err
 				}
+				var buf bytes.Buffer
+				buf.Write(val)
+				ppf = append(ppf, profile.NewProfileFactoryFrom(&buf))
 			}
 		}
 
@@ -237,7 +236,6 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 		ids = append(ids, make([]profile.ProfileID, 0, len(keys)))
 		for _, k := range keys {
 			pid := k[len(k)-sizeOfProfileID:]
-			st.logger.Debugw("findProfileIDs: found profile id", "pid", pid)
 			ids[i] = append(ids[i], pid)
 		}
 	}
@@ -271,11 +269,7 @@ func (st *Storage) scanIndexKeys(indexKey []byte, createdAtMin, createdAtMax tim
 
 			// check if item's key chunk before the timestamp is equal indexKey
 			tsStartPos := len(it.Item().Key()) - sizeOfProfileID - 8
-			itemKey := item.Key()[:tsStartPos]
-
-			st.logger.Debugw("scanIndexKeys: check keys", "indexKey", indexKey, "itemKey", itemKey)
-
-			if bytes.Equal(indexKey, itemKey) {
+			if bytes.Equal(indexKey, item.Key()[:tsStartPos]) {
 				var key []byte
 				key = item.KeyCopy(key)
 				keys = append(keys, key)
