@@ -86,18 +86,18 @@ func (h *ProfileHandler) HandleGetProfile(w http.ResponseWriter, r *http.Request
 }
 
 func (h *ProfileHandler) HandleFindProfile(w http.ResponseWriter, r *http.Request) error {
-	req := &storage.FindProfilesParams{}
-	if err := parseFindProfileParams(req, r); err != nil {
+	params := &storage.FindProfilesParams{}
+	if err := parseFindProfileParams(params, r); err != nil {
 		return err
 	}
 
-	if err := req.Validate(); err != nil {
+	if err := params.Validate(); err != nil {
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 
-	err := h.querier.FindProfileTo(r.Context(), w, req)
+	err := h.querier.FindProfileTo(r.Context(), w, params)
 	if err == storage.ErrNotFound {
 		return StatusError(http.StatusNotFound, "nothing found", nil)
 	} else if err == storage.ErrEmpty {
@@ -116,7 +116,7 @@ func parseFindProfileParams(in *storage.FindProfilesParams, r *http.Request) (er
 	if v := q.Get("service"); v != "" {
 		in.Service = v
 	} else {
-		return StatusError(http.StatusBadRequest, "bad request: missing name", nil)
+		return StatusError(http.StatusBadRequest, "bad request: missing service", nil)
 	}
 
 	if pt, err := getProfileType(q); err != nil {

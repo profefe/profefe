@@ -27,8 +27,8 @@ func (q *Querier) GetProfile(ctx context.Context, pid profile.ProfileID) (*profi
 	return q.sr.GetProfile(ctx, pid)
 }
 
-func (q *Querier) FindProfileTo(ctx context.Context, dst io.Writer, req *storage.FindProfilesParams) error {
-	ppf, err := q.sr.FindProfiles(ctx, req)
+func (q *Querier) FindProfileTo(ctx context.Context, dst io.Writer, params *storage.FindProfilesParams) error {
+	ppf, err := q.sr.FindProfiles(ctx, params)
 	if err != nil {
 		return err
 	}
