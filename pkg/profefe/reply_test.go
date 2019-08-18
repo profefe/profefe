@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/xerrors"
 )
 
 func TestReplyError(t *testing.T) {
@@ -31,12 +32,17 @@ func TestReplyError(t *testing.T) {
 			"bad request",
 		},
 		{
-			fmt.Errorf("unexpted error: %w", StatusError(http.StatusBadRequest, "bad request", nil)),
+			xerrors.Errorf("unexpted error: %w", StatusError(http.StatusBadRequest, "bad request", nil)),
 			http.StatusBadRequest,
 			"bad request",
 		},
 		{
-			fmt.Errorf("unexpted error: %w", testRawErr),
+			xerrors.Errorf("unexpted error: %w", testRawErr),
+			http.StatusInternalServerError,
+			"internal error",
+		},
+		{
+			fmt.Errorf("unexpted error: %v", testRawErr),
 			http.StatusInternalServerError,
 			"internal error",
 		},
