@@ -14,6 +14,7 @@ const (
 	HeapProfile
 	BlockProfile
 	MutexProfile
+	GoroutineProfile
 )
 
 func (ptype ProfileType) MarshalString() (s string) {
@@ -26,7 +27,7 @@ func (ptype *ProfileType) UnmarshalString(s string) error {
 		return err
 	}
 	switch pt := ProfileType(pt); pt {
-	case CPUProfile, HeapProfile, BlockProfile, MutexProfile:
+	case CPUProfile, HeapProfile, BlockProfile, MutexProfile, GoroutineProfile:
 		*ptype = pt
 	default:
 		*ptype = UnknownProfile
@@ -45,6 +46,8 @@ func (ptype *ProfileType) FromString(s string) error {
 		*ptype = BlockProfile
 	case "mutex":
 		*ptype = MutexProfile
+	case "goroutine":
+		*ptype = GoroutineProfile
 	default:
 		*ptype = UnknownProfile
 	}
@@ -63,6 +66,8 @@ func (ptype ProfileType) String() string {
 		return "block"
 	case MutexProfile:
 		return "mutex"
+	case GoroutineProfile:
+		return "goroutine"
 	}
 	return fmt.Sprintf("%d", ptype)
 }
