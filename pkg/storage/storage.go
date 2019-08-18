@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	ErrNotFound = xerrors.New("profile not found")
-	ErrEmpty    = xerrors.New("profile is empty")
+	ErrNotFound = xerrors.New("not found")
+	ErrEmpty    = xerrors.New("results empty")
 )
 
 type Writer interface {
@@ -21,6 +21,8 @@ type Reader interface {
 	GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error)
 	FindProfiles(ctx context.Context, params *FindProfilesParams) ([]*profile.ProfileFactory, error)
 	FindProfileIDs(ctx context.Context, params *FindProfilesParams) ([]profile.ProfileID, error)
+
+	GetServices(ctx context.Context) ([]string, error)
 }
 
 type FindProfilesParams struct {

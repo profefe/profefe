@@ -23,6 +23,10 @@ func NewQuerier(logger *log.Logger, sr storage.Reader) *Querier {
 	}
 }
 
+func (q *Querier) GetServices(ctx context.Context) ([]string, error) {
+	return q.sr.GetServices(ctx)
+}
+
 func (q *Querier) GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error) {
 	return q.sr.GetProfile(ctx, pid)
 }

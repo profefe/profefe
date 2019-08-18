@@ -73,19 +73,19 @@ To start the example, in a separate terminal window run:
 After a brief period, the application will start sending CPU profiles to the collector:
 
 ```
-send profile: http://localhost:10100/api/0/profile?instance_id=87cdc549c84507f24944793b1ddbdc34&labels=version%3D1.0.0&service=hotapp-service&type=cpu
-send profile: http://localhost:10100/api/0/profile?instance_id=87cdc549c84507f24944793b1ddbdc34&labels=version%3D1.0.0&service=hotapp-service&type=cpu
-send profile: http://localhost:10100/api/0/profile?instance_id=87cdc549c84507f24944793b1ddbdc34&labels=version%3D1.0.0&service=hotapp-service&type=cpu
+send profile: http://localhost:10100/api/0/profiles?instance_id=87cdc549c84507f24944793b1ddbdc34&labels=version%3D1.0.0&service=hotapp-service&type=cpu
+send profile: http://localhost:10100/api/0/profiles?instance_id=87cdc549c84507f24944793b1ddbdc34&labels=version%3D1.0.0&service=hotapp-service&type=cpu
+send profile: http://localhost:10100/api/0/profiles?instance_id=87cdc549c84507f24944793b1ddbdc34&labels=version%3D1.0.0&service=hotapp-service&type=cpu
 ```
 
 ### Querying Profiles
 
-Querying the profiling data is an HTTP call to collector's `/api/0/profile` endpoint:
+Querying the profiling data is an HTTP call to collector's `/api/0/profiles` endpoint:
 
 ```
-> go tool pprof 'http://localhost:10100/api/0/profile?service=hotapp-service&type=cpu&from=2019-05-30T11:49:00&to=2019-05-30T12:49:00&labels=version=1.0.0'
+> go tool pprof 'http://localhost:10100/api/0/profiles?service=hotapp-service&type=cpu&from=2019-05-30T11:49:00&to=2019-05-30T12:49:00&labels=version=1.0.0'
 
-Fetching profile over HTTP from http://localhost:10100/api/0/profile...
+Fetching profile over HTTP from http://localhost:10100/api/0/profiles...
 Saved profile in /Users/varankinv/pprof/pprof.samples.cpu.001.pb.gz
 Type: cpu
 Entering interactive mode (type "help" for commands, "o" for options)
@@ -111,19 +111,19 @@ Showing top 10 nodes out of 12
 ### Save pprof data
 
 ```
-POST /api/0/profile?service=<service>&instance_id=<iid>&type=[cpu|heap]&labels=<key=value,key=value>
+POST /api/0/profiles?service=<service>&instance_id=<iid>&type=[cpu|heap]&labels=<key=value,key=value>
 body pprof.pb.gz
 ```
 
 - `service` — service name (string)
 - `instance_id` — an identifier of running instance (string) (*TODO: do we need iid?*)
-- `type` — profile type (cpu, heap, block, or mutex)
+- `type` — profile type (cpu, heap, block, mutex, or goroutine)
 - `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
 
 ### Query pprof data
 
 ```
-GET /api/0/profile?service=<service>&type=[cpu|heap]&from=<created_from>&to=<created_to>&labels=<key=value,key=value>
+GET /api/0/profiles?service=<service>&type=[cpu|heap]&from=<created_from>&to=<created_to>&labels=<key=value,key=value>
 ```
 
 - `service` — service name

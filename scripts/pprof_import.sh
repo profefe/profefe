@@ -60,7 +60,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-api_profile_url="$PROFEFE_COLLECTOR/api/0/profile"
+api_profile_url="$PROFEFE_COLLECTOR/api/0/profiles"
 
 create_profile() {
     local file_path="$1"

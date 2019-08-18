@@ -14,38 +14,38 @@ import (
 	"golang.org/x/xerrors"
 )
 
-type ProfileHandler struct {
+type ProfilesHandler struct {
 	logger    *log.Logger
 	collector *Collector
 	querier   *Querier
 }
 
-func NewProfileHandler(logger *log.Logger, collector *Collector, querier *Querier) *ProfileHandler {
-	return &ProfileHandler{
+func NewProfilesHandler(logger *log.Logger, collector *Collector, querier *Querier) *ProfilesHandler {
+	return &ProfilesHandler{
 		logger:    logger,
 		collector: collector,
 		querier:   querier,
 	}
 }
 
-func (h *ProfileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *ProfilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 
-	if p := path.Clean(r.URL.Path); p == apiProfilePath {
+	if p := path.Clean(r.URL.Path); p == apiProfilesPath {
 		switch r.Method {
 		case http.MethodPost:
 			err = h.HandleCreateProfile(w, r)
 		case http.MethodGet:
 			err = h.HandleFindProfile(w, r)
 		}
-	} else if len(p) > len(apiProfilePath) {
+	} else if len(p) > len(apiProfilesPath) {
 		err = h.HandleGetProfile(w, r)
 	}
 
 	HandleErrorHTTP(h.logger, err, w, r)
 }
 
-func (h *ProfileHandler) HandleCreateProfile(w http.ResponseWriter, r *http.Request) error {
+func (h *ProfilesHandler) HandleCreateProfile(w http.ResponseWriter, r *http.Request) error {
 	req := &WriteProfileRequest{}
 	if err := req.UnmarshalURL(r.URL.Query()); err != nil {
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %v", err), nil)
@@ -61,8 +61,8 @@ func (h *ProfileHandler) HandleCreateProfile(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
-func (h *ProfileHandler) HandleGetProfile(w http.ResponseWriter, r *http.Request) error {
-	rawPid := r.URL.Path[len(apiProfilePath):] // id part of the path
+func (h *ProfilesHandler) HandleGetProfile(w http.ResponseWriter, r *http.Request) error {
+	rawPid := r.URL.Path[len(apiProfilesPath):] // id part of the path
 	rawPid = strings.Trim(rawPid, "/")
 	if rawPid == "" {
 		return StatusError(http.StatusBadRequest, "no profile id", nil)
@@ -85,7 +85,7 @@ func (h *ProfileHandler) HandleGetProfile(w http.ResponseWriter, r *http.Request
 	return pf.WriteTo(w)
 }
 
-func (h *ProfileHandler) HandleFindProfile(w http.ResponseWriter, r *http.Request) error {
+func (h *ProfilesHandler) HandleFindProfile(w http.ResponseWriter, r *http.Request) error {
 	params := &storage.FindProfilesParams{}
 	if err := parseFindProfileParams(params, r); err != nil {
 		return err

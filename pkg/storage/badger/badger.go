@@ -44,7 +44,7 @@ func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 func (st *Storage) WriteProfile(ctx context.Context, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error {
 	entries := make([]*badger.Entry, 0, 1+2+len(meta.Labels)) // 1 for profile entry, 2 for general indexes
 
-	pKey, pVal, err := createProfileKV(meta, pf)
+	pKey, pVal, err := createProfileKV(meta.ProfileID, pf)
 	if err != nil {
 		return xerrors.Errorf("could not create key-value pair for profile: %w", err)
 	}
@@ -85,8 +85,8 @@ func (st *Storage) newBadgerEntry(key, val []byte) *badger.Entry {
 	return entry
 }
 
-// key is profilePrefix<pid><created-at><instance-id>, value encoded pprof data
-func createProfileKV(meta *profile.ProfileMeta, pf *profile.ProfileFactory) ([]byte, []byte, error) {
+// key is profilePrefix<pid><created-at>, value encoded pprof data
+func createProfileKV(pid profile.ProfileID, pf *profile.ProfileFactory) ([]byte, []byte, error) {
 	// writeTo parses profile from internal reader if profile data isn't available yet
 	var buf bytes.Buffer
 	if err := pf.WriteTo(&buf); err != nil {
@@ -98,15 +98,14 @@ func createProfileKV(meta *profile.ProfileMeta, pf *profile.ProfileFactory) ([]b
 		return nil, nil, err
 	}
 
-	key := make([]byte, 0, len(meta.ProfileID)+len(meta.InstanceID)+1+8) // 1 for prefix, 8 for created-at nanos
+	key := make([]byte, 0, len(pid)+1+8) // 1 for prefix, 8 for created-at nanos
 	key = append(key, profilePrefix)
-	key = append(key, meta.ProfileID...)
+	key = append(key, pid...)
 	{
 		tb := make([]byte, 8)
 		binary.BigEndian.PutUint64(tb, uint64(pp.TimeNanos))
 		key = append(key, tb...)
 	}
-	key = append(key, meta.InstanceID...)
 
 	return key, buf.Bytes(), nil
 }
@@ -330,4 +329,40 @@ func mergeJoinProfileIDs(ids [][]profile.ProfileID, params *storage.FindProfiles
 	}
 
 	return mergedIDs
+}
+
+// TODO(narqo): does full index scan, add caching (note, ttl)
+func (st *Storage) GetServices(ctx context.Context) ([]string, error) {
+	uniqServices := make(map[string]struct{})
+	err := st.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // we're iterating over keys only
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		serviceIndexKey := []byte{serviceIndexID}
+
+		for it.Seek(serviceIndexKey); it.ValidForPrefix(serviceIndexKey); it.Next() {
+			// parse service from <index-id><service><created-at><pid>
+			tsPos := len(it.Item().Key()) - sizeOfProfileID - 8 // 8 is for created-at nanos
+			s := it.Item().Key()[len(serviceIndexKey):tsPos]
+			if _, ok := uniqServices[string(s)]; !ok {
+				uniqServices[string(s)] = struct{}{}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	services := make([]string, 0, len(uniqServices))
+	for s := range uniqServices {
+		services = append(services, s)
+	}
+
+	return services, nil
 }

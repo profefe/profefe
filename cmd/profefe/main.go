@@ -54,7 +54,7 @@ func run(ctx context.Context, logger *log.Logger, conf config.Config) error {
 
 	mux := http.NewServeMux()
 
-	profefe.RegisterRoutes(mux, logger, st, st)
+	profefe.SetupRoutes(mux, logger, st, st)
 
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)

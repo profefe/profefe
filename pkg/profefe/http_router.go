@@ -8,20 +8,23 @@ import (
 )
 
 const (
-	apiProfilePath = "/api/0/profile"
-	apiVersionPath = "/api/0/version"
+	apiProfilesPath = "/api/0/profiles"
+	apiServicesPath = "/api/0/services"
+	apiVersionPath  = "/api/0/version"
 )
 
-func RegisterRoutes(
+func SetupRoutes(
 	mux *http.ServeMux,
 	logger *log.Logger,
 	sr storage.Reader,
 	sw storage.Writer,
 ) {
-	mux.HandleFunc(apiVersionPath, VersionHandler)
+	querier := NewQuerier(logger, sr)
+	collector := NewCollector(logger, sw)
 
-	// XXX(narqo): everything below /api/0/ is served by profile handler
-	querierSvc := NewQuerier(logger, sr)
-	collectorSvc := NewCollector(logger, sw)
-	mux.Handle("/api/0/", NewProfileHandler(logger, collectorSvc, querierSvc))
+	mux.HandleFunc(apiVersionPath, VersionHandler)
+	mux.Handle(apiServicesPath, NewServicesHandler(logger, querier))
+
+	// XXX(narqo): everything below /api/0/ is served by profiles handler
+	mux.Handle("/api/0/", NewProfilesHandler(logger, collector, querier))
 }

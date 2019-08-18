@@ -160,7 +160,7 @@ func (a *Agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf 
 	q.Set("labels", a.rawLabels.String())
 	q.Set("type", ptype.String())
 
-	surl := a.collectorAddr + "/api/0/profile?" + q.Encode()
+	surl := a.collectorAddr + "/api/0/profiles?" + q.Encode()
 	a.logf("send profile: %s", surl)
 	req, err := http.NewRequest(http.MethodPost, surl, buf)
 	if err != nil {
