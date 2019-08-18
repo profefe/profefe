@@ -96,6 +96,7 @@ func (h *ProfilesHandler) HandleFindProfile(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, params.Type))
 
 	err := h.querier.FindProfileTo(r.Context(), w, params)
 	if err == storage.ErrNotFound {
