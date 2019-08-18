@@ -39,9 +39,7 @@ func TestStorage_WriteFind(t *testing.T) {
 	pp, err := pprofProfile.ParseData(data)
 	require.NoError(t, err)
 
-	pf := profile.NewProfileFactory(pp)
-
-	err = st.WriteProfile(context.Background(), meta, pf)
+	err = st.WriteProfile(context.Background(), meta, profile.NewProfileFactory(pp))
 	require.NoError(t, err)
 
 	params := &storage.FindProfilesParams{
@@ -64,20 +62,7 @@ func TestStorage_FindProfiles_MultipleResults(t *testing.T) {
 	st, teardown := setupTestStorage(t)
 	defer teardown()
 
-	iid := profile.NewInstanceID()
-	service := fmt.Sprintf("test-service-%s", iid)
-	labels := profile.Labels{{"key1", "val1"}}
-
-	for i := 0; i < 3; i++ {
-		meta := &profile.ProfileMeta{
-			ProfileID:  profile.NewProfileID(),
-			Service:    service,
-			Type:       profile.CPUProfile,
-			InstanceID: iid,
-			Labels:     labels,
-		}
-
-		fileName := fmt.Sprintf("../../../testdata/collector_cpu_%d.prof", i+1)
+	writeProfile := func(fileName string, meta *profile.ProfileMeta) {
 		data, err := ioutil.ReadFile(fileName)
 		require.NoError(t, err)
 		pp, err := pprofProfile.ParseData(data)
@@ -87,21 +72,87 @@ func TestStorage_FindProfiles_MultipleResults(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	params := &storage.FindProfilesParams{
-		Service:      service,
-		CreatedAtMin: time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC), // just some old date
-	}
-	gotpfs, err := st.FindProfiles(context.Background(), params)
-	require.NoError(t, err)
-	require.Len(t, gotpfs, 3)
+	iid := profile.NewInstanceID()
+	service := fmt.Sprintf("test-service-%s", iid)
 
-	// make sure storage returns profiles in the correct order
-	var prevTime int64
-	for _, pf := range gotpfs {
-		pp, err := pf.Profile()
-		require.NoError(t, err)
-		assert.True(t, prevTime < pp.TimeNanos, "create time must be after previous time")
+	writeProfile(
+		"../../../testdata/test_cpu1.prof",
+		&profile.ProfileMeta{
+			ProfileID:  profile.NewProfileID(),
+			Service:    service,
+			Type:       profile.CPUProfile,
+			InstanceID: iid,
+			Labels:     profile.Labels{{"key1", "val1"}},
+		},
+	)
+
+	writeProfile(
+		"../../../testdata/test_heap1.prof",
+		&profile.ProfileMeta{
+			ProfileID:  profile.NewProfileID(),
+			Service:    service,
+			Type:       profile.HeapProfile,
+			InstanceID: iid,
+			Labels:     profile.Labels{{"key1", "val1"}},
+		},
+	)
+
+	for i := 0; i < 3; i++ {
+		fileName := fmt.Sprintf("../../../testdata/collector_cpu_%d.prof", i+1)
+		writeProfile(
+			fileName,
+			&profile.ProfileMeta{
+				ProfileID:  profile.NewProfileID(),
+				Service:    service,
+				Type:       profile.CPUProfile,
+				InstanceID: iid,
+				Labels:     profile.Labels{{"key2", "val2"}},
+			},
+		)
 	}
+
+	// just some old date
+	createdAtMin := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("by service and labels", func(t *testing.T) {
+		params := &storage.FindProfilesParams{
+			Service:      service,
+			Labels:       profile.Labels{{"key2", "val2"}},
+			CreatedAtMin: createdAtMin,
+		}
+		gotpfs, err := st.FindProfiles(context.Background(), params)
+		require.NoError(t, err)
+		require.Len(t, gotpfs, 3)
+
+		// check that storage returns profiles in the correct order
+		var prevTime int64
+		for _, pf := range gotpfs {
+			pp, err := pf.Profile()
+			require.NoError(t, err)
+			assert.True(t, prevTime < pp.TimeNanos, "create time must be after previous time")
+		}
+	})
+
+	t.Run("by service and type", func(t *testing.T) {
+		params := &storage.FindProfilesParams{
+			Service:      service,
+			Type:         profile.HeapProfile,
+			CreatedAtMin: createdAtMin,
+		}
+		gotpfs, err := st.FindProfiles(context.Background(), params)
+		require.NoError(t, err)
+		require.Len(t, gotpfs, 1)
+	})
+
+	t.Run("by service", func(t *testing.T) {
+		params := &storage.FindProfilesParams{
+			Service:      service,
+			CreatedAtMin: createdAtMin,
+		}
+		gotpfs, err := st.FindProfiles(context.Background(), params)
+		require.NoError(t, err)
+		require.Len(t, gotpfs, 5)
+	})
 }
 
 func TestStorage_FindProfiles_NotFound(t *testing.T) {
@@ -137,9 +188,7 @@ func TestStorage_GetProfile(t *testing.T) {
 	pp, err := pprofProfile.ParseData(data)
 	require.NoError(t, err)
 
-	pf := profile.NewProfileFactory(pp)
-
-	err = st.WriteProfile(context.Background(), meta, pf)
+	err = st.WriteProfile(context.Background(), meta, profile.NewProfileFactory(pp))
 	require.NoError(t, err)
 
 	gotpf, err := st.GetProfile(context.Background(), pid)
