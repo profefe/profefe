@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/profefe/profefe/pkg/profile"
-	"github.com/profefe/profefe/pkg/retry"
 )
 
 const (
@@ -52,7 +51,8 @@ type Agent struct {
 	CPUProfileDuration time.Duration
 	HeapProfile        bool
 	BlockProfile       bool
-	MuxProfile         bool
+	MutexProfile       bool
+	GoroutineProfile   bool
 
 	service    string
 	instanceID profile.InstanceID
@@ -135,22 +135,30 @@ func (a *Agent) collectProfile(ctx context.Context, ptype profile.ProfileType, b
 		}
 		sleep(a.CPUProfileDuration, ctx.Done())
 		pprof.StopCPUProfile()
-
 	case profile.HeapProfile:
 		err := pprof.WriteHeapProfile(buf)
 		if err != nil {
 			return fmt.Errorf("failed to write heap profile: %v", err)
 		}
-
 	case profile.BlockProfile:
-		fallthrough
+		return a.writeProfile("block", buf)
 	case profile.MutexProfile:
-		fallthrough
+		return a.writeProfile("mutex", buf)
+	case profile.GoroutineProfile:
+		return a.writeProfile("goroutine", buf)
 	default:
 		return fmt.Errorf("unknown profile type %v", ptype)
 	}
 
 	return nil
+}
+
+func (a *Agent) writeProfile(name string, w io.Writer) error {
+	err := pprof.Lookup(name).WriteTo(w, 0)
+	if err != nil {
+		err = fmt.Errorf("failed to write %s profile: %v", name, err)
+	}
+	return err
 }
 
 func (a *Agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
@@ -168,7 +176,7 @@ func (a *Agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf 
 	}
 	req = req.WithContext(ctx)
 
-	return retry.Do(
+	return Do(
 		backoffMinDelay,
 		backoffMaxDelay,
 		func() error { return a.doRequest(req, nil) },
@@ -178,7 +186,7 @@ func (a *Agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf 
 func (a *Agent) doRequest(req *http.Request, v io.Writer) error {
 	resp, err := a.rawClient.Do(req)
 	if err, ok := err.(*url.Error); ok && err.Err == context.Canceled {
-		return retry.Cancel(err)
+		return Cancel(err)
 	}
 	if err != nil {
 		return err
@@ -193,7 +201,7 @@ func (a *Agent) doRequest(req *http.Request, v io.Writer) error {
 		if resp.StatusCode >= 500 {
 			return fmt.Errorf("unexpected respose from collector %s: %s", resp.Status, respBody)
 		}
-		return retry.Cancel(fmt.Errorf("bad client request: collector responded with %s: %s", resp.Status, respBody))
+		return Cancel(fmt.Errorf("bad request: collector responded with %s: %s", resp.Status, respBody))
 	}
 
 	if v != nil {
@@ -271,10 +279,15 @@ func (a *Agent) nextProfileType(ptype profile.ProfileType) profile.ProfileType {
 			}
 		case profile.BlockProfile:
 			ptype = profile.MutexProfile
-			if a.MuxProfile {
+			if a.MutexProfile {
 				return ptype
 			}
 		case profile.MutexProfile:
+			ptype = profile.GoroutineProfile
+			if a.GoroutineProfile {
+				return ptype
+			}
+		case profile.GoroutineProfile:
 			ptype = profile.CPUProfile
 			if a.CPUProfile {
 				return ptype

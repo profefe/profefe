@@ -1,4 +1,4 @@
-package retry
+package agent
 
 import (
 	"time"
@@ -9,7 +9,7 @@ func Do(minDelay, maxDelay time.Duration, fn func() error) error {
 }
 
 func DoAttempts(minDelay, maxDelay time.Duration, attempts int, fn func() error) error {
-	r := New(minDelay, maxDelay, attempts)
+	r := newRetry(minDelay, maxDelay, attempts)
 	return r.Do(fn)
 }
 
@@ -19,7 +19,7 @@ type Retry struct {
 	MaxAttempts int
 }
 
-func New(minDelay, maxDelay time.Duration, attempts int) *Retry {
+func newRetry(minDelay, maxDelay time.Duration, attempts int) *Retry {
 	return &Retry{
 		MinDelay:    minDelay,
 		MaxDelay:    maxDelay,

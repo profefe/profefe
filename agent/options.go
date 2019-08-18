@@ -21,18 +21,23 @@ func WithHeapProfile() Option {
 	}
 }
 
-// TODO(narqo): support the rest of profile types
-//func WithBlockProfile() Option {
-//	return func(a *agent) {
-//		a.BlockProfile = true
-//	}
-//}
-//
-//func WithMuxProfile() Option {
-//	return func(a *agent) {
-//		a.MuxProfile = true
-//	}
-//}
+func WithBlockProfile() Option {
+	return func(a *Agent) {
+		a.BlockProfile = true
+	}
+}
+
+func WithMutexProfile() Option {
+	return func(a *Agent) {
+		a.MutexProfile = true
+	}
+}
+
+func WithGoroutineProfile() Option {
+	return func(a *Agent) {
+		a.GoroutineProfile = true
+	}
+}
 
 func WithLabels(args ...string) Option {
 	if len(args)%2 != 0 {
