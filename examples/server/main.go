@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/profefe/profefe/agent"
@@ -10,16 +11,29 @@ import (
 
 const pffCollectorAddr = "http://localhost:10100"
 
+var instance = os.Getenv("INSTANCE_ID")
+
+func init() {
+	if instance == "" {
+		instance = "0"
+	}
+}
+
 func main() {
 	pffAgent, err := agent.Start(
 		pffCollectorAddr,
 		"example_server",
 		agent.WithCPUProfile(10*time.Second),
+		agent.WithHeapProfile(),
+		agent.WithBlockProfile(),
+		agent.WithMutexProfile(),
+		agent.WithGoroutineProfile(),
 		agent.WithLogger(agentLogger),
 		agent.WithLabels(
-			"az", "fra",
+			"region", "europe-west3",
+			"dc", "fra",
 			"host", "localhost",
-			"instance", "1",
+			"instance", instance,
 		),
 	)
 	if err != nil {
