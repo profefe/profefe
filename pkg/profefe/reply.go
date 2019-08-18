@@ -20,26 +20,28 @@ func ReplyOK(w http.ResponseWriter) {
 func ReplyJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 
-	json.NewEncoder(w).Encode(v)
+	err := json.NewEncoder(w).Encode(v)
+	if err != nil {
+		io.WriteString(w, `{"code":`+strconv.Itoa(http.StatusInternalServerError)+`,"error":"`+err.Error()+`"}`)
+	}
 }
 
 func ReplyError(w http.ResponseWriter, err error) {
 	var (
+		statusErr  *statusError
 		statusCode int
 		errMsg     string
 	)
 
-	switch err := err.(type) {
-	case *statusError:
-		statusCode = err.code
-		errMsg = err.Error()
-	default:
+	if xerrors.As(err, &statusErr) {
+		statusCode = statusErr.code
+		errMsg = statusErr.Error()
+	} else {
 		statusCode = http.StatusInternalServerError
 		errMsg = "internal error"
 	}
 
 	w.WriteHeader(statusCode)
-	w.Header().Set("Content-Type", "application/json")
 
 	resp := struct {
 		Code  int    `json:"code"`
@@ -48,9 +50,7 @@ func ReplyError(w http.ResponseWriter, err error) {
 		Code:  statusCode,
 		Error: errMsg,
 	}
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		io.WriteString(w, `{"code":`+strconv.Itoa(http.StatusInternalServerError)+`,"error":"`+err.Error()+`"}`)
-	}
+	ReplyJSON(w, resp)
 }
 
 func HandleErrorHTTP(logger *log.Logger, err error, w http.ResponseWriter, r *http.Request) {
@@ -69,23 +69,23 @@ func HandleErrorHTTP(logger *log.Logger, err error, w http.ResponseWriter, r *ht
 }
 
 type statusError struct {
-	code   int
-	status string
-	cause  error
-}
-
-func (s *statusError) Error() string {
-	return s.status
-}
-
-func (s *statusError) Unwrap() error {
-	return s.cause
+	code    int
+	message string
+	cause   error
 }
 
 func StatusError(code int, msg string, cause error) *statusError {
 	return &statusError{
-		code:   code,
-		status: msg,
-		cause:  cause,
+		code:    code,
+		message: msg,
+		cause:   cause,
 	}
+}
+
+func (s statusError) Error() string {
+	return s.message
+}
+
+func (s statusError) Unwrap() error {
+	return s.cause
 }
