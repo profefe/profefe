@@ -13,6 +13,8 @@ import (
 	"golang.org/x/xerrors"
 )
 
+const labelSep = '\xff'
+
 const profilePrefix byte = 1 << 7
 
 const (
@@ -56,14 +58,19 @@ func (st *Storage) WriteProfile(ctx context.Context, meta *profile.ProfileMeta, 
 	// add indexes
 	entries = append(entries, st.newBadgerEntry(createIndexKey(serviceIndexID, []byte(meta.Service), pp.TimeNanos, meta.ProfileID), nil))
 
+	indexVal := make([]byte, 0, len(meta.Service)+64)
 	{
-		indexVal := append(make([]byte, 0, len(meta.Service)+1), meta.Service...)
+		indexVal = append(indexVal, meta.Service...)
 		indexVal = append(indexVal, byte(meta.Type))
 		entries = append(entries, st.newBadgerEntry(createIndexKey(typeIndexID, indexVal, pp.TimeNanos, meta.ProfileID), nil))
 	}
 
 	for _, label := range meta.Labels {
-		entries = append(entries, st.newBadgerEntry(createIndexKey(labelsIndexID, []byte(meta.Service+label.Key+label.Value), pp.TimeNanos, meta.ProfileID), nil))
+		indexVal = append(indexVal[:0], meta.Service...)
+		indexVal = append(indexVal, label.Key...)
+		indexVal = append(indexVal, labelSep)
+		indexVal = append(indexVal, label.Value...)
+		entries = append(entries, st.newBadgerEntry(createIndexKey(labelsIndexID, indexVal, pp.TimeNanos, meta.ProfileID), nil))
 	}
 
 	return st.db.Update(func(txn *badger.Txn) error {
@@ -196,6 +203,15 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 		return nil, xerrors.New("empty service")
 	}
 
+	if params.CreatedAtMin.IsZero() {
+		return nil, xerrors.New("empty created_at")
+	}
+
+	createdAtMax := params.CreatedAtMax
+	if createdAtMax.IsZero() {
+		createdAtMax = time.Now().UTC()
+	}
+
 	indexesToScan := make([][]byte, 0, 1)
 	{
 		indexKey := make([]byte, 0, 64)
@@ -214,10 +230,11 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 
 		// by-service-type-labels
 		for _, label := range params.Labels {
-			indexKey := make([]byte, 0, 1+len(params.Service)+len(label.Key)+len(label.Value))
+			indexKey := make([]byte, 0, 2+len(params.Service)+len(label.Key)+len(label.Value))
 			indexKey = append(indexKey, labelsIndexID)
 			indexKey = append(indexKey, params.Service...)
 			indexKey = append(indexKey, label.Key...)
+			indexKey = append(indexKey, labelSep)
 			indexKey = append(indexKey, label.Value...)
 			indexesToScan = append(indexesToScan, indexKey)
 		}
@@ -227,7 +244,7 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 
 	// scan prepared indexes
 	for i, s := range indexesToScan {
-		keys, err := st.scanIndexKeys(s, params.CreatedAtMin, params.CreatedAtMax)
+		keys, err := st.scanIndexKeys(s, params.CreatedAtMin, createdAtMax)
 		if err != nil {
 			return nil, err
 		}
@@ -298,20 +315,28 @@ func mergeJoinProfileIDs(ids [][]profile.ProfileID, params *storage.FindProfiles
 
 	if len(ids) > 1 {
 		for i := 1; i < len(ids); i++ {
-			merged := make([]profile.ProfileID, 0, len(mergedIDs))
-			k := len(mergedIDs) - 1
-			for j := len(ids[i]) - 1; j >= 0 && k >= 0; {
-				switch bytes.Compare(mergedIDs[k], ids[i][j]) {
+			mergedCap := len(mergedIDs)
+			if mergedCap > len(ids[i]) {
+				mergedCap = len(ids[i])
+			}
+
+			merged := make([]profile.ProfileID, 0, mergedCap)
+
+			l := len(mergedIDs) - 1
+			r := len(ids[i]) - 1
+			for r >= 0 && l >= 0 {
+				switch bytes.Compare(mergedIDs[l], ids[i][r]) {
 				case 0:
 					// left == right
-					merged = append(merged, mergedIDs[k])
-					k--
+					merged = append(merged, mergedIDs[l])
+					l--
+					r--
 				case 1:
 					// left > right
-					k--
+					r--
 				case -1:
 					// left < right
-					j--
+					l--
 				}
 			}
 			mergedIDs = merged
