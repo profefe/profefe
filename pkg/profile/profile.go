@@ -1,21 +1,27 @@
 package profile
 
 import (
-	"io"
 	"time"
 
-	"github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/rs/xid"
-	"golang.org/x/xerrors"
 )
 
-type ProfileID []byte
+type ID []byte
 
-func NewProfileID() ProfileID {
-	return ProfileID(xid.New().Bytes())
+func NewProfileID() ID {
+	return xid.New().Bytes()
 }
 
-func (pid *ProfileID) FromString(s string) error {
+func (pid *ID) FromBytes(b []byte) error {
+	id, err := xid.FromBytes(b)
+	if err != nil {
+		return err
+	}
+	*pid = id.Bytes()
+	return nil
+}
+
+func (pid *ID) FromString(s string) error {
 	id, err := xid.FromString(s)
 	if err != nil {
 		return err
@@ -24,27 +30,31 @@ func (pid *ProfileID) FromString(s string) error {
 	return nil
 }
 
-func (pid ProfileID) String() string {
-	id, _ := xid.FromBytes([]byte(pid))
+func (pid ID) IsNil() bool {
+	return pid == nil
+}
+
+func (pid ID) String() string {
+	id, _ := xid.FromBytes(pid)
 	return id.String()
 }
 
-type InstanceID string
+type InstanceID []byte
 
 func NewInstanceID() InstanceID {
-	return InstanceID(xid.New().String())
+	return xid.New().Bytes()
 }
 
 func (iid InstanceID) IsNil() bool {
-	return iid == ""
+	return iid == nil
 }
 
 func (iid InstanceID) String() string {
 	return string(iid)
 }
 
-type ProfileMeta struct {
-	ProfileID  ProfileID   `json:"profile_id"`
+type Meta struct {
+	ProfileID  ID          `json:"profile_id"`
 	Service    string      `json:"service"`
 	Type       ProfileType `json:"type"`
 	InstanceID InstanceID  `json:"instance_id"`
@@ -52,8 +62,8 @@ type ProfileMeta struct {
 	CreatedAt  time.Time   `json:"created_at,omitempty"`
 }
 
-func NewProfileMeta(service string, ptyp ProfileType, iid InstanceID, labels Labels) *ProfileMeta {
-	return &ProfileMeta{
+func NewProfileMeta(service string, ptyp ProfileType, iid InstanceID, labels Labels) *Meta {
+	return &Meta{
 		ProfileID:  NewProfileID(),
 		Service:    service,
 		Type:       ptyp,
@@ -61,44 +71,4 @@ func NewProfileMeta(service string, ptyp ProfileType, iid InstanceID, labels Lab
 		Labels:     labels,
 		CreatedAt:  time.Now().UTC(),
 	}
-}
-
-type ProfileFactory struct {
-	pp *profile.Profile
-	r  io.Reader
-}
-
-func NewProfileFactory(pp *profile.Profile) *ProfileFactory {
-	return &ProfileFactory{pp: pp}
-}
-
-func NewProfileFactoryFrom(r io.Reader) *ProfileFactory {
-	return &ProfileFactory{r: r}
-}
-
-func (p *ProfileFactory) Profile() (*profile.Profile, error) {
-	if p.pp != nil {
-		return p.pp, nil
-	}
-	err := p.parse(p.r)
-	return p.pp, err
-}
-
-func (p *ProfileFactory) WriteTo(dst io.Writer) error {
-	if p.pp != nil {
-		return p.pp.Write(dst)
-	}
-	return p.parse(io.TeeReader(p.r, dst))
-}
-
-func (p *ProfileFactory) parse(r io.Reader) (err error) {
-	if p.pp != nil {
-		return nil
-	}
-	// TODO(narqo): check if profile.Profile.Compact make any sense here
-	p.pp, err = profile.Parse(r)
-	if err != nil {
-		err = xerrors.Errorf("could not parse profile: %w", err)
-	}
-	return err
 }

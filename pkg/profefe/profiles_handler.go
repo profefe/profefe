@@ -68,7 +68,7 @@ func (h *ProfilesHandler) HandleGetProfile(w http.ResponseWriter, r *http.Reques
 		return StatusError(http.StatusBadRequest, "no profile id", nil)
 	}
 
-	var pid profile.ProfileID
+	var pid profile.ID
 	if err := pid.FromString(rawPid); err != nil {
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad profile id %q", rawPid), err)
 	}

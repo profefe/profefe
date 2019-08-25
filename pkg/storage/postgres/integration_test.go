@@ -1,4 +1,4 @@
-// +build integration
+// +build postgres integration
 
 package postgres_test
 
@@ -74,7 +74,7 @@ func TestStorage(t *testing.T) {
 	now := time.Now()
 	iid := profile.NewInstanceID()
 	service := fmt.Sprintf("test-service-%s", iid)
-	meta := &profile.ProfileMeta{
+	meta := &profile.Meta{
 		Service:    service,
 		Type:       profile.CPUProfile,
 		InstanceID: iid,
@@ -86,7 +86,7 @@ func TestStorage(t *testing.T) {
 	pp, err := pprofProfile.ParseData(data)
 	require.NoError(t, err)
 
-	pf := profile.NewProfileFactory(pp)
+	pf := profile.NewSingleProfileReader(pp)
 
 	err = st.WriteProfile(ctx, meta, pf)
 	require.NoError(t, err)

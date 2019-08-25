@@ -1,3 +1,5 @@
+// +build postgres
+
 package postgres
 
 import (
@@ -32,7 +34,7 @@ func New(logger *log.Logger, db *sql.DB) (*Storage, error) {
 	return st, nil
 }
 
-func (st *Storage) WriteProfile(ctx context.Context, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error {
+func (st *Storage) WriteProfile(ctx context.Context, meta *profile.Meta, pf *profile.SingleProfileReader) error {
 	pp, err := pf.Profile()
 	if err != nil {
 		return err
@@ -202,11 +204,11 @@ func getSampleLabels(sample *pprofProfile.Sample) (labels SampleLabels) {
 	return labels
 }
 
-func (st *Storage) GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error) {
+func (st *Storage) GetProfile(ctx context.Context, pid profile.ID) (*profile.SingleProfileReader, error) {
 	panic("implement me")
 }
 
-func (st *Storage) FindProfile(ctx context.Context, req *storage.FindProfilesParams) (*profile.ProfileFactory, error) {
+func (st *Storage) FindProfile(ctx context.Context, req *storage.FindProfilesParams) (*profile.SingleProfileReader, error) {
 	defer func(t time.Time) {
 		st.logger.Debugw("findProfile", "time", time.Since(t))
 	}(time.Now())
@@ -215,7 +217,7 @@ func (st *Storage) FindProfile(ctx context.Context, req *storage.FindProfilesPar
 	if err != nil {
 		return nil, err
 	}
-	return profile.NewProfileFactory(pp), nil
+	return profile.NewSingleProfileReader(pp), nil
 }
 
 func (st *Storage) findProfile(ctx context.Context, req *storage.FindProfilesParams) (*pprofProfile.Profile, error) {

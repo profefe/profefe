@@ -26,7 +26,7 @@ func TestStorage_WriteFind(t *testing.T) {
 
 	iid := profile.NewInstanceID()
 	service := fmt.Sprintf("test-service-%s", iid)
-	meta := &profile.ProfileMeta{
+	meta := &profile.Meta{
 		ProfileID:  profile.NewProfileID(),
 		Service:    service,
 		Type:       profile.CPUProfile,
@@ -39,7 +39,7 @@ func TestStorage_WriteFind(t *testing.T) {
 	pp, err := pprofProfile.ParseData(data)
 	require.NoError(t, err)
 
-	err = st.WriteProfile(context.Background(), meta, profile.NewProfileFactory(pp))
+	err = st.WriteProfile(context.Background(), meta, profile.NewSingleProfileReader(pp))
 	require.NoError(t, err)
 
 	params := &storage.FindProfilesParams{
@@ -62,13 +62,13 @@ func TestStorage_FindProfiles_MultipleResults(t *testing.T) {
 	st, teardown := setupTestStorage(t)
 	defer teardown()
 
-	writeProfile := func(fileName string, meta *profile.ProfileMeta) {
+	writeProfile := func(fileName string, meta *profile.Meta) {
 		data, err := ioutil.ReadFile(fileName)
 		require.NoError(t, err)
 		pp, err := pprofProfile.ParseData(data)
 		require.NoError(t, err)
 
-		err = st.WriteProfile(context.Background(), meta, profile.NewProfileFactory(pp))
+		err = st.WriteProfile(context.Background(), meta, profile.NewSingleProfileReader(pp))
 		require.NoError(t, err)
 	}
 
@@ -77,7 +77,7 @@ func TestStorage_FindProfiles_MultipleResults(t *testing.T) {
 
 	writeProfile(
 		"../../../testdata/test_cpu1.prof",
-		&profile.ProfileMeta{
+		&profile.Meta{
 			ProfileID:  profile.NewProfileID(),
 			Service:    service,
 			Type:       profile.CPUProfile,
@@ -88,7 +88,7 @@ func TestStorage_FindProfiles_MultipleResults(t *testing.T) {
 
 	writeProfile(
 		"../../../testdata/test_heap1.prof",
-		&profile.ProfileMeta{
+		&profile.Meta{
 			ProfileID:  profile.NewProfileID(),
 			Service:    service,
 			Type:       profile.HeapProfile,
@@ -101,7 +101,7 @@ func TestStorage_FindProfiles_MultipleResults(t *testing.T) {
 		fileName := fmt.Sprintf("../../../testdata/collector_cpu_%d.prof", i+1)
 		writeProfile(
 			fileName,
-			&profile.ProfileMeta{
+			&profile.Meta{
 				ProfileID:  profile.NewProfileID(),
 				Service:    service,
 				Type:       profile.CPUProfile,
@@ -144,6 +144,18 @@ func TestStorage_FindProfiles_MultipleResults(t *testing.T) {
 		require.Len(t, gotpfs, 1)
 	})
 
+	t.Run("by service labels and type", func(t *testing.T) {
+		params := &storage.FindProfilesParams{
+			Service:      service,
+			Type:         profile.HeapProfile,
+			Labels:       profile.Labels{{"key1", "val1"}},
+			CreatedAtMin: createdAtMin,
+		}
+		gotpfs, err := st.FindProfiles(context.Background(), params)
+		require.NoError(t, err)
+		require.Len(t, gotpfs, 1)
+	})
+
 	t.Run("by service", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
 			Service:      service,
@@ -152,6 +164,89 @@ func TestStorage_FindProfiles_MultipleResults(t *testing.T) {
 		gotpfs, err := st.FindProfiles(context.Background(), params)
 		require.NoError(t, err)
 		require.Len(t, gotpfs, 5)
+	})
+}
+
+func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
+	st, teardown := setupTestStorage(t)
+	defer teardown()
+
+	writeProfile := func(fileName string, meta *profile.Meta) {
+		data, err := ioutil.ReadFile(fileName)
+		require.NoError(t, err)
+		pp, err := pprofProfile.ParseData(data)
+		require.NoError(t, err)
+
+		err = st.WriteProfile(context.Background(), meta, profile.NewSingleProfileReader(pp))
+		require.NoError(t, err)
+	}
+
+	iid := profile.NewInstanceID()
+	service := fmt.Sprintf("test-service-%s", iid)
+
+	writeProfile(
+		"../../../testdata/test_cpu1.prof",
+		&profile.Meta{
+			ProfileID:  profile.NewProfileID(),
+			Service:    service,
+			Type:       profile.CPUProfile,
+			InstanceID: iid,
+			Labels:     profile.Labels{{"key1", "val1"}},
+		},
+	)
+
+	writeProfile(
+		"../../../testdata/test_heap1.prof",
+		&profile.Meta{
+			ProfileID:  profile.NewProfileID(),
+			Service:    service,
+			Type:       profile.HeapProfile,
+			InstanceID: iid,
+			Labels:     profile.Labels{{"key1", "val1"}},
+		},
+	)
+
+	for i := 0; i < 3; i++ {
+		fileName := fmt.Sprintf("../../../testdata/collector_cpu_%d.prof", i+1)
+		writeProfile(
+			fileName,
+			&profile.Meta{
+				ProfileID:  profile.NewProfileID(),
+				Service:    service,
+				Type:       profile.CPUProfile,
+				InstanceID: iid,
+				Labels:     profile.Labels{{"key2", "val2"}},
+			},
+		)
+	}
+
+	// just some old date
+	createdAtMin := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("by service and labels", func(t *testing.T) {
+		params := &storage.FindProfilesParams{
+			Service:      service,
+			Labels:       profile.Labels{{"key2", "val2"}},
+			CreatedAtMin: createdAtMin,
+		}
+		pl, err := st.ListProfiles(context.Background(), params)
+		require.NoError(t, err)
+
+		var foundPfs int
+		// check that storage returns profiles in the correct order
+		var prevTime int64
+
+		for pl.Next() {
+			foundPfs++
+
+			pp, err := pl.Reader().Profile()
+			require.NoError(t, err)
+			assert.True(t, prevTime < pp.TimeNanos, "create time must be after previous time")
+		}
+		require.NoError(t, pl.Err())
+		require.Equal(t, 3, foundPfs)
+
+		require.NoError(t, pl.Close())
 	})
 }
 
@@ -175,7 +270,7 @@ func TestStorage_GetProfile(t *testing.T) {
 	pid := profile.NewProfileID()
 	iid := profile.NewInstanceID()
 	service := fmt.Sprintf("test-service-%s", iid)
-	meta := &profile.ProfileMeta{
+	meta := &profile.Meta{
 		ProfileID:  pid,
 		Service:    service,
 		Type:       profile.CPUProfile,
@@ -188,7 +283,7 @@ func TestStorage_GetProfile(t *testing.T) {
 	pp, err := pprofProfile.ParseData(data)
 	require.NoError(t, err)
 
-	err = st.WriteProfile(context.Background(), meta, profile.NewProfileFactory(pp))
+	err = st.WriteProfile(context.Background(), meta, profile.NewSingleProfileReader(pp))
 	require.NoError(t, err)
 
 	gotpf, err := st.GetProfile(context.Background(), pid)

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/profefe/profefe/pkg/profile"
@@ -14,15 +15,15 @@ var (
 )
 
 type Writer interface {
-	WriteProfile(ctx context.Context, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error
+	WriteProfile(ctx context.Context, meta *profile.Meta, r io.Reader) error
 }
 
 type Reader interface {
-	GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error)
-	FindProfiles(ctx context.Context, params *FindProfilesParams) ([]*profile.ProfileFactory, error)
-	FindProfileIDs(ctx context.Context, params *FindProfilesParams) ([]profile.ProfileID, error)
+	ListProfiles(ctx context.Context, pid []profile.ID) (profile.Reader, error)
+	FindProfiles(ctx context.Context, params *FindProfilesParams) (profile.Reader, error)
+	FindProfileIDs(ctx context.Context, params *FindProfilesParams) ([]profile.ID, error)
 
-	GetServices(ctx context.Context) ([]string, error)
+	ListServices(ctx context.Context) ([]string, error)
 }
 
 type FindProfilesParams struct {

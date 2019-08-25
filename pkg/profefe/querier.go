@@ -24,25 +24,36 @@ func NewQuerier(logger *log.Logger, sr storage.Reader) *Querier {
 }
 
 func (q *Querier) GetServices(ctx context.Context) ([]string, error) {
-	return q.sr.GetServices(ctx)
+	return q.sr.ListServices(ctx)
 }
 
-func (q *Querier) GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error) {
-	return q.sr.GetProfile(ctx, pid)
+func (q *Querier) GetProfile(ctx context.Context, pid profile.ID) (*pprofProfile.Profile, error) {
+	pr, err := q.sr.ListProfiles(ctx, []profile.ID{pid})
+	if err != nil {
+		return nil, err
+	}
+	defer pr.Close()
+
+	var pp *pprofProfile.Profile
+	for pr.Next() {
+		pp = pr.Profile()
+	}
+	return pp, pr.Err()
 }
 
 func (q *Querier) FindProfileTo(ctx context.Context, dst io.Writer, params *storage.FindProfilesParams) error {
-	ppf, err := q.sr.FindProfiles(ctx, params)
+	pr, err := q.sr.FindProfiles(ctx, params)
 	if err != nil {
 		return err
 	}
+	defer pr.Close()
 
-	pps := make([]*pprofProfile.Profile, len(ppf))
-	for i, pf := range ppf {
-		pps[i], err = pf.Profile()
-		if err != nil {
-			return err
-		}
+	pps := make([]*pprofProfile.Profile, 0)
+	for pr.Next() {
+		pps = append(pps, pr.Profile())
+	}
+	if err := pr.Err(); err != nil {
+		return err
 	}
 
 	pp, err := pprofProfile.Merge(pps)
