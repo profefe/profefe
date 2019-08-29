@@ -30,7 +30,11 @@ func (q *Querier) GetProfile(ctx context.Context, pid profile.ID) (*pprofProfile
 	}
 	defer list.Close()
 
-	return list.Next()
+	pp, err := list.Next()
+	if err == io.EOF {
+		return nil, storage.ErrNotFound
+	}
+	return pp, err
 }
 
 func (q *Querier) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]*profile.Meta, error) {
@@ -38,15 +42,11 @@ func (q *Querier) FindProfiles(ctx context.Context, params *storage.FindProfiles
 }
 
 func (q *Querier) FindProfileTo(ctx context.Context, dst io.Writer, params *storage.FindProfilesParams) error {
-	metas, err := q.sr.FindProfiles(ctx, params)
+	pids, err := q.sr.FindProfileIDs(ctx, params)
 	if err != nil {
 		return err
 	}
 
-	pids := make([]profile.ID, len(metas))
-	for i, meta := range metas {
-		pids[i] = meta.ProfileID
-	}
 	list, err := q.sr.ListProfiles(ctx, pids)
 	if err != nil {
 		return err

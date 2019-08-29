@@ -57,11 +57,17 @@ func (st *Storage) WriteProfile(ctx context.Context, meta *profile.Meta, r io.Re
 	if err != nil {
 		return xerrors.Errorf("could not parse profile: %w", err)
 	}
-	return st.writeProfileData(ctx, meta, pp.TimeNanos, buf.Bytes())
+
+	// XXX(narqo): update meta with time from parsed profile
+	meta.CreatedAt = time.Unix(0, pp.TimeNanos)
+
+	return st.writeProfileData(ctx, meta, buf.Bytes())
 }
 
-func (st *Storage) writeProfileData(ctx context.Context, meta *profile.Meta, createdAt int64, data []byte) error {
+func (st *Storage) writeProfileData(ctx context.Context, meta *profile.Meta, data []byte) error {
 	entries := make([]*badger.Entry, 0, 1+1+2+len(meta.Labels)) // 1 for profile entry, 1 for meta entry, 2 for general indexes
+
+	createdAt := meta.CreatedAt.UnixNano()
 
 	entries = append(entries, st.newBadgerEntry(createProfilePK(meta.ProfileID, createdAt), data))
 
@@ -120,11 +126,11 @@ func (st *Storage) newBadgerEntry(key, val []byte) *badger.Entry {
 func createProfilePK(pid profile.ID, createdAt int64) []byte {
 	var buf bytes.Buffer
 	buf.WriteByte(profilePrefix)
+	buf.Write(pid)
 	// special case to re-use the function for both write and read
 	if createdAt != 0 {
 		binary.Write(&buf, binary.BigEndian, createdAt)
 	}
-	buf.Write(pid)
 	return buf.Bytes()
 }
 
@@ -164,12 +170,12 @@ func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage
 	txn := st.db.NewTransaction(false)
 
 	opts := badger.DefaultIteratorOptions
-	opts.PrefetchSize = 10 // pk keys are sorted
+	opts.PrefetchSize = 10
 
 	pl := &ProfileList{
 		txn:      txn,
 		it:       txn.NewIterator(opts),
-		logger:   st.logger.With("component", "profilelist"),
+		logger:   st.logger,
 		prefixes: prefixes,
 	}
 	return pl, nil
@@ -234,7 +240,7 @@ func (pl *ProfileList) setErr(err error) {
 }
 
 func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]*profile.Meta, error) {
-	pids, err := st.findProfileIDs(ctx, params)
+	pids, err := st.FindProfileIDs(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -243,6 +249,7 @@ func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfile
 	for _, pid := range pids {
 		pk := append(make([]byte, 0, 1+len(pid)), metaPrefix)
 		pk = append(pk, pid...)
+		st.logger.Debugw("findProfiles: create pk", "pid", pid, "pk", pk)
 		prefixes = append(prefixes, pk)
 	}
 
@@ -279,7 +286,7 @@ func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfile
 	return metas, nil
 }
 
-func (st *Storage) findProfileIDs(ctx context.Context, params *storage.FindProfilesParams) ([]profile.ID, error) {
+func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfilesParams) ([]profile.ID, error) {
 	if params.Service == "" {
 		return nil, xerrors.New("empty service")
 	}

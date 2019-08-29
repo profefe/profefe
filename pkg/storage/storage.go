@@ -21,6 +21,7 @@ type Writer interface {
 
 type Reader interface {
 	FindProfiles(ctx context.Context, params *FindProfilesParams) ([]*profile.Meta, error)
+	FindProfileIDs(ctx context.Context, params *FindProfilesParams) ([]profile.ID, error)
 	ListProfiles(ctx context.Context, pid []profile.ID) (ProfileList, error)
 }
 
@@ -33,22 +34,21 @@ type FindProfilesParams struct {
 	Limit        int
 }
 
-func (filter *FindProfilesParams) Validate() error {
-	if filter == nil {
+func (params *FindProfilesParams) Validate() error {
+	if params == nil {
 		return xerrors.New("nil request")
 	}
-
-	if filter.Service == "" {
-		return xerrors.Errorf("service empty: filter %v", filter)
+	if params.Service == "" {
+		return xerrors.New("service empty")
 	}
-	if filter.Type == profile.UnknownProfile {
-		return xerrors.Errorf("unknown profile type %s: filter %v", filter.Type, filter)
+	if params.Type == profile.UnknownProfile {
+		return xerrors.Errorf("unknown profile type %s", params.Type)
 	}
-	if filter.CreatedAtMin.IsZero() || filter.CreatedAtMax.IsZero() {
-		return xerrors.Errorf("createdAt time zero: filter %v", filter)
+	if params.CreatedAtMin.IsZero() || params.CreatedAtMax.IsZero() {
+		return xerrors.Errorf("createdAt time zero: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
 	}
-	if filter.CreatedAtMin.After(filter.CreatedAtMax) {
-		return xerrors.Errorf("createdAt time min after max: filter %v", filter)
+	if params.CreatedAtMin.After(params.CreatedAtMax) {
+		return xerrors.Errorf("createdAt time min after max: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
 	}
 	return nil
 }
