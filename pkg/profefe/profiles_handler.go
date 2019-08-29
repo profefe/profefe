@@ -36,7 +36,7 @@ func (h *ProfilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodPost:
 			err = h.HandleCreateProfile(w, r)
 		case http.MethodGet:
-			err = h.HandleFindProfile(w, r)
+			err = h.HandleFindProfiles(w, r)
 		}
 	} else if len(p) > len(apiProfilesPath) {
 		err = h.HandleGetProfile(w, r)
@@ -73,7 +73,7 @@ func (h *ProfilesHandler) HandleGetProfile(w http.ResponseWriter, r *http.Reques
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad profile id %q", rawPid), err)
 	}
 
-	pf, err := h.querier.GetProfile(r.Context(), pid)
+	pp, err := h.querier.GetProfile(r.Context(), pid)
 	if err == storage.ErrNotFound {
 		return StatusError(http.StatusNotFound, "nothing found", nil)
 	} else if err != nil {
@@ -82,17 +82,33 @@ func (h *ProfilesHandler) HandleGetProfile(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 
-	return pf.WriteTo(w)
+	return pp.Write(w)
+}
+
+func (h *ProfilesHandler) HandleFindProfiles(w http.ResponseWriter, r *http.Request) error {
+	params := &storage.FindProfilesParams{}
+	if err := parseFindProfileParams(params, r); err != nil {
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	metas, err := h.querier.FindProfiles(r.Context(), params)
+	if err == storage.ErrNotFound {
+		return StatusError(http.StatusNotFound, "nothing found", nil)
+	} else if err == storage.ErrEmpty {
+		return StatusError(http.StatusNoContent, "profile empty", nil)
+	}
+
+	ReplyJSON(w, metas)
+
+	return nil
 }
 
 func (h *ProfilesHandler) HandleFindProfile(w http.ResponseWriter, r *http.Request) error {
 	params := &storage.FindProfilesParams{}
 	if err := parseFindProfileParams(params, r); err != nil {
 		return err
-	}
-
-	if err := params.Validate(); err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -156,6 +172,10 @@ func parseFindProfileParams(in *storage.FindProfilesParams, r *http.Request) (er
 			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad limit %q", v), err)
 		}
 		in.Limit = l
+	}
+
+	if err := in.Validate(); err != nil {
+		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
 	}
 
 	return nil

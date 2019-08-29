@@ -4,20 +4,25 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"io"
 	"time"
 
 	"github.com/dgraph-io/badger"
+	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
 	"golang.org/x/xerrors"
 )
 
-const profilePrefix byte = 1 << 7 // 0b10000000
+const (
+	metaPrefix    byte = 1 << 6 // 0b01000000
+	profilePrefix byte = 1 << 7 // 0b10000000
+)
 
 const (
-	serviceIndexID = profilePrefix | 1 + iota
+	serviceIndexID = metaPrefix | 1 + iota
 	typeIndexID
 	labelsIndexID
 )
@@ -47,22 +52,24 @@ func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 }
 
 func (st *Storage) WriteProfile(ctx context.Context, meta *profile.Meta, r io.Reader) error {
-	pr := profile.NewReaderFrom(r)
-	for pr.Next() {
-		pp := pr.Profile()
-		err := st.writeProfileData(ctx, meta, pp.TimeNanos, pr.Bytes())
-		if err != nil {
-			return xerrors.Errorf("could not write profile data: %w", err)
-		}
+	var buf bytes.Buffer
+	pp, err := pprofProfile.Parse(io.TeeReader(r, &buf))
+	if err != nil {
+		return xerrors.Errorf("could not parse profile: %w", err)
 	}
-
-	return pr.Err()
+	return st.writeProfileData(ctx, meta, pp.TimeNanos, buf.Bytes())
 }
 
 func (st *Storage) writeProfileData(ctx context.Context, meta *profile.Meta, createdAt int64, data []byte) error {
-	entries := make([]*badger.Entry, 0, 1+2+len(meta.Labels)) // 1 for profile entry, 2 for general indexes
+	entries := make([]*badger.Entry, 0, 1+1+2+len(meta.Labels)) // 1 for profile entry, 1 for meta entry, 2 for general indexes
 
 	entries = append(entries, st.newBadgerEntry(createProfilePK(meta.ProfileID, createdAt), data))
+
+	mk, mv, err := createMetaKV(meta)
+	if err != nil {
+		return xerrors.Errorf("could not encode meta %v: %w", meta, err)
+	}
+	entries = append(entries, st.newBadgerEntry(mk, mv))
 
 	// indexes
 	indexVal := make([]byte, 0, len(meta.Service)+64)
@@ -112,42 +119,37 @@ func (st *Storage) newBadgerEntry(key, val []byte) *badger.Entry {
 // profile primary key profilePrefix<pid><created-at>
 func createProfilePK(pid profile.ID, createdAt int64) []byte {
 	var buf bytes.Buffer
-
 	buf.WriteByte(profilePrefix)
 	// special case to re-use the function for both write and read
 	if createdAt != 0 {
 		binary.Write(&buf, binary.BigEndian, createdAt)
 	}
 	buf.Write(pid)
-
 	return buf.Bytes()
+}
+
+// meta primary key metaPrefix<pid>, value json-encoded
+func createMetaKV(meta *profile.Meta) ([]byte, []byte, error) {
+	key := make([]byte, 0, len(meta.ProfileID)+1)
+	key = append(key, metaPrefix)
+	key = append(key, meta.ProfileID...)
+
+	val, err := json.Marshal(meta)
+
+	return key, val, err
 }
 
 // index key <index-id><index-val><created-at><pid>
 func createIndexKey(indexID byte, indexVal []byte, pid profile.ID, createdAt int64) []byte {
 	var buf bytes.Buffer
-
 	buf.WriteByte(indexID)
 	buf.Write(indexVal)
 	binary.Write(&buf, binary.BigEndian, createdAt)
 	buf.Write(pid)
-
 	return buf.Bytes()
 }
 
-func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (profile.Reader, error) {
-	return st.getProfiles(ctx, pids)
-}
-
-func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) (profile.Reader, error) {
-	pids, err := st.FindProfileIDs(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	return st.getProfiles(ctx, pids)
-}
-
-func (st *Storage) getProfiles(ctx context.Context, pids []profile.ID) (*ProfilesReader, error) {
+func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage.ProfileList, error) {
 	if len(pids) == 0 {
 		return nil, xerrors.New("empty profile ids")
 	}
@@ -161,18 +163,123 @@ func (st *Storage) getProfiles(ctx context.Context, pids []profile.ID) (*Profile
 
 	txn := st.db.NewTransaction(false)
 
-	opt := badger.DefaultIteratorOptions
-	opt.PrefetchSize = 10 // pk keys are sorted
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchSize = 10 // pk keys are sorted
 
-	pl := &ProfilesReader{
+	pl := &ProfileList{
 		txn:      txn,
-		it:       txn.NewIterator(opt),
+		it:       txn.NewIterator(opts),
+		logger:   st.logger.With("component", "profilelist"),
 		prefixes: prefixes,
 	}
 	return pl, nil
 }
 
-func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfilesParams) ([]profile.ID, error) {
+type ProfileList struct {
+	txn    *badger.Txn
+	it     *badger.Iterator
+	logger *log.Logger
+
+	prefixes [][]byte
+	prefix   []byte
+	nPrefix  int
+
+	err error
+}
+
+func (pl *ProfileList) Next() (*pprofProfile.Profile, error) {
+	if pl.err != nil {
+		return nil, pl.err
+	}
+
+	for pl.nPrefix < len(pl.prefixes) {
+		if pl.prefix == nil {
+			pl.prefix = pl.prefixes[pl.nPrefix]
+			pl.nPrefix++
+			pl.it.Seek(pl.prefix)
+		} else {
+			pl.it.Next()
+		}
+
+		valid := pl.it.ValidForPrefix(pl.prefix)
+		pl.logger.Debugw("next", "prefix", pl.prefix, "valid", valid)
+		if valid {
+			var pp *pprofProfile.Profile
+			err := pl.it.Item().Value(func(val []byte) (err error) {
+				pp, err = pprofProfile.ParseData(val)
+				return err
+			})
+			if err != nil {
+				pl.setErr(err)
+			}
+			return pp, err
+		}
+
+		pl.prefix = nil
+	}
+
+	return nil, io.EOF
+}
+
+func (pl *ProfileList) Close() error {
+	pl.it.Close()
+	pl.txn.Discard()
+	return pl.err
+}
+
+func (pl *ProfileList) setErr(err error) {
+	if pl.err == nil || pl.err == io.EOF {
+		pl.err = err
+	}
+}
+
+func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]*profile.Meta, error) {
+	pids, err := st.findProfileIDs(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	prefixes := make([][]byte, 0, len(pids))
+	for _, pid := range pids {
+		pk := append(make([]byte, 0, 1+len(pid)), metaPrefix)
+		pk = append(pk, pid...)
+		prefixes = append(prefixes, pk)
+	}
+
+	metas := make([]*profile.Meta, 0, len(pids))
+
+	err = st.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for _, prefix := range prefixes {
+			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+				meta := new(profile.Meta)
+				err := it.Item().Value(func(val []byte) error {
+					return json.Unmarshal(val, meta)
+				})
+				if err != nil {
+					return err
+				}
+				metas = append(metas, meta)
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	if len(metas) == 0 {
+		return nil, storage.ErrNotFound
+	}
+
+	return metas, nil
+}
+
+func (st *Storage) findProfileIDs(ctx context.Context, params *storage.FindProfilesParams) ([]profile.ID, error) {
 	if params.Service == "" {
 		return nil, xerrors.New("empty service")
 	}

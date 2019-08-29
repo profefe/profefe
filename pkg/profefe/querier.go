@@ -23,37 +23,46 @@ func NewQuerier(logger *log.Logger, sr storage.Reader) *Querier {
 	}
 }
 
-func (q *Querier) GetServices(ctx context.Context) ([]string, error) {
-	return q.sr.ListServices(ctx)
-}
-
 func (q *Querier) GetProfile(ctx context.Context, pid profile.ID) (*pprofProfile.Profile, error) {
-	pr, err := q.sr.ListProfiles(ctx, []profile.ID{pid})
+	list, err := q.sr.ListProfiles(ctx, []profile.ID{pid})
 	if err != nil {
 		return nil, err
 	}
-	defer pr.Close()
+	defer list.Close()
 
-	var pp *pprofProfile.Profile
-	for pr.Next() {
-		pp = pr.Profile()
-	}
-	return pp, pr.Err()
+	return list.Next()
+}
+
+func (q *Querier) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]*profile.Meta, error) {
+	return q.sr.FindProfiles(ctx, params)
 }
 
 func (q *Querier) FindProfileTo(ctx context.Context, dst io.Writer, params *storage.FindProfilesParams) error {
-	pr, err := q.sr.FindProfiles(ctx, params)
+	metas, err := q.sr.FindProfiles(ctx, params)
 	if err != nil {
 		return err
 	}
-	defer pr.Close()
 
-	pps := make([]*pprofProfile.Profile, 0)
-	for pr.Next() {
-		pps = append(pps, pr.Profile())
+	pids := make([]profile.ID, len(metas))
+	for i, meta := range metas {
+		pids[i] = meta.ProfileID
 	}
-	if err := pr.Err(); err != nil {
+	list, err := q.sr.ListProfiles(ctx, pids)
+	if err != nil {
 		return err
+	}
+	defer list.Close()
+
+	pps := make([]*pprofProfile.Profile, 0, len(pids))
+	for {
+		p, err := list.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		pps = append(pps, p)
 	}
 
 	pp, err := pprofProfile.Merge(pps)

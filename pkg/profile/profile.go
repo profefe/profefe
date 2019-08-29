@@ -34,6 +34,14 @@ func (pid ID) IsNil() bool {
 	return pid == nil
 }
 
+func (pid ID) MarshalJSON() (b []byte, err error) {
+	id, err := xid.FromBytes(pid)
+	if err != nil {
+		return nil, err
+	}
+	return id.MarshalJSON()
+}
+
 func (pid ID) String() string {
 	id, _ := xid.FromBytes(pid)
 	return id.String()

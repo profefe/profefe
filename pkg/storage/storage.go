@@ -5,13 +5,14 @@ import (
 	"io"
 	"time"
 
+	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/profile"
 	"golang.org/x/xerrors"
 )
 
 var (
 	ErrNotFound = xerrors.New("not found")
-	ErrEmpty    = xerrors.New("results empty")
+	ErrEmpty    = xerrors.New("empty results")
 )
 
 type Writer interface {
@@ -19,11 +20,8 @@ type Writer interface {
 }
 
 type Reader interface {
-	ListProfiles(ctx context.Context, pid []profile.ID) (profile.Reader, error)
-	FindProfiles(ctx context.Context, params *FindProfilesParams) (profile.Reader, error)
-	FindProfileIDs(ctx context.Context, params *FindProfilesParams) ([]profile.ID, error)
-
-	ListServices(ctx context.Context) ([]string, error)
+	FindProfiles(ctx context.Context, params *FindProfilesParams) ([]*profile.Meta, error)
+	ListProfiles(ctx context.Context, pid []profile.ID) (ProfileList, error)
 }
 
 type FindProfilesParams struct {
@@ -53,4 +51,9 @@ func (filter *FindProfilesParams) Validate() error {
 		return xerrors.Errorf("createdAt time min after max: filter %v", filter)
 	}
 	return nil
+}
+
+type ProfileList interface {
+	Next() (*pprofProfile.Profile, error)
+	Close() error
 }
