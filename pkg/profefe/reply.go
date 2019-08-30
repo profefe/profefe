@@ -10,6 +10,8 @@ import (
 	"golang.org/x/xerrors"
 )
 
+var ErrNotFound = StatusError(http.StatusNotFound, "not found", nil)
+
 func ReplyOK(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")

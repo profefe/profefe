@@ -27,7 +27,7 @@ func TestStorage_WriteFind(t *testing.T) {
 	iid := profile.NewInstanceID()
 	service := fmt.Sprintf("test-service-%s", iid)
 	meta := &profile.Meta{
-		ProfileID:  profile.NewProfileID(),
+		ProfileID:  profile.NewID(),
 		Service:    service,
 		Type:       profile.CPUProfile,
 		InstanceID: iid,
@@ -78,7 +78,7 @@ func TestStorage_FindProfiles_MultipleResults(t *testing.T) {
 	writeProfile(
 		"../../../testdata/test_cpu1.prof",
 		&profile.Meta{
-			ProfileID:  profile.NewProfileID(),
+			ProfileID:  profile.NewID(),
 			Service:    service,
 			Type:       profile.CPUProfile,
 			InstanceID: iid,
@@ -89,7 +89,7 @@ func TestStorage_FindProfiles_MultipleResults(t *testing.T) {
 	writeProfile(
 		"../../../testdata/test_heap1.prof",
 		&profile.Meta{
-			ProfileID:  profile.NewProfileID(),
+			ProfileID:  profile.NewID(),
 			Service:    service,
 			Type:       profile.HeapProfile,
 			InstanceID: iid,
@@ -102,7 +102,7 @@ func TestStorage_FindProfiles_MultipleResults(t *testing.T) {
 		writeProfile(
 			fileName,
 			&profile.Meta{
-				ProfileID:  profile.NewProfileID(),
+				ProfileID:  profile.NewID(),
 				Service:    service,
 				Type:       profile.CPUProfile,
 				InstanceID: iid,
@@ -187,7 +187,7 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 	writeProfile(
 		"../../../testdata/test_cpu1.prof",
 		&profile.Meta{
-			ProfileID:  profile.NewProfileID(),
+			ProfileID:  profile.NewID(),
 			Service:    service,
 			Type:       profile.CPUProfile,
 			InstanceID: iid,
@@ -198,7 +198,7 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 	writeProfile(
 		"../../../testdata/test_heap1.prof",
 		&profile.Meta{
-			ProfileID:  profile.NewProfileID(),
+			ProfileID:  profile.NewID(),
 			Service:    service,
 			Type:       profile.HeapProfile,
 			InstanceID: iid,
@@ -211,7 +211,7 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 		writeProfile(
 			fileName,
 			&profile.Meta{
-				ProfileID:  profile.NewProfileID(),
+				ProfileID:  profile.NewID(),
 				Service:    service,
 				Type:       profile.CPUProfile,
 				InstanceID: iid,
@@ -267,7 +267,7 @@ func TestStorage_GetProfile(t *testing.T) {
 	st, teardown := setupTestStorage(t)
 	defer teardown()
 
-	pid := profile.NewProfileID()
+	pid := profile.NewID()
 	iid := profile.NewInstanceID()
 	service := fmt.Sprintf("test-service-%s", iid)
 	meta := &profile.Meta{
@@ -299,7 +299,7 @@ func TestStorage_GetProfile_NotFound(t *testing.T) {
 	st, teardown := setupTestStorage(t)
 	defer teardown()
 
-	pid := profile.NewProfileID()
+	pid := profile.NewID()
 
 	_, err := st.GetProfile(context.Background(), pid)
 	require.Equal(t, storage.ErrNotFound, err)

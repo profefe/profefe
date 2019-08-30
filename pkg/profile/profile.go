@@ -14,17 +14,18 @@ var encoding = base32.NewEncoding(encoder).WithPadding(base32.NoPadding)
 
 type ID []byte
 
-func NewProfileID() ID {
+func NewID() ID {
 	return xid.New().Bytes()
 }
 
-func (pid *ID) FromBytes(b []byte) error {
-	return pid.UnmarshalText(b)
+func IDFromString(s string) (ID, error) {
+	return encoding.DecodeString(s)
 }
 
-func (pid *ID) FromString(s string) (err error) {
-	*pid, err = encoding.DecodeString(s)
-	return err
+func IDFromBytes(b []byte) (ID, error) {
+	var pid ID
+	err := pid.UnmarshalText(b)
+	return pid, err
 }
 
 func (pid ID) IsNil() bool {
@@ -92,7 +93,7 @@ type Meta struct {
 
 func NewProfileMeta(service string, ptyp ProfileType, iid InstanceID, labels Labels) *Meta {
 	return &Meta{
-		ProfileID:  NewProfileID(),
+		ProfileID:  NewID(),
 		Service:    service,
 		Type:       ptyp,
 		InstanceID: iid,

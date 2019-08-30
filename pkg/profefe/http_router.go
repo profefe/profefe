@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	apiProfilesPath = "/api/0/profiles"
-	apiVersionPath  = "/api/0/version"
+	apiProfilesPath      = "/api/0/profiles"
+	apiProfilesMergePath = "/api/0/profiles/merge"
+	apiVersionPath       = "/api/0/version"
 )
 
 func SetupRoutes(

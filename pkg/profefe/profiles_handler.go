@@ -29,19 +29,30 @@ func NewProfilesHandler(logger *log.Logger, collector *Collector, querier *Queri
 }
 
 func (h *ProfilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var err error
+	var (
+		handler func(http.ResponseWriter, *http.Request) error
+		urlPath = path.Clean(r.URL.Path)
+	)
 
-	if p := path.Clean(r.URL.Path); p == apiProfilesPath {
+	if urlPath == apiProfilesMergePath {
+		handler = h.HandleFindProfile
+	} else if urlPath == apiProfilesPath {
 		switch r.Method {
 		case http.MethodPost:
-			err = h.HandleCreateProfile(w, r)
+			handler = h.HandleCreateProfile
 		case http.MethodGet:
-			err = h.HandleFindProfiles(w, r)
+			handler = h.HandleFindProfiles
 		}
-	} else if len(p) > len(apiProfilesPath) {
-		err = h.HandleGetProfile(w, r)
+	} else if len(urlPath) > len(apiProfilesPath) {
+		handler = h.HandleGetProfile
 	}
 
+	var err error
+	if handler != nil {
+		err = handler(w, r)
+	} else {
+		err = ErrNotFound
+	}
 	HandleErrorHTTP(h.logger, err, w, r)
 }
 
@@ -68,13 +79,8 @@ func (h *ProfilesHandler) HandleGetProfile(w http.ResponseWriter, r *http.Reques
 		return StatusError(http.StatusBadRequest, "no profile id", nil)
 	}
 
-	// special case: find profiles and merge them into one
-	if rawPid == "merge" {
-		return h.HandleFindProfile(w, r)
-	}
-
-	var pid profile.ID
-	if err := pid.FromString(rawPid); err != nil {
+	pid, err := profile.IDFromString(rawPid)
+	if err != nil {
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad profile id %q", rawPid), err)
 	}
 

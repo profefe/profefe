@@ -8,14 +8,13 @@ import (
 )
 
 func TestID_MarshalJSON(t *testing.T) {
-	var testPID ID
-	testPID.FromString("blk30gth5s5jab509hk0")
+	testPID, _ := IDFromString("blk30gth5s5jab509hk0")
 
 	cases := []struct {
 		pid ID
 	}{
 		{nil},
-		{NewProfileID()},
+		{NewID()},
 		{testPID},
 	}
 
@@ -31,17 +30,18 @@ func TestID_MarshalJSON(t *testing.T) {
 	}
 }
 
-func TestID_FromString(t *testing.T) {
+func TestIDFromString(t *testing.T) {
+	testPID, _ := IDFromString("blk30gth5s5jab509hk0")
+
 	cases := []struct {
 		pid ID
 	}{
-		//{nil},
-		{NewProfileID()},
+		{testPID},
+		{NewID()},
 	}
 
 	for _, tc := range cases {
-		var gotPid ID
-		err := gotPid.FromString(tc.pid.String())
+		gotPid, err := IDFromString(tc.pid.String())
 		require.NoError(t, err)
 		assert.Equal(t, tc.pid, gotPid)
 	}

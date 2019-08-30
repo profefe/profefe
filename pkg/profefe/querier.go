@@ -47,6 +47,8 @@ func (q *Querier) FindProfileTo(ctx context.Context, dst io.Writer, params *stor
 		return err
 	}
 
+	// TODO(narqo): limit maximum number of profiles to merge; as an example,
+	//  Stackdriver merges up to 250 random profiles if query returns more than that
 	list, err := q.sr.ListProfiles(ctx, pids)
 	if err != nil {
 		return err
