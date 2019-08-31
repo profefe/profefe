@@ -22,9 +22,8 @@ func IDFromString(s string) (ID, error) {
 	return encoding.DecodeString(s)
 }
 
-func IDFromBytes(b []byte) (ID, error) {
-	var pid ID
-	err := pid.UnmarshalText(b)
+func IDFromBytes(b []byte) (pid ID, err error) {
+	err = pid.UnmarshalText(b)
 	return pid, err
 }
 
