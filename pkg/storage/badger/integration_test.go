@@ -1,8 +1,10 @@
 package badger_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -24,22 +26,18 @@ func TestStorage_WriteFind(t *testing.T) {
 	st, teardown := setupTestStorage(t)
 	defer teardown()
 
-	iid := profile.NewInstanceID()
-	service := fmt.Sprintf("test-service-%s", iid)
-	meta := &profile.ProfileMeta{
-		ProfileID:  profile.NewProfileID(),
+	service := "test-service-1"
+	meta := &profile.Meta{
+		ProfileID:  profile.NewID(),
 		Service:    service,
 		Type:       profile.CPUProfile,
-		InstanceID: iid,
-		Labels:     profile.Labels{{"key1", "val2"}},
+		InstanceID: profile.NewInstanceID(),
+		Labels:     profile.Labels{{"key1", "val1"}},
 	}
 
-	data, err := ioutil.ReadFile("../../../testdata/test_cpu1.prof")
-	require.NoError(t, err)
-	pp, err := pprofProfile.ParseData(data)
-	require.NoError(t, err)
+	data := testWriteProfile(t, st, "../../../testdata/collector_cpu_1.prof", meta)
 
-	err = st.WriteProfile(context.Background(), meta, profile.NewProfileFactory(pp))
+	pp, err := pprofProfile.ParseData(data)
 	require.NoError(t, err)
 
 	params := &storage.FindProfilesParams{
@@ -47,170 +45,225 @@ func TestStorage_WriteFind(t *testing.T) {
 		Type:         profile.CPUProfile,
 		CreatedAtMin: time.Unix(0, pp.TimeNanos),
 	}
-	gotpfs, err := st.FindProfiles(context.Background(), params)
+	found, err := st.FindProfiles(context.Background(), params)
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+
+	assert.Equal(t, service, found[0].Service)
+	assert.Equal(t, profile.CPUProfile, found[0].Type)
+
+	list, err := st.ListProfiles(context.Background(), []profile.ID{found[0].ProfileID})
 	require.NoError(t, err)
 
-	require.Len(t, gotpfs, 1)
-
-	gotpp, err := gotpfs[0].Profile()
+	gotpp, err := list.Next()
 	require.NoError(t, err)
 
 	assert.True(t, pprofutil.ProfilesEqual(pp, gotpp))
+
+	_, err = list.Next()
+	assert.Equal(t, io.EOF, err)
+
+	assert.NoError(t, list.Close())
 }
 
-func TestStorage_FindProfiles_MultipleResults(t *testing.T) {
+func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 	st, teardown := setupTestStorage(t)
 	defer teardown()
-
-	writeProfile := func(fileName string, meta *profile.ProfileMeta) {
-		data, err := ioutil.ReadFile(fileName)
-		require.NoError(t, err)
-		pp, err := pprofProfile.ParseData(data)
-		require.NoError(t, err)
-
-		err = st.WriteProfile(context.Background(), meta, profile.NewProfileFactory(pp))
-		require.NoError(t, err)
-	}
 
 	iid := profile.NewInstanceID()
 	service := fmt.Sprintf("test-service-%s", iid)
 
-	writeProfile(
-		"../../../testdata/test_cpu1.prof",
-		&profile.ProfileMeta{
-			ProfileID:  profile.NewProfileID(),
+	for n := 1; n <= 2; n++ {
+		fileName := fmt.Sprintf("../../../testdata/collector_cpu_%d.prof", n)
+		meta := &profile.Meta{
+			ProfileID:  profile.NewID(),
 			Service:    service,
 			Type:       profile.CPUProfile,
 			InstanceID: iid,
 			Labels:     profile.Labels{{"key1", "val1"}},
-		},
-	)
+		}
+		testWriteProfile(t, st, fileName, meta)
+	}
 
-	writeProfile(
-		"../../../testdata/test_heap1.prof",
-		&profile.ProfileMeta{
-			ProfileID:  profile.NewProfileID(),
-			Service:    service,
-			Type:       profile.HeapProfile,
-			InstanceID: iid,
+	// a profile of different service
+	testWriteProfile(
+		t,
+		st,
+		"../../../testdata/collector_cpu_3.prof",
+		&profile.Meta{
+			ProfileID:  profile.NewID(),
+			Service:    "another-service",
+			Type:       profile.CPUProfile,
+			InstanceID: profile.NewInstanceID(),
 			Labels:     profile.Labels{{"key1", "val1"}},
 		},
 	)
 
-	for i := 0; i < 3; i++ {
-		fileName := fmt.Sprintf("../../../testdata/collector_cpu_%d.prof", i+1)
-		writeProfile(
-			fileName,
-			&profile.ProfileMeta{
-				ProfileID:  profile.NewProfileID(),
-				Service:    service,
-				Type:       profile.CPUProfile,
-				InstanceID: iid,
-				Labels:     profile.Labels{{"key2", "val2"}},
-			},
-		)
-	}
+	// a profile of different type
+	testWriteProfile(
+		t,
+		st,
+		"../../../testdata/collector_heap_1.prof",
+		&profile.Meta{
+			ProfileID:  profile.NewID(),
+			Service:    service,
+			Type:       profile.HeapProfile,
+			InstanceID: iid,
+			Labels:     profile.Labels{{"key1", "val1"}, {"key2", "val2"}},
+		},
+	)
 
-	// just some old date
+	// a profile of different labels
+	testWriteProfile(
+		t,
+		st,
+		"../../../testdata/collector_heap_2.prof",
+		&profile.Meta{
+			ProfileID:  profile.NewID(),
+			Service:    service,
+			Type:       profile.HeapProfile,
+			InstanceID: iid,
+			Labels:     profile.Labels{{"key3", "val3"}},
+		},
+	)
+
+	// just some old date to simplify querying
 	createdAtMin := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
-
-	t.Run("by service and labels", func(t *testing.T) {
-		params := &storage.FindProfilesParams{
-			Service:      service,
-			Labels:       profile.Labels{{"key2", "val2"}},
-			CreatedAtMin: createdAtMin,
-		}
-		gotpfs, err := st.FindProfiles(context.Background(), params)
-		require.NoError(t, err)
-		require.Len(t, gotpfs, 3)
-
-		// check that storage returns profiles in the correct order
-		var prevTime int64
-		for _, pf := range gotpfs {
-			pp, err := pf.Profile()
-			require.NoError(t, err)
-			assert.True(t, prevTime < pp.TimeNanos, "create time must be after previous time")
-		}
-	})
-
-	t.Run("by service and type", func(t *testing.T) {
-		params := &storage.FindProfilesParams{
-			Service:      service,
-			Type:         profile.HeapProfile,
-			CreatedAtMin: createdAtMin,
-		}
-		gotpfs, err := st.FindProfiles(context.Background(), params)
-		require.NoError(t, err)
-		require.Len(t, gotpfs, 1)
-	})
 
 	t.Run("by service", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
 			Service:      service,
 			CreatedAtMin: createdAtMin,
 		}
-		gotpfs, err := st.FindProfiles(context.Background(), params)
+		ids, err := st.FindProfileIDs(context.Background(), params)
 		require.NoError(t, err)
-		require.Len(t, gotpfs, 5)
+		require.Len(t, ids, 4)
+	})
+
+	t.Run("by service type", func(t *testing.T) {
+		params := &storage.FindProfilesParams{
+			Service:      service,
+			Type:         profile.CPUProfile,
+			CreatedAtMin: createdAtMin,
+		}
+		ids, err := st.FindProfileIDs(context.Background(), params)
+		require.NoError(t, err)
+		require.Len(t, ids, 2)
+	})
+
+	t.Run("by service labels", func(t *testing.T) {
+		params := &storage.FindProfilesParams{
+			Service:      service,
+			Labels:       profile.Labels{{"key1", "val1"}},
+			CreatedAtMin: createdAtMin,
+		}
+		ids, err := st.FindProfileIDs(context.Background(), params)
+		require.NoError(t, err)
+		require.Len(t, ids, 3)
+	})
+
+	t.Run("by service labels type", func(t *testing.T) {
+		params := &storage.FindProfilesParams{
+			Service:      service,
+			Type:         profile.HeapProfile,
+			Labels:       profile.Labels{{"key2", "val2"}},
+			CreatedAtMin: createdAtMin,
+		}
+		ids, err := st.FindProfileIDs(context.Background(), params)
+		require.NoError(t, err)
+		require.Len(t, ids, 1)
+	})
+
+	t.Run("with limit", func(t *testing.T) {
+		params := &storage.FindProfilesParams{
+			Service:      service,
+			CreatedAtMin: createdAtMin,
+			Limit:        2,
+		}
+		ids, err := st.FindProfileIDs(context.Background(), params)
+		require.NoError(t, err)
+		require.Len(t, ids, 2)
+	})
+
+	t.Run("nothing found", func(t *testing.T) {
+		params := &storage.FindProfilesParams{
+			Service:      service,
+			Type:         profile.HeapProfile,
+			Labels:       profile.Labels{{"key3", "val1"}},
+			CreatedAtMin: createdAtMin,
+		}
+		_, err := st.FindProfileIDs(context.Background(), params)
+		require.Equal(t, storage.ErrNotFound, err)
 	})
 }
 
-func TestStorage_FindProfiles_NotFound(t *testing.T) {
+func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 	st, teardown := setupTestStorage(t)
 	defer teardown()
 
-	params := &storage.FindProfilesParams{
-		Service:      "test-service",
-		Type:         profile.CPUProfile,
-		CreatedAtMin: time.Now().UTC(),
-	}
-	_, err := st.FindProfiles(context.Background(), params)
-	require.Equal(t, storage.ErrNotFound, err)
-}
-
-func TestStorage_GetProfile(t *testing.T) {
-	st, teardown := setupTestStorage(t)
-	defer teardown()
-
-	pid := profile.NewProfileID()
 	iid := profile.NewInstanceID()
 	service := fmt.Sprintf("test-service-%s", iid)
-	meta := &profile.ProfileMeta{
-		ProfileID:  pid,
-		Service:    service,
-		Type:       profile.CPUProfile,
-		InstanceID: iid,
-		Labels:     profile.Labels{{"key1", "val2"}},
+
+	var (
+		pids []profile.ID
+		pps  []*pprofProfile.Profile
+	)
+
+	for n := 1; n <= 3; n++ {
+		pid := profile.NewID()
+		pids = append(pids, pid)
+		fileName := fmt.Sprintf("../../../testdata/collector_cpu_%d.prof", n)
+		meta := &profile.Meta{
+			ProfileID:  pid,
+			Service:    service,
+			Type:       profile.CPUProfile,
+			InstanceID: iid,
+			Labels:     profile.Labels{{"key1", "val1"}},
+		}
+		data := testWriteProfile(t, st, fileName, meta)
+
+		pp, err := pprofProfile.ParseData(data)
+		require.NoError(t, err)
+		pps = append(pps, pp)
 	}
 
-	data, err := ioutil.ReadFile("../../../testdata/test_cpu1.prof")
-	require.NoError(t, err)
-	pp, err := pprofProfile.ParseData(data)
-	require.NoError(t, err)
+	assert.Len(t, pids, 3)
 
-	err = st.WriteProfile(context.Background(), meta, profile.NewProfileFactory(pp))
-	require.NoError(t, err)
+	t.Run("found", func(t *testing.T) {
+		list, err := st.ListProfiles(context.Background(), pids[1:])
+		require.NoError(t, err)
+		defer list.Close()
 
-	gotpf, err := st.GetProfile(context.Background(), pid)
-	require.NoError(t, err)
+		var found int
+		for {
+			gotpp, err := list.Next()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
 
-	gotpp, err := gotpf.Profile()
-	require.NoError(t, err)
+			found++
+			assert.True(t, pprofutil.ProfilesEqual(pps[found], gotpp), "profiles %d must be equal", found)
+		}
+	})
 
-	assert.True(t, pprofutil.ProfilesEqual(pp, gotpp))
+	t.Run("no ids", func(t *testing.T) {
+		_, err := st.ListProfiles(context.Background(), nil)
+		require.Error(t, err)
+	})
 }
 
-func TestStorage_GetProfile_NotFound(t *testing.T) {
-	st, teardown := setupTestStorage(t)
-	defer teardown()
+func testWriteProfile(t testing.TB, st *badgerStorage.Storage, fileName string, meta *profile.Meta) []byte {
+	data, err := ioutil.ReadFile(fileName)
+	require.NoError(t, err)
 
-	pid := profile.NewProfileID()
+	err = st.WriteProfile(context.Background(), meta, bytes.NewReader(data))
+	require.NoError(t, err)
 
-	_, err := st.GetProfile(context.Background(), pid)
-	require.Equal(t, storage.ErrNotFound, err)
+	return data
 }
 
-func setupTestStorage(t *testing.T) (st *badgerStorage.Storage, teardown func()) {
+func setupTestStorage(t testing.TB) (st *badgerStorage.Storage, teardown func()) {
 	dbPath, err := ioutil.TempDir("", "badger")
 	require.NoError(t, err)
 

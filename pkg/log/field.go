@@ -1,6 +1,7 @@
 package log
 
 import (
+	"encoding/hex"
 	"regexp"
 	"strings"
 
@@ -21,4 +22,17 @@ func (s multiLineString) String() string {
 // MultiLine construct zapcore.Field that caries a multi line string.
 func MultiLine(key, val string) zapcore.Field {
 	return zapcore.Field{Key: key, Type: zapcore.StringerType, Interface: multiLineString{val}}
+}
+
+type byteString struct {
+	val []byte
+}
+
+func (b byteString) String() string {
+	return hex.EncodeToString(b.val)
+}
+
+// ByteString construct zapcore.Field that caries hex encoded data as []byte.
+func ByteString(key string, val []byte) zapcore.Field {
+	return zapcore.Field{Key: key, Type: zapcore.StringerType, Interface: byteString{val}}
 }

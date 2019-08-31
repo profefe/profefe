@@ -23,26 +23,48 @@ func NewQuerier(logger *log.Logger, sr storage.Reader) *Querier {
 	}
 }
 
-func (q *Querier) GetServices(ctx context.Context) ([]string, error) {
-	return q.sr.GetServices(ctx)
+func (q *Querier) GetProfile(ctx context.Context, pid profile.ID) (*pprofProfile.Profile, error) {
+	list, err := q.sr.ListProfiles(ctx, []profile.ID{pid})
+	if err != nil {
+		return nil, err
+	}
+	defer list.Close()
+
+	pp, err := list.Next()
+	if err == io.EOF {
+		return nil, storage.ErrNotFound
+	}
+	return pp, err
 }
 
-func (q *Querier) GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error) {
-	return q.sr.GetProfile(ctx, pid)
+func (q *Querier) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]*profile.Meta, error) {
+	return q.sr.FindProfiles(ctx, params)
 }
 
 func (q *Querier) FindProfileTo(ctx context.Context, dst io.Writer, params *storage.FindProfilesParams) error {
-	ppf, err := q.sr.FindProfiles(ctx, params)
+	pids, err := q.sr.FindProfileIDs(ctx, params)
 	if err != nil {
 		return err
 	}
 
-	pps := make([]*pprofProfile.Profile, len(ppf))
-	for i, pf := range ppf {
-		pps[i], err = pf.Profile()
+	// TODO(narqo): limit maximum number of profiles to merge; as an example,
+	//  Stackdriver merges up to 250 random profiles if query returns more than that
+	list, err := q.sr.ListProfiles(ctx, pids)
+	if err != nil {
+		return err
+	}
+	defer list.Close()
+
+	pps := make([]*pprofProfile.Profile, 0, len(pids))
+	for {
+		p, err := list.Next()
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
 			return err
 		}
+		pps = append(pps, p)
 	}
 
 	pp, err := pprofProfile.Merge(pps)

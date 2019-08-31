@@ -1,50 +1,88 @@
 package profile
 
 import (
-	"io"
+	"bytes"
+	"encoding/base32"
 	"time"
 
-	"github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/rs/xid"
-	"golang.org/x/xerrors"
 )
 
-type ProfileID []byte
+const encoder = "0123456789abcdefghijklmnopqrstuv"
 
-func NewProfileID() ProfileID {
-	return ProfileID(xid.New().Bytes())
+var encoding = base32.NewEncoding(encoder).WithPadding(base32.NoPadding)
+
+type ID []byte
+
+func NewID() ID {
+	return xid.New().Bytes()
 }
 
-func (pid *ProfileID) FromString(s string) error {
-	id, err := xid.FromString(s)
-	if err != nil {
-		return err
+func IDFromString(s string) (ID, error) {
+	return encoding.DecodeString(s)
+}
+
+func IDFromBytes(b []byte) (pid ID, err error) {
+	err = pid.UnmarshalText(b)
+	return pid, err
+}
+
+func (pid ID) IsNil() bool {
+	return pid == nil
+}
+
+func (pid ID) MarshalText() ([]byte, error) {
+	buf := make([]byte, encoding.EncodedLen(len(pid)))
+	encoding.Encode(buf, pid)
+	return buf, nil
+}
+
+func (pid *ID) UnmarshalText(b []byte) error {
+	buf := make([]byte, encoding.DecodedLen(len(b)))
+	_, err := encoding.Decode(buf, b)
+	*pid = buf
+	return err
+}
+
+func (pid ID) MarshalJSON() ([]byte, error) {
+	if pid.IsNil() {
+		return []byte("null"), nil
 	}
-	*pid = id.Bytes()
-	return nil
+	buf := make([]byte, encoding.EncodedLen(len(pid))+2)
+	buf[0] = '"'
+	encoding.Encode(buf[1:len(buf)-1], pid)
+	buf[len(buf)-1] = '"'
+	return buf, nil
 }
 
-func (pid ProfileID) String() string {
-	id, _ := xid.FromBytes([]byte(pid))
-	return id.String()
+func (pid *ID) UnmarshalJSON(b []byte) error {
+	if bytes.Equal(b, []byte("null")) {
+		return nil
+	}
+	return pid.UnmarshalText(b[1 : len(b)-1])
 }
 
-type InstanceID string
+func (pid ID) String() string {
+	text, _ := pid.MarshalText()
+	return string(text)
+}
+
+type InstanceID []byte
 
 func NewInstanceID() InstanceID {
-	return InstanceID(xid.New().String())
+	return xid.New().Bytes()
 }
 
 func (iid InstanceID) IsNil() bool {
-	return iid == ""
+	return iid == nil
 }
 
 func (iid InstanceID) String() string {
-	return string(iid)
+	return encoding.EncodeToString(iid)
 }
 
-type ProfileMeta struct {
-	ProfileID  ProfileID   `json:"profile_id"`
+type Meta struct {
+	ProfileID  ID          `json:"profile_id"`
 	Service    string      `json:"service"`
 	Type       ProfileType `json:"type"`
 	InstanceID InstanceID  `json:"instance_id"`
@@ -52,53 +90,13 @@ type ProfileMeta struct {
 	CreatedAt  time.Time   `json:"created_at,omitempty"`
 }
 
-func NewProfileMeta(service string, ptyp ProfileType, iid InstanceID, labels Labels) *ProfileMeta {
-	return &ProfileMeta{
-		ProfileID:  NewProfileID(),
+func NewProfileMeta(service string, ptyp ProfileType, iid InstanceID, labels Labels) *Meta {
+	return &Meta{
+		ProfileID:  NewID(),
 		Service:    service,
 		Type:       ptyp,
 		InstanceID: iid,
 		Labels:     labels,
 		CreatedAt:  time.Now().UTC(),
 	}
-}
-
-type ProfileFactory struct {
-	pp *profile.Profile
-	r  io.Reader
-}
-
-func NewProfileFactory(pp *profile.Profile) *ProfileFactory {
-	return &ProfileFactory{pp: pp}
-}
-
-func NewProfileFactoryFrom(r io.Reader) *ProfileFactory {
-	return &ProfileFactory{r: r}
-}
-
-func (p *ProfileFactory) Profile() (*profile.Profile, error) {
-	if p.pp != nil {
-		return p.pp, nil
-	}
-	err := p.parse(p.r)
-	return p.pp, err
-}
-
-func (p *ProfileFactory) WriteTo(dst io.Writer) error {
-	if p.pp != nil {
-		return p.pp.Write(dst)
-	}
-	return p.parse(io.TeeReader(p.r, dst))
-}
-
-func (p *ProfileFactory) parse(r io.Reader) (err error) {
-	if p.pp != nil {
-		return nil
-	}
-	// TODO(narqo): check if profile.Profile.Compact make any sense here
-	p.pp, err = profile.Parse(r)
-	if err != nil {
-		err = xerrors.Errorf("could not parse profile: %w", err)
-	}
-	return err
 }

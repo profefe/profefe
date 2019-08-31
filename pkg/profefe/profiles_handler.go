@@ -29,19 +29,30 @@ func NewProfilesHandler(logger *log.Logger, collector *Collector, querier *Queri
 }
 
 func (h *ProfilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var err error
+	var (
+		handler func(http.ResponseWriter, *http.Request) error
+		urlPath = path.Clean(r.URL.Path)
+	)
 
-	if p := path.Clean(r.URL.Path); p == apiProfilesPath {
+	if urlPath == apiProfilesMergePath {
+		handler = h.HandleFindProfile
+	} else if urlPath == apiProfilesPath {
 		switch r.Method {
 		case http.MethodPost:
-			err = h.HandleCreateProfile(w, r)
+			handler = h.HandleCreateProfile
 		case http.MethodGet:
-			err = h.HandleFindProfile(w, r)
+			handler = h.HandleFindProfiles
 		}
-	} else if len(p) > len(apiProfilesPath) {
-		err = h.HandleGetProfile(w, r)
+	} else if len(urlPath) > len(apiProfilesPath) {
+		handler = h.HandleGetProfile
 	}
 
+	var err error
+	if handler != nil {
+		err = handler(w, r)
+	} else {
+		err = ErrNotFound
+	}
 	HandleErrorHTTP(h.logger, err, w, r)
 }
 
@@ -68,12 +79,12 @@ func (h *ProfilesHandler) HandleGetProfile(w http.ResponseWriter, r *http.Reques
 		return StatusError(http.StatusBadRequest, "no profile id", nil)
 	}
 
-	var pid profile.ProfileID
-	if err := pid.FromString(rawPid); err != nil {
+	pid, err := profile.IDFromString(rawPid)
+	if err != nil {
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad profile id %q", rawPid), err)
 	}
 
-	pf, err := h.querier.GetProfile(r.Context(), pid)
+	pp, err := h.querier.GetProfile(r.Context(), pid)
 	if err == storage.ErrNotFound {
 		return StatusError(http.StatusNotFound, "nothing found", nil)
 	} else if err != nil {
@@ -82,17 +93,33 @@ func (h *ProfilesHandler) HandleGetProfile(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 
-	return pf.WriteTo(w)
+	return pp.Write(w)
+}
+
+func (h *ProfilesHandler) HandleFindProfiles(w http.ResponseWriter, r *http.Request) error {
+	params := &storage.FindProfilesParams{}
+	if err := parseFindProfileParams(params, r); err != nil {
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	metas, err := h.querier.FindProfiles(r.Context(), params)
+	if err == storage.ErrNotFound {
+		return StatusError(http.StatusNotFound, "nothing found", nil)
+	} else if err == storage.ErrEmpty {
+		return StatusError(http.StatusNoContent, "profile empty", nil)
+	}
+
+	ReplyJSON(w, metas)
+
+	return nil
 }
 
 func (h *ProfilesHandler) HandleFindProfile(w http.ResponseWriter, r *http.Request) error {
 	params := &storage.FindProfilesParams{}
 	if err := parseFindProfileParams(params, r); err != nil {
 		return err
-	}
-
-	if err := params.Validate(); err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -156,6 +183,10 @@ func parseFindProfileParams(in *storage.FindProfilesParams, r *http.Request) (er
 			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad limit %q", v), err)
 		}
 		in.Limit = l
+	}
+
+	if err := in.Validate(); err != nil {
+		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
 	}
 
 	return nil

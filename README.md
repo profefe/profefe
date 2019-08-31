@@ -80,10 +80,10 @@ send profile: http://localhost:10100/api/0/profiles?instance_id=87cdc549c84507f2
 
 ### Querying Profiles
 
-Querying the profiling data is an HTTP call to collector's `/api/0/profiles` endpoint:
+Querying the profiling data is an HTTP call to collector's `/api/0/profiles` endpoints.
 
 ```
-> go tool pprof 'http://localhost:10100/api/0/profiles?service=hotapp-service&type=cpu&from=2019-05-30T11:49:00&to=2019-05-30T12:49:00&labels=version=1.0.0'
+> go tool pprof 'http://localhost:10100/api/0/profiles/merge?service=hotapp-service&type=cpu&from=2019-05-30T11:49:00&to=2019-05-30T12:49:00&labels=version=1.0.0'
 
 Fetching profile over HTTP from http://localhost:10100/api/0/profiles...
 Saved profile in /Users/varankinv/pprof/pprof.samples.cpu.001.pb.gz
@@ -120,7 +120,7 @@ body pprof.pb.gz
 - `type` — profile type (cpu, heap, block, mutex, or goroutine)
 - `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
 
-### Query pprof data
+### Query saved meta information
 
 ```
 GET /api/0/profiles?service=<service>&type=[cpu|heap]&from=<created_from>&to=<created_to>&labels=<key=value,key=value>
@@ -130,6 +130,20 @@ GET /api/0/profiles?service=<service>&type=[cpu|heap]&from=<created_from>&to=<cr
 - `type` — profile type
 - `from`, `to` — a time window between which pprof data was collected
 - `labels` — a set of key-value pairs
+
+### Query saved pprof data and return it as a single merge profile
+
+```
+GET /api/0/profiles/merge?service=<service>&type=[cpu|heap]&from=<created_from>&to=<created_to>&labels=<key=value,key=value>
+```
+
+### Return individual pprof data
+
+```
+GET /api/0/profiles/<id>
+```
+
+- `id` - id of stored pprof file; returned with query API.
 
 ## Feedback
 

@@ -36,8 +36,3 @@ deploy:
 .PHONY: test
 test:
 	$(TEST.go) -ldflags "$(LDFLAGS)" ./...
-
-.PHONY: postgres-integration-test
-postgres-integration-test:
-	-$(GO) clean -testcache
-	$(TEST.go) -ldflags "$(LDFLAGS)" -tags=integration ./pkg/storage/postgres/... $(STORAGEFLAGS)

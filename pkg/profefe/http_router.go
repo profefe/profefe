@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	apiProfilesPath = "/api/0/profiles"
-	apiServicesPath = "/api/0/services"
-	apiVersionPath  = "/api/0/version"
+	apiProfilesPath      = "/api/0/profiles"
+	apiProfilesMergePath = "/api/0/profiles/merge"
+	apiVersionPath       = "/api/0/version"
 )
 
 func SetupRoutes(
@@ -23,7 +23,6 @@ func SetupRoutes(
 	collector := NewCollector(logger, sw)
 
 	mux.HandleFunc(apiVersionPath, VersionHandler)
-	mux.Handle(apiServicesPath, NewServicesHandler(logger, querier))
 
 	// XXX(narqo): everything below /api/0/ is served by profiles handler
 	mux.Handle("/api/0/", NewProfilesHandler(logger, collector, querier))

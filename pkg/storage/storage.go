@@ -2,27 +2,27 @@ package storage
 
 import (
 	"context"
+	"io"
 	"time"
 
+	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/profile"
 	"golang.org/x/xerrors"
 )
 
 var (
 	ErrNotFound = xerrors.New("not found")
-	ErrEmpty    = xerrors.New("results empty")
+	ErrEmpty    = xerrors.New("empty results")
 )
 
 type Writer interface {
-	WriteProfile(ctx context.Context, meta *profile.ProfileMeta, pf *profile.ProfileFactory) error
+	WriteProfile(ctx context.Context, meta *profile.Meta, r io.Reader) error
 }
 
 type Reader interface {
-	GetProfile(ctx context.Context, pid profile.ProfileID) (*profile.ProfileFactory, error)
-	FindProfiles(ctx context.Context, params *FindProfilesParams) ([]*profile.ProfileFactory, error)
-	FindProfileIDs(ctx context.Context, params *FindProfilesParams) ([]profile.ProfileID, error)
-
-	GetServices(ctx context.Context) ([]string, error)
+	FindProfiles(ctx context.Context, params *FindProfilesParams) ([]*profile.Meta, error)
+	FindProfileIDs(ctx context.Context, params *FindProfilesParams) ([]profile.ID, error)
+	ListProfiles(ctx context.Context, pid []profile.ID) (ProfileList, error)
 }
 
 type FindProfilesParams struct {
@@ -34,22 +34,26 @@ type FindProfilesParams struct {
 	Limit        int
 }
 
-func (filter *FindProfilesParams) Validate() error {
-	if filter == nil {
+func (params *FindProfilesParams) Validate() error {
+	if params == nil {
 		return xerrors.New("nil request")
 	}
-
-	if filter.Service == "" {
-		return xerrors.Errorf("service empty: filter %v", filter)
+	if params.Service == "" {
+		return xerrors.New("service empty")
 	}
-	if filter.Type == profile.UnknownProfile {
-		return xerrors.Errorf("unknown profile type %s: filter %v", filter.Type, filter)
+	if params.Type == profile.UnknownProfile {
+		return xerrors.Errorf("unknown profile type %s", params.Type)
 	}
-	if filter.CreatedAtMin.IsZero() || filter.CreatedAtMax.IsZero() {
-		return xerrors.Errorf("createdAt time zero: filter %v", filter)
+	if params.CreatedAtMin.IsZero() || params.CreatedAtMax.IsZero() {
+		return xerrors.Errorf("createdAt time zero: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
 	}
-	if filter.CreatedAtMin.After(filter.CreatedAtMax) {
-		return xerrors.Errorf("createdAt time min after max: filter %v", filter)
+	if params.CreatedAtMin.After(params.CreatedAtMax) {
+		return xerrors.Errorf("createdAt time min after max: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
 	}
 	return nil
+}
+
+type ProfileList interface {
+	Next() (*pprofProfile.Profile, error)
+	Close() error
 }
