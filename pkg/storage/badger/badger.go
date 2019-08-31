@@ -105,7 +105,7 @@ func (st *Storage) writeProfileData(ctx context.Context, meta *profile.Meta, dat
 
 	return st.db.Update(func(txn *badger.Txn) error {
 		for i := range entries {
-			st.logger.Debugw("writeProfile: set entry", "pid", meta.ProfileID, "pk", entries[i].Key, "expires_at", entries[i].ExpiresAt)
+			st.logger.Debugw("writeProfile: set entry", "pid", meta.ProfileID, log.ByteString("key", entries[i].Key), "expires_at", entries[i].ExpiresAt)
 			if err := txn.SetEntry(entries[i]); err != nil {
 				return xerrors.Errorf("could not write entry: %w", err)
 			}
@@ -162,9 +162,9 @@ func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage
 
 	prefixes := make([][]byte, 0, len(pids))
 	for _, pid := range pids {
-		pk := createProfilePK(pid, 0)
-		st.logger.Debugw("listProfiles: create pk", "pid", pid, "pk", pk)
-		prefixes = append(prefixes, pk)
+		key := createProfilePK(pid, 0)
+		st.logger.Debugw("listProfiles: create key", "pid", pid, "key", key)
+		prefixes = append(prefixes, key)
 	}
 
 	txn := st.db.NewTransaction(false)
@@ -208,7 +208,7 @@ func (pl *ProfileList) Next() (*pprofProfile.Profile, error) {
 		}
 
 		valid := pl.it.ValidForPrefix(pl.prefix)
-		pl.logger.Debugw("next", "prefix", pl.prefix, "valid", valid)
+		pl.logger.Debugw("next", log.ByteString("prefix", pl.prefix), "valid", valid)
 		if valid {
 			var pp *pprofProfile.Profile
 			err := pl.it.Item().Value(func(val []byte) (err error) {
@@ -247,10 +247,10 @@ func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfile
 
 	prefixes := make([][]byte, 0, len(pids))
 	for _, pid := range pids {
-		pk := append(make([]byte, 0, 1+len(pid)), metaPrefix)
-		pk = append(pk, pid...)
-		st.logger.Debugw("findProfiles: create pk", "pid", pid, "pk", pk)
-		prefixes = append(prefixes, pk)
+		key := append(make([]byte, 0, 1+len(pid)), metaPrefix)
+		key = append(key, pid...)
+		st.logger.Debugw("findProfiles: create key", "pid", pid, log.ByteString("key", key))
+		prefixes = append(prefixes, key)
 	}
 
 	metas := make([]*profile.Meta, 0, len(pids))
@@ -328,7 +328,8 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 		}
 	}
 
-	ids := make([][]profile.ID, 0, len(indexesToScan))
+	// slice of slice of raw ids
+	ids := make([][][]byte, 0, len(indexesToScan))
 
 	// scan prepared indexes
 	for i, s := range indexesToScan {
@@ -337,10 +338,10 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 			return nil, err
 		}
 
-		ids = append(ids, make([]profile.ID, 0, len(keys)))
+		ids = append(ids, make([][]byte, 0, len(keys)))
 		for _, k := range keys {
-			pid := k[len(k)-sizeOfProfileID:]
-			ids[i] = append(ids[i], pid)
+			id := k[len(k)-sizeOfProfileID:] // extract profileID part from the key
+			ids[i] = append(ids[i], id)
 		}
 	}
 
@@ -348,7 +349,11 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 		return nil, storage.ErrNotFound
 	}
 
-	return mergeJoinProfileIDs(ids, params), nil
+	pids := mergeJoinIDs(ids, params)
+	if len(pids) == 0 {
+		return nil, storage.ErrNotFound
+	}
+	return pids, nil
 }
 
 func (st *Storage) scanIndexKeys(indexKey []byte, createdAtMin, createdAtMax time.Time) (keys [][]byte, err error) {
@@ -357,7 +362,7 @@ func (st *Storage) scanIndexKeys(indexKey []byte, createdAtMin, createdAtMax tim
 
 	err = st.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false // we're iterating over keys only
+		opts.PrefetchValues = false // keys-only iteration
 
 		// key to start scan from
 		key := append([]byte{}, indexKey...)
@@ -366,16 +371,15 @@ func (st *Storage) scanIndexKeys(indexKey []byte, createdAtMin, createdAtMax tim
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
-		st.logger.Debugw("scanIndexKeys", "key", key)
-
 		for it.Seek(key); scanIteratorValid(it, indexKey, createdAtMax.UnixNano()); it.Next() {
 			item := it.Item()
 
-			// check if item's key chunk before the timestamp is equal indexKey
+			// check if item's key chunk before the timestamp is equal to indexKey
 			tsStartPos := len(it.Item().Key()) - sizeOfProfileID - 8
 			if bytes.Equal(indexKey, item.Key()[:tsStartPos]) {
 				var key []byte
 				key = item.KeyCopy(key)
+				st.logger.Debugw("scanIndexKeys found", log.ByteString("key", key))
 				keys = append(keys, key)
 			}
 		}
@@ -398,7 +402,7 @@ func scanIteratorValid(it *badger.Iterator, prefix []byte, tsMax int64) bool {
 }
 
 // does merge part of sort-merge join of N lists of ids
-func mergeJoinProfileIDs(ids [][]profile.ID, params *storage.FindProfilesParams) (res []profile.ID) {
+func mergeJoinIDs(ids [][][]byte, params *storage.FindProfilesParams) []profile.ID {
 	mergedIDs := ids[0]
 
 	if len(ids) > 1 {
@@ -408,74 +412,41 @@ func mergeJoinProfileIDs(ids [][]profile.ID, params *storage.FindProfilesParams)
 				mergedCap = len(ids[i])
 			}
 
-			merged := make([]profile.ID, 0, mergedCap)
+			merged := make([][]byte, 0, mergedCap)
 
-			l := len(mergedIDs) - 1
-			r := len(ids[i]) - 1
-			for r >= 0 && l >= 0 {
+			for l, r := 0, 0; l < len(mergedIDs) && r < len(ids[i]); {
 				switch bytes.Compare(mergedIDs[l], ids[i][r]) {
 				case 0:
 					// left == right
 					merged = append(merged, mergedIDs[l])
-					l--
-					r--
+					l++
+					r++
 				case 1:
 					// left > right
-					r--
+					r++
 				case -1:
 					// left < right
-					l--
+					l++
 				}
 			}
 			mergedIDs = merged
 		}
 	}
 
-	// by this point the order of ids in mergedIDs is reversed as badger uses ASC by default
+	// by this point the order of ids in mergedIDs is ASC, because of createdAt part of a key,
+	// so limit from head
 	if params.Limit > 0 && len(mergedIDs) > params.Limit {
 		mergedIDs = mergedIDs[len(mergedIDs)-params.Limit:]
 	}
 
-	// reverse ids
+	// reverse keys
 	for left, right := 0, len(mergedIDs)-1; left < right; left, right = left+1, right-1 {
 		mergedIDs[left], mergedIDs[right] = mergedIDs[right], mergedIDs[left]
 	}
 
-	return mergedIDs
-}
-
-// TODO(narqo): does full index scan, add caching (note, ttl)
-func (st *Storage) ListServices(ctx context.Context) ([]string, error) {
-	uniqServices := make(map[string]struct{})
-	err := st.db.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false // we're iterating over keys only
-
-		it := txn.NewIterator(opts)
-		defer it.Close()
-
-		serviceIndexKey := []byte{serviceIndexID}
-
-		for it.Seek(serviceIndexKey); it.ValidForPrefix(serviceIndexKey); it.Next() {
-			// parse service from <index-id><service><created-at><pid>
-			tsPos := len(it.Item().Key()) - sizeOfProfileID - 8 // 8 is for created-at nanos
-			s := it.Item().Key()[len(serviceIndexKey):tsPos]
-			if _, ok := uniqServices[string(s)]; !ok {
-				uniqServices[string(s)] = struct{}{}
-			}
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
+	pids := make([]profile.ID, 0, len(mergedIDs))
+	for _, id := range mergedIDs {
+		pids = append(pids, id)
 	}
-
-	services := make([]string, 0, len(uniqServices))
-	for s := range uniqServices {
-		services = append(services, s)
-	}
-
-	return services, nil
+	return pids
 }
