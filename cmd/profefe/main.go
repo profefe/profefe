@@ -40,12 +40,12 @@ func main() {
 		panic(err)
 	}
 
-	if err := run(context.Background(), logger, conf); err != nil {
+	if err := run(logger, conf); err != nil {
 		logger.Error(err)
 	}
 }
 
-func run(ctx context.Context, logger *log.Logger, conf config.Config) error {
+func run(logger *log.Logger, conf config.Config) error {
 	st, closer, err := initBadgerStorage(logger, conf)
 	if err != nil {
 		return err
@@ -85,7 +85,7 @@ func run(ctx context.Context, logger *log.Logger, conf config.Config) error {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, conf.ExitTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), conf.ExitTimeout)
 	defer cancel()
 
 	return server.Shutdown(ctx)
@@ -101,22 +101,3 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*badgerStorage.S
 	st := badgerStorage.New(logger, db, conf.Badger.ProfileTTL)
 	return st, db, nil
 }
-
-/*
-func initPgStorage(logger *log.Logger, conf config.Config) (storage.Storage, io.Closer, error) {
-	db, err := sql.Open("postgres", conf.Postgres.ConnString())
-	if err != nil {
-		return nil, nil, xerrors.Errorf("could not connect to db: %w", err)
-	}
-
-	if err := db.Ping(); err != nil {
-		return nil, nil, xerrors.Errorf("could not ping db: %w", err)
-	}
-
-	st, err := pgstorage.New(logger.With("storage", "pg"), db)
-	if err != nil {
-		return nil, nil, xerrors.Errorf("could not create new pg storage: %w", err)
-	}
-	return st, db, nil
-}
-*/
