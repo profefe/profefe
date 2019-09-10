@@ -10,6 +10,14 @@
   revision = "e2d15f34fcf99d5dbb871c820ec73f710fca9815"
 
 [[projects]]
+  digest = "1:47056e6fe3a3524238d48ddcb6d38bfcfa6db346a11d73d83f1620a8cbf69793"
+  name = "github.com/cespare/xxhash"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "de209a9ffae3256185a6bb135d1a0ada7b2b5f09"
+  version = "v2.1.0"
+
+[[projects]]
   digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
@@ -201,6 +209,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/cespare/xxhash",
     "github.com/dgraph-io/badger",
     "github.com/pkg/errors",
     "github.com/rs/xid",

@@ -8,6 +8,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/cespare/xxhash"
 	"github.com/dgraph-io/badger"
 	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/log"
@@ -94,13 +95,12 @@ func (st *Storage) writeProfileData(ctx context.Context, meta *profile.Meta, dat
 	}
 
 	// by-labels index
-	for _, label := range meta.Labels {
-		// TODO(narqo): store hash(key,value) instead of raw labels
-		indexVal = append(indexVal[:0], meta.Service...)
-		indexVal = append(indexVal, label.Key...)
-		indexVal = append(indexVal, labelSep)
-		indexVal = append(indexVal, label.Value...)
-		entries = append(entries, st.newBadgerEntry(createIndexKey(labelsIndexID, indexVal, meta.ProfileID, createdAt), nil))
+	if len(meta.Labels) != 0 {
+		for _, label := range meta.Labels {
+			indexVal = append(indexVal[:0], meta.Service...)
+			indexVal = appendLabelKV(indexVal, label.Key, label.Value)
+			entries = append(entries, st.newBadgerEntry(createIndexKey(labelsIndexID, indexVal, meta.ProfileID, createdAt), nil))
+		}
 	}
 
 	return st.db.Update(func(txn *badger.Txn) error {
@@ -153,6 +153,14 @@ func createIndexKey(indexID byte, indexVal []byte, pid profile.ID, createdAt int
 	binary.Write(&buf, binary.BigEndian, createdAt)
 	buf.Write(pid)
 	return buf.Bytes()
+}
+
+func appendLabelKV(b []byte, key, val string) []byte {
+	h := xxhash.New()
+	h.WriteString(key)
+	h.Write([]byte{labelSep})
+	h.WriteString(val)
+	return h.Sum(b)
 }
 
 func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage.ProfileList, error) {
@@ -317,14 +325,14 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 		indexesToScan = append(indexesToScan, indexKey)
 
 		// by-service-labels
-		for _, label := range params.Labels {
-			indexKey := make([]byte, 0, 2+len(params.Service)+len(label.Key)+len(label.Value))
-			indexKey = append(indexKey, labelsIndexID)
-			indexKey = append(indexKey, params.Service...)
-			indexKey = append(indexKey, label.Key...)
-			indexKey = append(indexKey, labelSep)
-			indexKey = append(indexKey, label.Value...)
-			indexesToScan = append(indexesToScan, indexKey)
+		if len(params.Labels) != 0 {
+			for _, label := range params.Labels {
+				indexKey := make([]byte, 0, 2+len(params.Service)+len(label.Key)+len(label.Value))
+				indexKey = append(indexKey, labelsIndexID)
+				indexKey = append(indexKey, params.Service...)
+				indexKey = appendLabelKV(indexKey, label.Key, label.Value)
+				indexesToScan = append(indexesToScan, indexKey)
+			}
 		}
 	}
 
