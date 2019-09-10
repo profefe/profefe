@@ -12,7 +12,6 @@ import (
 	"syscall"
 
 	"github.com/dgraph-io/badger"
-	_ "github.com/lib/pq"
 	"github.com/profefe/profefe/pkg/config"
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/middleware"
