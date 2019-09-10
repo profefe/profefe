@@ -3,15 +3,16 @@
 ## General
 
 - more testing
-- (?) protobuf instead json for rpc
 
 ## Agent
 
-- (?) more logging
+- more logging
 - collect and send mutex and other profiles
 
 ## Collector
 
+- add metrics
+  prometheus? x/vars?
 - persistent storage
   tarantool? cassandra? postgres?
 - vacuum: remove old profiles base on some retention

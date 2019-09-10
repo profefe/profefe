@@ -80,7 +80,7 @@ send profile: http://localhost:10100/api/0/profiles?instance_id=87cdc549c84507f2
 
 ### Querying Profiles
 
-Querying the profiling data is an HTTP call to collector's `/api/0/profiles` endpoints.
+Querying the profiling data is an HTTP call to collector's query API endpoint:
 
 ```
 > go tool pprof 'http://localhost:10100/api/0/profiles/merge?service=hotapp-service&type=cpu&from=2019-05-30T11:49:00&to=2019-05-30T12:49:00&labels=version=1.0.0'
