@@ -22,3 +22,7 @@
 [[constraint]]
   name = "github.com/dgraph-io/badger"
   version = "1.6.0"
+
+[[constraint]]
+  name = "github.com/cespare/xxhash"
+  version = "2.1.0"
