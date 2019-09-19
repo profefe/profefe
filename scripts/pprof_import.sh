@@ -69,7 +69,7 @@ create_profile() {
     echo "OK"
 }
 
-for prof_file in $*;
+for prof_file in "$@";
 do
     if [ ! -r "$prof_file" ]; then
         echo 1>&2 "$0: can't read prof file $prof_file"
