@@ -41,16 +41,16 @@ annotating metrics with labels.
 *profefe* consists of:
 
 - Collector — a service that receives profiles from the agent, stores them in the persistent storage, and provides an API for querying profiles.
-- Agent — an optional library that can be integrated into your project. Its goal is to scrap pprof data from the running instance periodically and send it to the collector.
+- Agent — an optional library that can be integrated into your project. Its goal is to scrap pprof data from the running instance periodically and to send the data to collector.
 
-*Note*: it's tempting to split collector into two separate parts (collector and querier) to inctease scalability. This
-is the subject of future research.
+*Note: it's tempting to split collector into two separate parts (collector and querier) to inctease scalability. This
+is the subject of future research.*
+
+Collector requires a plugable storage to persist the profiling data. Currently it only supports [Badger](https://github.com/dgraph-io/badger).
 
 ## Quickstart
 
 **TODO add quickstart**
-
-Collector requires a storage to keep the profiling data. Currently, the only supported storage is [Badger](https://github.com/dgraph-io/badger).
 
 To build and start the collector, run:
 
