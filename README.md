@@ -12,7 +12,7 @@ the profiling samples base on metadata associated with the service.
 
 ---
 
-## Why Continues Profiling?
+## Why Continuous Profiling?
 
 Profiling a single instance of a running Go service [is very easy][1]: one adds `net/http/pprof` to the list of
 imports and a "magical" `/debug/pprof/` route is registered to the services' default HTTP server.
@@ -22,7 +22,7 @@ At the same time, making the server available for a limited group of privileged 
 from a trusted network, can bring unexpected delays in cases when profiling data was needed for a quick investigation
 of an incident.
 
-Continues profiling can also help in a situation where an instance showed periodic outstanding behaviour but had
+Continuous profiling can also help in a situation where an instance showed periodic outstanding behaviour but had
 been restarted by an "external force" (i.e. *OOM killer or an On Call Ops in the middle of a weekend*), before
 a developer could scrap the profiles.
 
