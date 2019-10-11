@@ -35,7 +35,7 @@ func (h *ProfilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if urlPath == apiProfilesMergePath {
-		handler = h.HandleFindProfile
+		handler = h.HandleMergeProfile
 	} else if urlPath == apiProfilesPath {
 		switch r.Method {
 		case http.MethodPost:
@@ -116,7 +116,7 @@ func (h *ProfilesHandler) HandleFindProfiles(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
-func (h *ProfilesHandler) HandleFindProfile(w http.ResponseWriter, r *http.Request) error {
+func (h *ProfilesHandler) HandleMergeProfile(w http.ResponseWriter, r *http.Request) error {
 	params := &storage.FindProfilesParams{}
 	if err := parseFindProfileParams(params, r); err != nil {
 		return err
@@ -125,7 +125,7 @@ func (h *ProfilesHandler) HandleFindProfile(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, params.Type))
 
-	err := h.querier.FindProfileTo(r.Context(), w, params)
+	err := h.querier.FindMergeProfileTo(r.Context(), w, params)
 	if err == storage.ErrNotFound {
 		return StatusError(http.StatusNotFound, "nothing found", nil)
 	} else if err == storage.ErrEmpty {

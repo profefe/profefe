@@ -30,18 +30,17 @@ func (q *Querier) GetProfile(ctx context.Context, pid profile.ID) (*pprofProfile
 	}
 	defer list.Close()
 
-	pp, err := list.Next()
-	if err == io.EOF {
+	if !list.Next() {
 		return nil, storage.ErrNotFound
 	}
-	return pp, err
+	return list.Profile()
 }
 
 func (q *Querier) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]*profile.Meta, error) {
 	return q.sr.FindProfiles(ctx, params)
 }
 
-func (q *Querier) FindProfileTo(ctx context.Context, dst io.Writer, params *storage.FindProfilesParams) error {
+func (q *Querier) FindMergeProfileTo(ctx context.Context, dst io.Writer, params *storage.FindProfilesParams) error {
 	pids, err := q.sr.FindProfileIDs(ctx, params)
 	if err != nil {
 		return err
@@ -56,11 +55,8 @@ func (q *Querier) FindProfileTo(ctx context.Context, dst io.Writer, params *stor
 	defer list.Close()
 
 	pps := make([]*pprofProfile.Profile, 0, len(pids))
-	for {
-		p, err := list.Next()
-		if err == io.EOF {
-			break
-		}
+	for list.Next() {
+		p, err := list.Profile()
 		if err != nil {
 			return err
 		}

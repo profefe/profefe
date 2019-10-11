@@ -45,15 +45,16 @@ func (params *FindProfilesParams) Validate() error {
 		return xerrors.Errorf("unknown profile type %s", params.Type)
 	}
 	if params.CreatedAtMin.IsZero() || params.CreatedAtMax.IsZero() {
-		return xerrors.Errorf("createdAt time zero: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
+		return xerrors.Errorf("profile created time zero: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
 	}
 	if params.CreatedAtMin.After(params.CreatedAtMax) {
-		return xerrors.Errorf("createdAt time min after max: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
+		return xerrors.Errorf("profile created time min after max: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
 	}
 	return nil
 }
 
 type ProfileList interface {
-	Next() (*pprofProfile.Profile, error)
+	Next() bool
+	Profile() (*pprofProfile.Profile, error)
 	Close() error
 }

@@ -201,9 +201,9 @@ type ProfileList struct {
 	err error
 }
 
-func (pl *ProfileList) Next() (*pprofProfile.Profile, error) {
+func (pl *ProfileList) Next() bool {
 	if pl.err != nil {
-		return nil, pl.err
+		return false
 	}
 
 	for pl.nPrefix < len(pl.prefixes) {
@@ -216,23 +216,25 @@ func (pl *ProfileList) Next() (*pprofProfile.Profile, error) {
 		}
 
 		valid := pl.it.ValidForPrefix(pl.prefix)
-		pl.logger.Debugw("next", log.ByteString("prefix", pl.prefix), "valid", valid)
 		if valid {
-			var pp *pprofProfile.Profile
-			err := pl.it.Item().Value(func(val []byte) (err error) {
-				pp, err = pprofProfile.ParseData(val)
-				return err
-			})
-			if err != nil {
-				pl.setErr(err)
-			}
-			return pp, err
+			pl.logger.Debugw("next", log.ByteString("prefix", pl.prefix), "valid", valid)
+			return true
 		}
-
 		pl.prefix = nil
 	}
+	return false
+}
 
-	return nil, io.EOF
+func (pl *ProfileList) Profile() (*pprofProfile.Profile, error) {
+	var pp *pprofProfile.Profile
+	err := pl.it.Item().Value(func(val []byte) (err error) {
+		pp, err = pprofProfile.ParseData(val)
+		return err
+	})
+	if err != nil {
+		pl.setErr(err)
+	}
+	return pp, err
 }
 
 func (pl *ProfileList) Close() error {
@@ -242,7 +244,7 @@ func (pl *ProfileList) Close() error {
 }
 
 func (pl *ProfileList) setErr(err error) {
-	if pl.err == nil || pl.err == io.EOF {
+	if pl.err == nil {
 		pl.err = err
 	}
 }
