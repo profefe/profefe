@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -55,13 +54,13 @@ func TestStorage_WriteFind(t *testing.T) {
 	list, err := st.ListProfiles(context.Background(), []profile.ID{found[0].ProfileID})
 	require.NoError(t, err)
 
-	gotpp, err := list.Next()
+	require.True(t, list.Next())
+	gotpp, err := list.Profile()
 	require.NoError(t, err)
 
 	assert.True(t, pprofutil.ProfilesEqual(pp, gotpp))
 
-	_, err = list.Next()
-	assert.Equal(t, io.EOF, err)
+	require.False(t, list.Next())
 
 	assert.NoError(t, list.Close())
 }
@@ -235,11 +234,8 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 		defer list.Close()
 
 		var found int
-		for {
-			gotpp, err := list.Next()
-			if err == io.EOF {
-				break
-			}
+		for list.Next() {
+			gotpp, err := list.Profile()
 			require.NoError(t, err)
 
 			found++
