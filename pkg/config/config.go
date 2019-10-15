@@ -10,6 +10,8 @@ import (
 const (
 	defaultAddr        = ":10100"
 	defaultExitTimeout = 5 * time.Second
+
+	defaultRetentionPeriod = 5*24*time.Hour
 )
 
 type Config struct {
@@ -34,5 +36,5 @@ type BadgerConfig struct {
 
 func (conf *BadgerConfig) RegisterFlags(f *flag.FlagSet) {
 	f.StringVar(&conf.Dir, "badger.dir", "data", "badger data dir")
-	f.DurationVar(&conf.ProfileTTL, "badger.profile-ttl", 3*24*time.Hour, "badger profile data ttl")
+	f.DurationVar(&conf.ProfileTTL, "badger.profile-ttl", defaultRetentionPeriod, "badger profile data ttl")
 }
