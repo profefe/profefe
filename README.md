@@ -113,7 +113,7 @@ GET /api/0/profiles?service=<service>&type=[cpu|heap]&from=<created_from>&to=<cr
 
 - `service` — service name
 - `type` — profile type
-- `from`, `to` — a time window between which pprof data was collected
+- `from`, `to` — a time window between which pprof data was collected (format: 2006-01-02T15:04:05)
 - `labels` — a set of key-value pairs
 
 ### Query saved pprof data returning it as a single merged profile
