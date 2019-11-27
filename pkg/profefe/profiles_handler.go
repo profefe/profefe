@@ -62,12 +62,12 @@ func (h *ProfilesHandler) HandleCreateProfile(w http.ResponseWriter, r *http.Req
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %v", err), nil)
 	}
 
-	err := h.collector.CollectProfileFrom(r.Context(), r.Body, req)
+	profModel, err := h.collector.CollectProfileFrom(r.Context(), r.Body, req)
 	if err != nil {
 		return StatusError(http.StatusInternalServerError, "failed to create profile", err)
 	}
 
-	ReplyOK(w)
+	ReplyJSON(w, profModel)
 
 	return nil
 }
@@ -104,14 +104,16 @@ func (h *ProfilesHandler) HandleFindProfiles(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 
-	metas, err := h.querier.FindProfiles(r.Context(), params)
+	profModels, err := h.querier.FindProfiles(r.Context(), params)
 	if err == storage.ErrNotFound {
 		return StatusError(http.StatusNotFound, "nothing found", nil)
 	} else if err == storage.ErrEmpty {
 		return StatusError(http.StatusNoContent, "profile empty", nil)
+	} else if err != nil {
+		return err
 	}
 
-	ReplyJSON(w, metas)
+	ReplyJSON(w, profModels)
 
 	return nil
 }
