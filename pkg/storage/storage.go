@@ -16,11 +16,11 @@ var (
 )
 
 type Writer interface {
-	WriteProfile(ctx context.Context, meta *profile.Meta, r io.Reader) error
+	WriteProfile(ctx context.Context, meta profile.Meta, r io.Reader) error
 }
 
 type Reader interface {
-	FindProfiles(ctx context.Context, params *FindProfilesParams) ([]*profile.Meta, error)
+	FindProfiles(ctx context.Context, params *FindProfilesParams) ([]profile.Meta, error)
 	FindProfileIDs(ctx context.Context, params *FindProfilesParams) ([]profile.ID, error)
 	ListProfiles(ctx context.Context, pid []profile.ID) (ProfileList, error)
 }

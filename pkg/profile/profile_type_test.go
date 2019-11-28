@@ -23,16 +23,3 @@ func TestProfileType_FromString(t *testing.T) {
 		assert.Equal(t, tc.want, pt)
 	}
 }
-
-func TestProfileType_MarshalUnmarshalString(t *testing.T) {
-	cases := []ProfileType{
-		CPUProfile,
-		UnknownProfile,
-	}
-
-	for _, want := range cases {
-		var got ProfileType
-		require.NoError(t, got.UnmarshalString(want.MarshalString()))
-		assert.Equalf(t, want, got, "type %v (%v)", want.String(), want.MarshalString())
-	}
-}

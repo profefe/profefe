@@ -2,7 +2,6 @@ package profile
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 )
 
@@ -18,24 +17,6 @@ const (
 
 	OtherProfile = 127
 )
-
-func (ptype ProfileType) MarshalString() (s string) {
-	return strconv.FormatInt(int64(ptype), 10)
-}
-
-func (ptype *ProfileType) UnmarshalString(s string) error {
-	pt, err := strconv.Atoi(s)
-	if err != nil {
-		return err
-	}
-	switch pt := ProfileType(pt); pt {
-	case CPUProfile, HeapProfile, BlockProfile, MutexProfile, GoroutineProfile, OtherProfile:
-		*ptype = pt
-	default:
-		*ptype = UnknownProfile
-	}
-	return nil
-}
 
 func (ptype *ProfileType) FromString(s string) error {
 	s = strings.TrimSpace(s)

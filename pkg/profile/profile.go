@@ -90,8 +90,8 @@ type Meta struct {
 	CreatedAt  time.Time   `json:"created_at,omitempty"`
 }
 
-func NewProfileMeta(service string, ptyp ProfileType, iid InstanceID, labels Labels) *Meta {
-	return &Meta{
+func NewProfileMeta(service string, ptyp ProfileType, iid InstanceID, labels Labels) Meta {
+	return Meta{
 		ProfileID:  NewID(),
 		Service:    service,
 		Type:       ptyp,

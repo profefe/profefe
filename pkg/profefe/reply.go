@@ -12,6 +12,12 @@ import (
 
 var ErrNotFound = StatusError(http.StatusNotFound, "not found", nil)
 
+type jsonResponse struct {
+	Code  int         `json:"code"`
+	Body  interface{} `json:"body,omitempty"`
+	Error string      `json:"error,omitempty"`
+}
+
 func ReplyOK(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
@@ -20,12 +26,13 @@ func ReplyOK(w http.ResponseWriter) {
 }
 
 func ReplyJSON(w http.ResponseWriter, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 
-	err := json.NewEncoder(w).Encode(v)
-	if err != nil {
-		io.WriteString(w, `{"code":`+strconv.Itoa(http.StatusInternalServerError)+`,"error":"`+err.Error()+`"}`)
+	resp := jsonResponse{
+		Code: http.StatusOK,
+		Body: v,
 	}
+	replyJSON(w, resp)
 }
 
 func ReplyError(w http.ResponseWriter, err error) {
@@ -45,14 +52,21 @@ func ReplyError(w http.ResponseWriter, err error) {
 
 	w.WriteHeader(statusCode)
 
-	resp := struct {
-		Code  int    `json:"code"`
-		Error string `json:"error"`
-	}{
+	resp := jsonResponse{
 		Code:  statusCode,
 		Error: errMsg,
 	}
-	ReplyJSON(w, resp)
+	replyJSON(w, resp)
+}
+
+func replyJSON(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+
+	err := json.NewEncoder(w).Encode(v)
+	if err != nil {
+		// TODO(narqo): escape quotes in the failure response JSON message
+		io.WriteString(w, `{"code":`+strconv.Itoa(http.StatusInternalServerError)+`,"error":"`+err.Error()+`"}`)
+	}
 }
 
 func HandleErrorHTTP(logger *log.Logger, err error, w http.ResponseWriter, r *http.Request) {

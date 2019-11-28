@@ -52,7 +52,7 @@ func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 	}
 }
 
-func (st *Storage) WriteProfile(ctx context.Context, meta *profile.Meta, r io.Reader) error {
+func (st *Storage) WriteProfile(ctx context.Context, meta profile.Meta, r io.Reader) error {
 	var buf bytes.Buffer
 	pp, err := pprofProfile.Parse(io.TeeReader(r, &buf))
 	if err != nil {
@@ -65,7 +65,7 @@ func (st *Storage) WriteProfile(ctx context.Context, meta *profile.Meta, r io.Re
 	return st.writeProfileData(ctx, meta, buf.Bytes())
 }
 
-func (st *Storage) writeProfileData(ctx context.Context, meta *profile.Meta, data []byte) error {
+func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, data []byte) error {
 	entries := make([]*badger.Entry, 0, 1+1+2+len(meta.Labels)) // 1 for profile entry, 1 for meta entry, 2 for general indexes
 
 	createdAt := meta.CreatedAt.UnixNano()
@@ -135,7 +135,7 @@ func createProfilePK(pid profile.ID, createdAt int64) []byte {
 }
 
 // meta primary key metaPrefix<pid>, value json-encoded
-func createMetaKV(meta *profile.Meta) ([]byte, []byte, error) {
+func createMetaKV(meta profile.Meta) ([]byte, []byte, error) {
 	key := make([]byte, 0, len(meta.ProfileID)+1)
 	key = append(key, metaPrefix)
 	key = append(key, meta.ProfileID...)
@@ -249,7 +249,7 @@ func (pl *ProfileList) setErr(err error) {
 	}
 }
 
-func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]*profile.Meta, error) {
+func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
 	pids, err := st.FindProfileIDs(ctx, params)
 	if err != nil {
 		return nil, err
@@ -263,7 +263,7 @@ func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfile
 		prefixes = append(prefixes, key)
 	}
 
-	metas := make([]*profile.Meta, 0, len(pids))
+	metas := make([]profile.Meta, 0, len(pids))
 
 	err = st.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -272,9 +272,9 @@ func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfile
 
 		for _, prefix := range prefixes {
 			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-				meta := new(profile.Meta)
+				var meta profile.Meta
 				err := it.Item().Value(func(val []byte) error {
-					return json.Unmarshal(val, meta)
+					return json.Unmarshal(val, &meta)
 				})
 				if err != nil {
 					return err

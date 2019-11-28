@@ -36,8 +36,17 @@ func (q *Querier) GetProfile(ctx context.Context, pid profile.ID) (*pprofProfile
 	return list.Profile()
 }
 
-func (q *Querier) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]*profile.Meta, error) {
-	return q.sr.FindProfiles(ctx, params)
+func (q *Querier) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]Profile, error) {
+	metas, err := q.sr.FindProfiles(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	profModels := make([]Profile, 0, len(metas))
+	for _, meta := range metas {
+		profModels = append(profModels, ProfileFromProfileMeta(meta))
+	}
+	return profModels, nil
 }
 
 func (q *Querier) FindMergeProfileTo(ctx context.Context, dst io.Writer, params *storage.FindProfilesParams) error {

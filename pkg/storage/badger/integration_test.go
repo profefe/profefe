@@ -26,7 +26,7 @@ func TestStorage_WriteFind(t *testing.T) {
 	defer teardown()
 
 	service := "test-service-1"
-	meta := &profile.Meta{
+	meta := profile.Meta{
 		ProfileID:  profile.NewID(),
 		Service:    service,
 		Type:       profile.CPUProfile,
@@ -74,7 +74,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 
 	for n := 1; n <= 2; n++ {
 		fileName := fmt.Sprintf("../../../testdata/collector_cpu_%d.prof", n)
-		meta := &profile.Meta{
+		meta := profile.Meta{
 			ProfileID:  profile.NewID(),
 			Service:    service,
 			Type:       profile.CPUProfile,
@@ -89,7 +89,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		t,
 		st,
 		"../../../testdata/collector_cpu_3.prof",
-		&profile.Meta{
+		profile.Meta{
 			ProfileID:  profile.NewID(),
 			Service:    "another-service",
 			Type:       profile.CPUProfile,
@@ -103,7 +103,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		t,
 		st,
 		"../../../testdata/collector_heap_1.prof",
-		&profile.Meta{
+		profile.Meta{
 			ProfileID:  profile.NewID(),
 			Service:    service,
 			Type:       profile.HeapProfile,
@@ -117,7 +117,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		t,
 		st,
 		"../../../testdata/collector_heap_2.prof",
-		&profile.Meta{
+		profile.Meta{
 			ProfileID:  profile.NewID(),
 			Service:    service,
 			Type:       profile.HeapProfile,
@@ -212,7 +212,7 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 		pid := profile.NewID()
 		pids = append(pids, pid)
 		fileName := fmt.Sprintf("../../../testdata/collector_cpu_%d.prof", n)
-		meta := &profile.Meta{
+		meta := profile.Meta{
 			ProfileID:  pid,
 			Service:    service,
 			Type:       profile.CPUProfile,
@@ -249,7 +249,7 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 	})
 }
 
-func testWriteProfile(t testing.TB, st *badgerStorage.Storage, fileName string, meta *profile.Meta) []byte {
+func testWriteProfile(t testing.TB, st *badgerStorage.Storage, fileName string, meta profile.Meta) []byte {
 	data, err := ioutil.ReadFile(fileName)
 	require.NoError(t, err)
 

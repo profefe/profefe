@@ -23,8 +23,12 @@ func NewCollector(logger *log.Logger, sw storage.Writer) *Collector {
 	}
 }
 
-func (c *Collector) CollectProfileFrom(ctx context.Context, src io.Reader, req *WriteProfileRequest) error {
-	return c.sw.WriteProfile(ctx, req.NewProfileMeta(), src)
+func (c *Collector) CollectProfileFrom(ctx context.Context, src io.Reader, req *WriteProfileRequest) (Profile, error) {
+	meta := req.NewProfileMeta()
+	if err := c.sw.WriteProfile(ctx, meta, src); err != nil {
+		return Profile{}, err
+	}
+	return ProfileFromProfileMeta(meta), nil
 }
 
 type WriteProfileRequest struct {
@@ -83,6 +87,6 @@ func (req *WriteProfileRequest) Validate() error {
 	return nil
 }
 
-func (req *WriteProfileRequest) NewProfileMeta() *profile.Meta {
+func (req *WriteProfileRequest) NewProfileMeta() profile.Meta {
 	return profile.NewProfileMeta(req.Service, req.Type, req.InstanceID, req.Labels)
 }
