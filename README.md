@@ -96,30 +96,57 @@ uploading service1-cpu-backend1-20190313-0948Z.prof...OK
 ### Save pprof data
 
 ```
-POST /api/0/profiles?service=<service>&instance_id=<iid>&type=[cpu|heap]&labels=<key=value,key=value>
+POST /api/0/profiles?service=<service>&instance_id=<iid>&type=[cpu|heap|...]&labels=<key=value,key=value>
 body pprof.pb.gz
+
+< 200 OK
+<
+{
+  "code": 200,
+  "body": {
+    "id": <id>,
+    "type": <type>,
+    ···
+  }
+}
 ```
 
 - `service` — service name (string)
-- `instance_id` — an identifier of running instance (string) (*TODO: why do we need instance_id?*)
-- `type` — profile type (cpu, heap, block, mutex, or goroutine)
+- `instance_id` — an identifier of running instance (string) (*TODO: why do we still need instance_id?*)
+- `type` — profile type (cpu, heap, block, mutex, goroutine, or other)
 - `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
 
 ### Query saved meta information
 
 ```
-GET /api/0/profiles?service=<service>&type=[cpu|heap]&from=<created_from>&to=<created_to>&labels=<key=value,key=value>
+GET /api/0/profiles?service=<service>&type=<type>from=<created_from>&to=<created_to>&labels=<key=value,key=value>
+
+< 200 OK
+<
+{
+  "code": 200,
+  "body": [
+    {
+      "id": <id>,
+      "type": <type>
+    },
+    ···
+  ]
+}
 ```
 
 - `service` — service name
 - `type` — profile type
-- `from`, `to` — a time window between which pprof data was collected (format: 2006-01-02T15:04:05)
+- `created_from`, `created_to` — a time window between which pprof data was collected, e.g. "from=2006-01-02T15:04:05"
 - `labels` — a set of key-value pairs
 
 ### Query saved pprof data returning it as a single merged profile
 
 ```
-GET /api/0/profiles/merge?service=<service>&type=[cpu|heap]&from=<created_from>&to=<created_to>&labels=<key=value,key=value>
+GET /api/0/profiles/merge?service=<service>&type=<type>&from=<created_from>&to=<created_to>&labels=<key=value,key=value>
+
+< 200 OK
+< pprof.pb.gz
 ```
 
 Request parameters are the same as for querying meta information.
@@ -128,6 +155,9 @@ Request parameters are the same as for querying meta information.
 
 ```
 GET /api/0/profiles/<id>
+
+< 200 OK
+< pprof.pb.gz
 ```
 
 - `id` - id of stored pprof file; returned with the request for meta information query
