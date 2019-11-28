@@ -10,19 +10,15 @@ import (
 	"golang.org/x/xerrors"
 )
 
-var ErrNotFound = StatusError(http.StatusNotFound, "not found", nil)
+var (
+	ErrEmpty    = StatusError(http.StatusNoContent, "empty results", nil)
+	ErrNotFound = StatusError(http.StatusNotFound, "nothing found", nil)
+)
 
 type jsonResponse struct {
 	Code  int         `json:"code"`
 	Body  interface{} `json:"body,omitempty"`
 	Error string      `json:"error,omitempty"`
-}
-
-func ReplyOK(w http.ResponseWriter) {
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "application/json")
-
-	io.WriteString(w, `{"code":200}`)
 }
 
 func ReplyJSON(w http.ResponseWriter, v interface{}) {
@@ -64,8 +60,7 @@ func replyJSON(w http.ResponseWriter, v interface{}) {
 
 	err := json.NewEncoder(w).Encode(v)
 	if err != nil {
-		// TODO(narqo): escape quotes in the failure response JSON message
-		io.WriteString(w, `{"code":`+strconv.Itoa(http.StatusInternalServerError)+`,"error":"`+err.Error()+`"}`)
+		io.WriteString(w, `{"code":`+strconv.Itoa(http.StatusInternalServerError)+`,"error":`+strconv.Quote(err.Error())+`}`)
 	}
 }
 

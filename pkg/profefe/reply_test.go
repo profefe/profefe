@@ -29,6 +29,26 @@ func TestReplyJSON(t *testing.T) {
 	assert.Equal(t, body, resp["body"])
 }
 
+// malformedJSON always returns an error when marshaling itself into JSON
+type malformedJSON string
+
+func (t malformedJSON) MarshalJSON() ([]byte, error) {
+	return nil, xerrors.New(`unexpected """, '"', and {}`)
+}
+
+func TestReplyJSON_FailMarshalResponse(t *testing.T) {
+	w := httptest.NewRecorder()
+	body := malformedJSON("foo")
+
+	ReplyJSON(w, body)
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+
+	assert.EqualValues(t, http.StatusInternalServerError, resp["code"])
+	assert.NotEmpty(t, resp["error"])
+}
+
 func TestReplyError(t *testing.T) {
 	testRawErr := errors.New("unexpected error")
 
@@ -61,6 +81,16 @@ func TestReplyError(t *testing.T) {
 			fmt.Errorf("unexpted error: %v", testRawErr),
 			http.StatusInternalServerError,
 			"internal error",
+		},
+		{
+				ErrEmpty,
+				http.StatusNoContent,
+				"empty results",
+		},
+		{
+			ErrNotFound,
+			http.StatusNotFound,
+			"nothing found",
 		},
 		{
 			nil,
