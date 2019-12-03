@@ -14,6 +14,7 @@ func TestProfileType_FromString(t *testing.T) {
 	}{
 		{"cpu", CPUProfile},
 		{"heap", HeapProfile},
+		{"threadcreate", ThreadcreateProfile},
 		{"blah", UnknownProfile},
 	}
 
