@@ -24,6 +24,10 @@ SHELL := /bin/bash
 BUILD.go = $(GO) build $(GOFLAGS)
 TEST.go  = $(GO) test $(TESTFLAGS)
 
+DOCKER_BUILD_ARGS += --build-arg VERSION=$(VERSION)
+DOCKER_BUILD_ARGS += --build-arg GITSHA=$(GITSHA)
+DOCKER_BUILD_ARGS += --build-arg BUILDTIME=$(BUILDTIME)
+
 .PHONY: all
 all: build-profefe
 
@@ -36,3 +40,6 @@ deploy:
 .PHONY: test
 test:
 	$(TEST.go) -ldflags "$(LDFLAGS)" ./...
+
+container:
+	docker build $(DOCKER_BUILD_ARGS) -f ./contrib/docker/Dockerfile -t profefe/profefe:$(GITSHA) .

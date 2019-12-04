@@ -51,6 +51,17 @@ send profile: http://localhost:10100/api/0/profiles?instance_id=87cdc549c84507f2
 send profile: http://localhost:10100/api/0/profiles?instance_id=87cdc549c84507f24944793b1ddbdc34&labels=version%3D1.0.0&service=hotapp-service&type=cpu
 ```
 
+## Docker
+
+You can build a docker image with the command:
+
+```
+make container
+```
+
+More documentation can be found  in
+[./contrib/docker/README.md](./contrib/docker/README.md)
+
 ### Querying Profiles
 
 Querying profiling data is an HTTP call to profefe collector API endpoint:
