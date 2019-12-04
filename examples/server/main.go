@@ -28,6 +28,7 @@ func main() {
 		agent.WithBlockProfile(),
 		agent.WithMutexProfile(),
 		agent.WithGoroutineProfile(),
+		agent.WithThreadcreateProfile(),
 		agent.WithLogger(agentLogger),
 		agent.WithLabels(
 			"region", "europe-west3",

@@ -47,12 +47,13 @@ type httpClient interface {
 }
 
 type Agent struct {
-	CPUProfile         bool
-	CPUProfileDuration time.Duration
-	HeapProfile        bool
-	BlockProfile       bool
-	MutexProfile       bool
-	GoroutineProfile   bool
+	CPUProfile          bool
+	CPUProfileDuration  time.Duration
+	HeapProfile         bool
+	BlockProfile        bool
+	MutexProfile        bool
+	GoroutineProfile    bool
+	ThreadcreateProfile bool
 
 	service    string
 	instanceID profile.InstanceID
@@ -140,25 +141,24 @@ func (a *Agent) collectProfile(ctx context.Context, ptype profile.ProfileType, b
 		if err != nil {
 			return fmt.Errorf("failed to write heap profile: %v", err)
 		}
-	case profile.BlockProfile:
-		return a.writeProfile("block", buf)
-	case profile.MutexProfile:
-		return a.writeProfile("mutex", buf)
-	case profile.GoroutineProfile:
-		return a.writeProfile("goroutine", buf)
+	case profile.BlockProfile,
+		profile.MutexProfile,
+		profile.GoroutineProfile,
+		profile.ThreadcreateProfile:
+
+		p := pprof.Lookup(ptype.String())
+		if p == nil {
+			return fmt.Errorf("unknown profile type %v", ptype)
+		}
+		err := p.WriteTo(buf, 0)
+		if err != nil {
+			return fmt.Errorf("failed to write %s profile: %v", ptype, err)
+		}
 	default:
 		return fmt.Errorf("unknown profile type %v", ptype)
 	}
 
 	return nil
-}
-
-func (a *Agent) writeProfile(name string, w io.Writer) error {
-	err := pprof.Lookup(name).WriteTo(w, 0)
-	if err != nil {
-		err = fmt.Errorf("failed to write %s profile: %v", name, err)
-	}
-	return err
 }
 
 func (a *Agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
@@ -288,6 +288,11 @@ func (a *Agent) nextProfileType(ptype profile.ProfileType) profile.ProfileType {
 				return ptype
 			}
 		case profile.GoroutineProfile:
+			ptype = profile.ThreadcreateProfile
+			if a.ThreadcreateProfile {
+				return ptype
+			}
+		case profile.ThreadcreateProfile:
 			ptype = profile.CPUProfile
 			if a.CPUProfile {
 				return ptype
