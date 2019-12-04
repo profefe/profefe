@@ -39,6 +39,12 @@ func WithGoroutineProfile() Option {
 	}
 }
 
+func WithThreadcreateProfile() Option {
+	return func(a *Agent) {
+		a.ThreadcreateProfile = true
+	}
+}
+
 func WithLabels(args ...string) Option {
 	if len(args)%2 != 0 {
 		panic("agent.WithLabels: uneven number of arguments, expected key-value pairs")
