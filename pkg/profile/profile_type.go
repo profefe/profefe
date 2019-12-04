@@ -14,6 +14,7 @@ const (
 	BlockProfile
 	MutexProfile
 	GoroutineProfile
+	ThreadcreateProfile
 
 	OtherProfile = 127
 )
@@ -31,6 +32,8 @@ func (ptype *ProfileType) FromString(s string) error {
 		*ptype = MutexProfile
 	case "goroutine":
 		*ptype = GoroutineProfile
+	case "threadcreate":
+		*ptype = ThreadcreateProfile
 	case "other":
 		*ptype = OtherProfile
 	default:
@@ -53,6 +56,8 @@ func (ptype ProfileType) String() string {
 		return "mutex"
 	case GoroutineProfile:
 		return "goroutine"
+	case ThreadcreateProfile:
+		return "threadcreate"
 	case OtherProfile:
 		return "other"
 	}

@@ -113,7 +113,7 @@ body pprof.pb.gz
 
 - `service` — service name (string)
 - `instance_id` — an identifier of running instance (string) (*TODO: why do we still need instance_id?*)
-- `type` — profile type (cpu, heap, block, mutex, goroutine, or other)
+- `type` — profile type (cpu, heap, block, mutex, goroutine, threadcreate or other)
 - `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
 
 ### Query saved meta information
