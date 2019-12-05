@@ -23,7 +23,7 @@ contents:
 FindProfiles() {
 s3 --prefix /service/profile_type/created_at_time
 for each object check if labels are in labels
-until limit download id meta data
+until download id meta data
 or until time > CreatedAtMax
 }
 

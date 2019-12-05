@@ -33,7 +33,7 @@ func Test_key(t *testing.T) {
 				},
 				CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
 			},
-			want: "/svc1/cpu/1257894000000000000/k1=v1,k2=v2/64",
+			want: "svc1/cpu/1257894000000000000/k1=v1,k2=v2/64",
 		},
 		{
 			name: "no labels",
@@ -44,7 +44,7 @@ func Test_key(t *testing.T) {
 				InstanceID: profile.InstanceID("1"),
 				CreatedAt:  time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
 			},
-			want: "/svc1/cpu/1257894000000000000//64",
+			want: "svc1/cpu/1257894000000000000//64",
 		},
 	}
 	for _, tt := range tests {
@@ -70,22 +70,22 @@ func Test_meta(t *testing.T) {
 		},
 		{
 			name:    "error when id is an invalid format",
-			key:     "/svc1/cpu/1257894000000000000/k1=v1,k2=v2/zz",
+			key:     "svc1/cpu/1257894000000000000/k1=v1,k2=v2/zz",
 			wantErr: true,
 		},
 		{
 			name:    "error when label encoding is incorrect",
-			key:     "/svc1/cpu/1257894000000000000/%GG=v1/64",
+			key:     "svc1/cpu/1257894000000000000/%GG=v1/64",
 			wantErr: true,
 		},
 		{
 			name:    "error when time is an invalid format",
-			key:     "/svc1/cpu/badint/k1=v1,k2=v2/64",
+			key:     "svc1/cpu/badint/k1=v1,k2=v2/64",
 			wantErr: true,
 		},
 		{
 			name: "able to parse",
-			key:  "/svc1/cpu/1257894000000000000/k1=v1,k2=v2/64",
+			key:  "svc1/cpu/1257894000000000000/k1=v1,k2=v2/64",
 			want: &profile.Meta{
 				ProfileID: profile.ID("1"),
 				Service:   "svc1",

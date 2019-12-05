@@ -166,10 +166,17 @@ func (s *Store) list(ctx context.Context, params *storage.FindProfilesParams) ([
 		createdAtMax = time.Now().UTC()
 	}
 
+	// TODO: is this max ok?
+	limit := params.Limit
+	if limit == 0 {
+		limit = 100
+	}
+
 	input := &s3.ListObjectsV2Input{
-		Bucket:  &s.S3Bucket,
-		Prefix:  aws.String(prefix(params)),
-		MaxKeys: aws.Int64(1000),
+		Bucket:     &s.S3Bucket,
+		Prefix:     aws.String(prefix(params)),
+		StartAfter: aws.String(startAfter(params)),
+		MaxKeys:    aws.Int64(1000),
 	}
 
 	metas := []profile.Meta{}
@@ -195,7 +202,7 @@ func (s *Store) list(ctx context.Context, params *storage.FindProfilesParams) ([
 				metas = append(metas, *m)
 			}
 
-			if len(metas) >= params.Limit {
+			if len(metas) >= limit {
 				return false
 			}
 
@@ -268,7 +275,6 @@ func newService(session client.ConfigProvider) *s3.S3 {
 func key(meta profile.Meta) string {
 	return strings.Join(
 		[]string{
-			"",
 			meta.Service,
 			meta.Type.String(),
 			strconv.FormatInt(meta.CreatedAt.UnixNano(), 10),
@@ -285,11 +291,11 @@ func key(meta profile.Meta) string {
 // TODO: I'd like to see instance id added to the key
 func meta(key string) (*profile.Meta, error) {
 	ks := strings.Split(key, "/")
-	if len(ks) != 6 {
+	if len(ks) != 5 {
 		return nil, fmt.Errorf("invalid key format %s; expected 5 fields", key)
 	}
 
-	svc, typ, tm, lbls, pid := ks[1], ks[2], ks[3], ks[4], ks[5]
+	svc, typ, tm, lbls, pid := ks[0], ks[1], ks[2], ks[3], ks[4]
 
 	profileID, err := profile.IDFromString(pid)
 	if err != nil {
@@ -322,13 +328,22 @@ func meta(key string) (*profile.Meta, error) {
 	}, nil
 }
 
-func prefix(params *storage.FindProfilesParams) string {
+func startAfter(params *storage.FindProfilesParams) string {
 	return strings.Join(
 		[]string{
-			"",
 			params.Service,
 			params.Type.String(),
 			strconv.FormatInt(params.CreatedAtMin.UnixNano(), 10),
+		},
+		"/",
+	)
+}
+
+func prefix(params *storage.FindProfilesParams) string {
+	return strings.Join(
+		[]string{
+			params.Service,
+			params.Type.String(),
 		},
 		"/",
 	)
