@@ -16,7 +16,9 @@ import (
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/middleware"
 	"github.com/profefe/profefe/pkg/profefe"
+	"github.com/profefe/profefe/pkg/storage"
 	badgerStorage "github.com/profefe/profefe/pkg/storage/badger"
+	"github.com/profefe/profefe/pkg/storage/s3"
 	"github.com/profefe/profefe/version"
 	"golang.org/x/xerrors"
 )
@@ -45,15 +47,30 @@ func main() {
 }
 
 func run(logger *log.Logger, conf config.Config) error {
-	st, closer, err := initBadgerStorage(logger, conf)
-	if err != nil {
-		return err
+	var (
+		r storage.Reader
+		w storage.Writer
+	)
+	if conf.Badger.Dir != "" {
+		st, closer, err := initBadgerStorage(logger, conf)
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		r, w = st, st
+	} else if conf.S3.Bucket != "" {
+		st, err := initS3(logger, conf)
+		if err != nil {
+			return err
+		}
+		r, w = st, st
+	} else {
+		return fmt.Errorf("badger or s3 configuration required")
 	}
-	defer closer.Close()
 
 	mux := http.NewServeMux()
 
-	profefe.SetupRoutes(mux, logger, st, st)
+	profefe.SetupRoutes(mux, logger, r, w)
 
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
@@ -99,4 +116,8 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*badgerStorage.S
 
 	st := badgerStorage.New(logger, db, conf.Badger.ProfileTTL)
 	return st, db, nil
+}
+
+func initS3(logger *log.Logger, conf config.Config) (*s3.Store, error) {
+	return s3.NewStore(conf.S3.Region, conf.S3.Bucket)
 }
