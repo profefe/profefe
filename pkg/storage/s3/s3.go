@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
 	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
@@ -40,8 +41,8 @@ type Store struct {
 	svc     s3iface.S3API
 
 	mu         sync.Mutex // protects the creation of uploader/downloader
-	uploader   *s3manager.Uploader
-	downloader *s3manager.Downloader
+	uploader   s3manageriface.UploaderAPI
+	downloader s3manageriface.DownloaderAPI
 }
 
 // NewStore reads and writes profiles from region and bucket.
@@ -105,6 +106,7 @@ func (p *profileList) Next() bool {
 }
 
 func (p *profileList) Profile() (*pprofProfile.Profile, error) {
+	defer func() { p.idx++ }()
 	if err := p.ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -237,7 +239,11 @@ func (s *Store) get(ctx context.Context, key string) ([]byte, error) {
 	buf := make([]byte, 0, 16384) // pre-allocated 16KB for the s3 object.
 	w := aws.NewWriteAtBuffer(buf)
 	_, err := s.downloader.DownloadWithContext(ctx, w, input)
-	return buf, err
+	if err != nil {
+		return nil, err
+	}
+	buf = w.Bytes()
+	return buf, nil
 }
 
 func (s *Store) newUploader() {
@@ -368,5 +374,5 @@ func includes(a, b profile.Labels) bool {
 }
 
 func profilePath(id profile.ID) string {
-	return fmt.Sprintf("/profiles/%s", id)
+	return fmt.Sprintf("profiles/%s", id)
 }
