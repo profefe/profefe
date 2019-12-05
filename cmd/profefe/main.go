@@ -18,7 +18,9 @@ import (
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/middleware"
 	"github.com/profefe/profefe/pkg/profefe"
+	"github.com/profefe/profefe/pkg/storage"
 	storageBadger "github.com/profefe/profefe/pkg/storage/badger"
+	"github.com/profefe/profefe/pkg/storage/s3"
 	"github.com/profefe/profefe/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -50,15 +52,30 @@ func main() {
 }
 
 func run(logger *log.Logger, conf config.Config, stdout io.Writer) error {
-	st, closer, err := initBadgerStorage(logger, conf)
-	if err != nil {
-		return err
+	var (
+		sr storage.Reader
+		sw storage.Writer
+	)
+	if conf.Badger.Dir != "" {
+		st, closer, err := initBadgerStorage(logger, conf)
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		sr, sw = st, st
+	} else if conf.S3.Bucket != "" {
+		st, err := initS3Storage(logger, conf)
+		if err != nil {
+			return err
+		}
+		sr, sw = st, st
+	} else {
+		return fmt.Errorf("badger or s3 configuration required")
 	}
-	defer closer.Close()
 
 	mux := http.NewServeMux()
 
-	profefe.SetupRoutes(mux, logger, prometheus.DefaultRegisterer, st, st)
+	profefe.SetupRoutes(mux, logger, prometheus.DefaultRegisterer, sr, sw)
 
 	setupDebugRoutes(mux)
 
@@ -119,6 +136,10 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*storageBadger.S
 
 	st := storageBadger.New(logger, db, conf.Badger.ProfileTTL)
 	return st, db, nil
+}
+
+func initS3Storage(logger *log.Logger, conf config.Config) (*s3.Store, error) {
+	return s3.NewStore(conf.S3.Region, conf.S3.Bucket)
 }
 
 func setupDebugRoutes(mux *http.ServeMux) {
