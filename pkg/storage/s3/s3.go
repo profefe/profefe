@@ -96,17 +96,24 @@ type profileList struct {
 	pids   []profile.ID
 	idx    int
 	getter func(ctx context.Context, key string) ([]byte, error)
+	parser func(data []byte) (*pprofProfile.Profile, error)
+
+	err error // first error preserved and always returned
 }
 
-func (p *profileList) Next() bool {
+func (p *profileList) Next() (n bool) {
 	if p.ctx.Err() != nil {
 		return false
 	}
-	return p.idx < len(p.pids)
+	if p.err != nil {
+		return false
+	}
+
+	p.idx++
+	return p.idx <= len(p.pids)
 }
 
 func (p *profileList) Profile() (*pprofProfile.Profile, error) {
-	defer func() { p.idx++ }()
 	if err := p.ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -117,10 +124,16 @@ func (p *profileList) Profile() (*pprofProfile.Profile, error) {
 
 	b, err := p.getter(p.ctx, profilePath(p.pids[p.idx]))
 	if err != nil {
+		p.err = err
 		return nil, err
 	}
 
-	return pprofProfile.ParseData(b)
+	prof, err := pprofProfile.ParseData(b)
+	if err != nil {
+		fmt.Printf("err %v\n", err)
+		p.err = err
+	}
+	return prof, err
 }
 
 func (p *profileList) Close() error { return nil }
@@ -131,6 +144,7 @@ func (s *Store) ListProfiles(ctx context.Context, pids []profile.ID) (storage.Pr
 		ctx:    ctx,
 		pids:   pids,
 		getter: s.get,
+		parser: pprofProfile.ParseData,
 	}, nil
 }
 
@@ -340,6 +354,7 @@ func meta(key string) (*profile.Meta, error) {
 	}, nil
 }
 
+// startAfter starts the s3 list after the CreatedAtMin time.
 func startAfter(params *storage.FindProfilesParams) string {
 	return strings.Join(
 		[]string{
@@ -351,6 +366,7 @@ func startAfter(params *storage.FindProfilesParams) string {
 	)
 }
 
+// prefix is used to filter down the s3 objects by service and type.
 func prefix(params *storage.FindProfilesParams) string {
 	return strings.Join(
 		[]string{
@@ -361,6 +377,7 @@ func prefix(params *storage.FindProfilesParams) string {
 	)
 }
 
+// includes checks if a includes all of b keys and values.
 func includes(a, b profile.Labels) bool {
 	hash := make(map[string]string)
 	for _, l := range a {
@@ -380,5 +397,5 @@ func includes(a, b profile.Labels) bool {
 }
 
 func profilePath(id profile.ID) string {
-	return fmt.Sprintf("profiles/%s", id)
+	return fmt.Sprintf("v0/profiles/%s", id)
 }
