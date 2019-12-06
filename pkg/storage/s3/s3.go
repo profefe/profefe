@@ -190,6 +190,7 @@ func (s *Store) list(ctx context.Context, params *storage.FindProfilesParams) ([
 				}
 				m, err := meta(*object.Key)
 				if err != nil {
+					fmt.Printf("%v\n", err)
 					// TODO: log
 					continue
 				}
@@ -199,6 +200,7 @@ func (s *Store) list(ctx context.Context, params *storage.FindProfilesParams) ([
 				}
 
 				if !includes(m.Labels, params.Labels) {
+					fmt.Printf("includes")
 					continue
 				}
 				metas = append(metas, *m)
@@ -297,11 +299,15 @@ func key(meta profile.Meta) string {
 // TODO: I'd like to see instance id added to the key
 func meta(key string) (*profile.Meta, error) {
 	ks := strings.Split(key, "/")
-	if len(ks) != 5 {
+	var svc, typ, tm, pid, lbls string
+	switch len(ks) {
+	case 4: // no labels are set in the path
+		svc, typ, tm, pid, lbls = ks[0], ks[1], ks[2], ks[3], ""
+	case 5:
+		svc, typ, tm, lbls, pid = ks[0], ks[1], ks[2], ks[3], ks[4]
+	default:
 		return nil, fmt.Errorf("invalid key format %s; expected 5 fields", key)
 	}
-
-	svc, typ, tm, lbls, pid := ks[0], ks[1], ks[2], ks[3], ks[4]
 
 	profileID, err := profile.IDFromString(pid)
 	if err != nil {
