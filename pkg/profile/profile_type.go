@@ -15,6 +15,7 @@ const (
 	MutexProfile
 	GoroutineProfile
 	ThreadcreateProfile
+	AllocsProfile
 
 	OtherProfile = 127
 )
@@ -22,6 +23,8 @@ const (
 func (ptype *ProfileType) FromString(s string) error {
 	s = strings.TrimSpace(s)
 	switch s {
+	case "allocs":
+		*ptype = AllocsProfile
 	case "cpu":
 		*ptype = CPUProfile
 	case "heap":
@@ -46,6 +49,8 @@ func (ptype ProfileType) String() string {
 	switch ptype {
 	case UnknownProfile:
 		return "unknown"
+	case AllocsProfile:
+		return "allocs"
 	case CPUProfile:
 		return "cpu"
 	case HeapProfile:
