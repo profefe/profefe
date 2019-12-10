@@ -1,16 +1,14 @@
 FROM golang:1.13.4-alpine3.10 as builder
 
-env GO111MODULE=off
-env SHELL=/bin/sh
+RUN apk add --update --no-cache make
 
+env GO111MODULE=off
 ARG VERSION
 ARG GITSHA
-ARG BUILDTIME
 
-RUN apk add --update --no-cache make
 COPY . /go/src/github.com/profefe/profefe
 WORKDIR /go/src/github.com/profefe/profefe
-RUN make SHELL=$SHELL GITSHA=$GITSHA
+RUN make VERSION=$VERSION GITSHA=$GITSHA
 
 FROM alpine
 
