@@ -4,20 +4,20 @@ docker image for `profefe`.
 Starting from the root of the project you can run:
 
 ```
-make container
+make docker-image
 ```
 
-It will build an image called `profefe/profefe:<GITSHA>` where `<GITSHA>` is the
-current git commit sha.
+This will build an image named `profefe/profefe:git-<GITSHA>` where `<GITSHA>` is the
+current git commit.
 
 You can run the container with the command:
 
 ```
-docker run -it -p 10100:10100 -v $PWD/data:$PWD/data profefe/profefe:<GITSHA>
+docker run -it -p 10100:10100 -v $PWD/data:/data profefe/profefe:git-<GITSHA>
 ```
 
-If you need to change the http server port you can do:
+If you need to change the http server port and you can do:
 
 ```
-docker run -it -p 10200:10200 -v $PWD/data:$PWD/data profefe/profefe:2550865 -addr :10200
+docker run -it -p 10200:10200 -v $PWD/data:/data profefe/profefe:git-<GITSHA> -addr :10200
 ```
