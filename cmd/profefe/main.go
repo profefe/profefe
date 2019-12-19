@@ -119,5 +119,5 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*badgerStorage.S
 }
 
 func initS3(logger *log.Logger, conf config.Config) (*s3.Store, error) {
-	return s3.NewStore(conf.S3.Region, conf.S3.Bucket)
+	return s3.NewStore(logger, conf.S3.Region, conf.S3.Bucket)
 }
