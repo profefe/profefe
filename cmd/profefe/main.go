@@ -139,7 +139,7 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*storageBadger.S
 }
 
 func initS3Storage(logger *log.Logger, conf config.Config) (*s3.Store, error) {
-	return s3.NewStore(conf.S3.Region, conf.S3.Bucket)
+	return s3.NewStore(logger, conf.S3.Region, conf.S3.Bucket)
 }
 
 func setupDebugRoutes(mux *http.ServeMux) {
