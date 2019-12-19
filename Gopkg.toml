@@ -26,3 +26,7 @@
 [[constraint]]
   name = "github.com/cespare/xxhash"
   version = "2.1.0"
+
+[[constraint]]
+  name = "github.com/aws/aws-sdk-go"
+  version = "v1.26.5"

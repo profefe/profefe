@@ -10,6 +10,57 @@
   revision = "e2d15f34fcf99d5dbb871c820ec73f710fca9815"
 
 [[projects]]
+  digest = "1:367558012c098708973c70a1d2cbd65bd3973c622f2dead8e3c9e80172ef4314"
+  name = "github.com/aws/aws-sdk-go"
+  packages = [
+    "aws",
+    "aws/arn",
+    "aws/awserr",
+    "aws/awsutil",
+    "aws/client",
+    "aws/client/metadata",
+    "aws/corehandlers",
+    "aws/credentials",
+    "aws/credentials/ec2rolecreds",
+    "aws/credentials/endpointcreds",
+    "aws/credentials/processcreds",
+    "aws/credentials/stscreds",
+    "aws/csm",
+    "aws/defaults",
+    "aws/ec2metadata",
+    "aws/endpoints",
+    "aws/request",
+    "aws/session",
+    "aws/signer/v4",
+    "internal/ini",
+    "internal/s3err",
+    "internal/sdkio",
+    "internal/sdkmath",
+    "internal/sdkrand",
+    "internal/sdkuri",
+    "internal/shareddefaults",
+    "private/protocol",
+    "private/protocol/eventstream",
+    "private/protocol/eventstream/eventstreamapi",
+    "private/protocol/json/jsonutil",
+    "private/protocol/query",
+    "private/protocol/query/queryutil",
+    "private/protocol/rest",
+    "private/protocol/restxml",
+    "private/protocol/xml/xmlutil",
+    "service/s3",
+    "service/s3/internal/arn",
+    "service/s3/s3iface",
+    "service/s3/s3manager",
+    "service/s3/s3manager/s3manageriface",
+    "service/sts",
+    "service/sts/stsiface",
+  ]
+  pruneopts = "UT"
+  revision = "a25ea3950893fa501b1fc9619eb1b3546c7ad3a0"
+  version = "v1.26.5"
+
+[[projects]]
   digest = "1:47056e6fe3a3524238d48ddcb6d38bfcfa6db346a11d73d83f1620a8cbf69793"
   name = "github.com/cespare/xxhash"
   packages = ["."]
@@ -63,6 +114,13 @@
   pruneopts = "UT"
   revision = "6c65a5562fc06764971b7c5d05c76c75e84bdbf7"
   version = "v1.3.2"
+
+[[projects]]
+  digest = "1:bb81097a5b62634f3e9fec1014657855610c82d19b9a40c17612e32651e35dca"
+  name = "github.com/jmespath/go-jmespath"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "c2b33e84"
 
 [[projects]]
   branch = "master"
@@ -209,6 +267,14 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/aws/aws-sdk-go/aws",
+    "github.com/aws/aws-sdk-go/aws/client",
+    "github.com/aws/aws-sdk-go/aws/request",
+    "github.com/aws/aws-sdk-go/aws/session",
+    "github.com/aws/aws-sdk-go/service/s3",
+    "github.com/aws/aws-sdk-go/service/s3/s3iface",
+    "github.com/aws/aws-sdk-go/service/s3/s3manager",
+    "github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface",
     "github.com/cespare/xxhash",
     "github.com/dgraph-io/badger",
     "github.com/pkg/errors",
