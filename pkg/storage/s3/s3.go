@@ -19,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
 	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
+	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
 )
@@ -33,9 +34,14 @@ var _ storage.Reader = (*Store)(nil)
 
 // S3Store stores and loads profiles from s3 using carefully constructed
 // object key.
+//
+// The schema for the key is:
+// /service/profile_type/created_at_unix_time/label1=value1,label2=value2/id
 type Store struct {
 	Region   string
 	S3Bucket string
+
+	logger *log.Logger
 
 	session client.ConfigProvider
 	svc     s3iface.S3API
@@ -46,7 +52,7 @@ type Store struct {
 }
 
 // NewStore reads and writes profiles from region and bucket.
-func NewStore(region, s3bucket string) (*Store, error) {
+func NewStore(logger *log.Logger, region, s3bucket string) (*Store, error) {
 	session, err := newSession(region)
 	if err != nil {
 		return nil, err
@@ -56,6 +62,7 @@ func NewStore(region, s3bucket string) (*Store, error) {
 		Region:   region,
 		S3Bucket: s3bucket,
 		session:  session,
+		logger:   logger,
 		svc:      newService(session),
 	}, nil
 }
@@ -94,7 +101,7 @@ var _ storage.ProfileList = (*profileList)(nil)
 type profileList struct {
 	ctx    context.Context
 	pids   []profile.ID
-	idx    int
+	cur    profile.ID
 	getter func(ctx context.Context, key string) ([]byte, error)
 	parser func(data []byte) (*pprofProfile.Profile, error)
 
@@ -109,8 +116,12 @@ func (p *profileList) Next() (n bool) {
 		return false
 	}
 
-	p.idx++
-	return p.idx <= len(p.pids)
+	if len(p.pids) == 0 {
+		return false
+	}
+
+	p.cur, p.pids = p.pids[0], p.pids[1:]
+	return true
 }
 
 func (p *profileList) Profile() (*pprofProfile.Profile, error) {
@@ -118,11 +129,11 @@ func (p *profileList) Profile() (*pprofProfile.Profile, error) {
 		return nil, err
 	}
 
-	if p.idx >= len(p.pids) {
+	if p.cur == nil {
 		return nil, fmt.Errorf("profile out of range")
 	}
 
-	b, err := p.getter(p.ctx, profilePath(p.pids[p.idx]))
+	b, err := p.getter(p.ctx, profilePath(p.cur))
 	if err != nil {
 		p.err = err
 		return nil, err
@@ -130,16 +141,18 @@ func (p *profileList) Profile() (*pprofProfile.Profile, error) {
 
 	prof, err := pprofProfile.ParseData(b)
 	if err != nil {
-		fmt.Printf("err %v\n", err)
 		p.err = err
 	}
 	return prof, err
 }
 
-func (p *profileList) Close() error { return nil }
+func (p *profileList) Close() error {
+	// prevent any use of this list's Profile or Next fn
+	p.err = fmt.Errorf("list closed")
+	return nil
+}
 
 func (s *Store) ListProfiles(ctx context.Context, pids []profile.ID) (storage.ProfileList, error) {
-	// TODO: Should ctx be used in the profilelist?
 	return &profileList{
 		ctx:    ctx,
 		pids:   pids,
@@ -149,15 +162,13 @@ func (s *Store) ListProfiles(ctx context.Context, pids []profile.ID) (storage.Pr
 }
 
 // FindProfiles searches s3 for profile meta data.
-// TODO: I should update the s3 key to have instance_id
-// TODO: instance id are not in the meta right now
 func (s *Store) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
-	return s.list(ctx, params)
+	return s.find(ctx, params)
 }
 
 // FindProfileIDs calls FindProfiles and returns just the IDs.
 func (s *Store) FindProfileIDs(ctx context.Context, params *storage.FindProfilesParams) ([]profile.ID, error) {
-	metas, err := s.list(ctx, params)
+	metas, err := s.find(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +179,7 @@ func (s *Store) FindProfileIDs(ctx context.Context, params *storage.FindProfiles
 	return ids, nil
 }
 
-func (s *Store) list(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
+func (s *Store) find(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
 	if params.Service == "" {
 		return nil, fmt.Errorf("empty service")
 	}
@@ -204,8 +215,7 @@ func (s *Store) list(ctx context.Context, params *storage.FindProfilesParams) ([
 				}
 				m, err := meta(*object.Key)
 				if err != nil {
-					fmt.Printf("%v\n", err)
-					// TODO: log
+					s.logger.Error(err)
 					continue
 				}
 
@@ -214,7 +224,6 @@ func (s *Store) list(ctx context.Context, params *storage.FindProfilesParams) ([
 				}
 
 				if !includes(m.Labels, params.Labels) {
-					fmt.Printf("includes")
 					continue
 				}
 				metas = append(metas, *m)
@@ -224,6 +233,9 @@ func (s *Store) list(ctx context.Context, params *storage.FindProfilesParams) ([
 				return false
 			}
 
+			if page.IsTruncated == nil {
+				return false
+			}
 			return *page.IsTruncated
 		})
 	return metas, err
@@ -310,7 +322,6 @@ func key(meta profile.Meta) string {
 // meta parses the s3 key by splitting by / to create a profile.Meta.
 //
 // Note: InstanceID is not set.
-// TODO: I'd like to see instance id added to the key
 func meta(key string) (*profile.Meta, error) {
 	ks := strings.Split(key, "/")
 	var svc, typ, tm, pid, lbls string

@@ -12,12 +12,16 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
 	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
+	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
+	"go.uber.org/zap/zaptest"
 )
 
 func Test_key(t *testing.T) {
@@ -368,6 +372,10 @@ func (m *mockDownloaderAPI) DownloadWithContext(ctx aws.Context, wa io.WriterAt,
 
 func mockProfile() ([]byte, error) {
 	p := &pprofProfile.Profile{}
+	return encodeProfile(p)
+}
+
+func encodeProfile(p *pprofProfile.Profile) ([]byte, error) {
 	buf := &bytes.Buffer{}
 	err := p.WriteUncompressed(buf)
 	return buf.Bytes(), err
@@ -399,6 +407,149 @@ func TestStore_ListProfiles(t *testing.T) {
 		}
 		if count != 2 {
 			t.Errorf("Store.ListProfiles().Next() = %d, want %d ", count, 2)
+		}
+
+		if got, want := len(profiles), 2; got != want {
+			t.Errorf("Store.ListProfiles.Profile() = %d, want %d", got, want)
+		}
+	})
+}
+
+type mockService struct {
+	s3iface.S3API
+
+	// data to send to ListObjectsV2PagesWithContext
+	page s3.ListObjectsV2Output
+	err  error
+
+	// data sent from ListObjectsV2PagesWithContext
+	input *s3.ListObjectsV2Input
+
+	// data sent from page function
+	nextPage bool
+}
+
+func (s *mockService) ListObjectsV2PagesWithContext(ctx aws.Context, input *s3.ListObjectsV2Input, fn func(*s3.ListObjectsV2Output, bool) bool, opts ...request.Option) error {
+	s.input = input
+	s.nextPage = fn(&s.page, false)
+	return s.err
+}
+
+func Test_FindProfileIDs(t *testing.T) {
+	s := &Store{
+		S3Bucket: "b1",
+		logger:   log.New(zaptest.NewLogger(t)),
+	}
+
+	t.Run("no service returns error", func(t *testing.T) {
+		params := &storage.FindProfilesParams{}
+		_, err := s.FindProfileIDs(context.Background(), params)
+		if err == nil {
+			t.Errorf("expected error as no service specified")
+		}
+	})
+	t.Run("no created at returns error", func(t *testing.T) {
+		params := &storage.FindProfilesParams{
+			Service: "svc1",
+		}
+		_, err := s.FindProfileIDs(context.Background(), params)
+		if err == nil {
+			t.Errorf("expected error as no created at time specified")
+		}
+	})
+	t.Run("no s3 objects should return on ids", func(t *testing.T) {
+		s.svc = &mockService{}
+		params := &storage.FindProfilesParams{
+			Service:      "svc1",
+			CreatedAtMin: time.Unix(0, 0),
+		}
+		ids, err := s.FindProfileIDs(context.Background(), params)
+		if err != nil {
+			t.Errorf("unexpected error from s3")
+		}
+		if len(ids) != 0 {
+			t.Errorf("unexpected ids returned %v", ids)
+		}
+	})
+	t.Run("s3 object with incorrectly formatted key is not returned", func(t *testing.T) {
+		s.svc = &mockService{
+			page: s3.ListObjectsV2Output{
+				Contents: []*s3.Object{
+					{
+						Key: aws.String("incorrect_key_format"),
+					},
+				},
+				IsTruncated: aws.Bool(false),
+			},
+		}
+		params := &storage.FindProfilesParams{
+			Service:      "svc1",
+			CreatedAtMin: time.Unix(0, 0),
+			Labels: profile.Labels{
+				profile.Label{
+					Key:   "k1",
+					Value: "v1",
+				},
+			},
+		}
+		ids, err := s.FindProfileIDs(context.Background(), params)
+		if err != nil {
+			t.Errorf("unexpected error from s3")
+		}
+		if len(ids) != 0 {
+			t.Errorf("unexpected ids returned %v", ids)
+		}
+	})
+	t.Run("s3 object with id 64 returned", func(t *testing.T) {
+		s.svc = &mockService{
+			page: s3.ListObjectsV2Output{
+				Contents: []*s3.Object{
+					{
+						Key: aws.String("svc1/cpu/1257894000000000000/k1=v1,k2=v2/64"),
+					},
+				},
+				IsTruncated: aws.Bool(false),
+			},
+		}
+		params := &storage.FindProfilesParams{
+			Service:      "svc1",
+			CreatedAtMin: time.Unix(0, 0),
+		}
+		ids, err := s.FindProfileIDs(context.Background(), params)
+		if err != nil {
+			t.Errorf("unexpected error from s3")
+		}
+		if len(ids) != 1 {
+			t.Fatalf("unexpected ids returned %v", ids)
+		}
+		want, _ := profile.IDFromString("64")
+		if got := ids[0]; got.String() != want.String() {
+			t.Errorf("FindProfileIDs() %d want %d", got, want)
+		}
+	})
+
+	t.Run("s3 object after max time will not return", func(t *testing.T) {
+		s.svc = &mockService{
+			page: s3.ListObjectsV2Output{
+				Contents: []*s3.Object{
+					{
+						Key: aws.String("svc1/cpu/1257894000000000000/k1=v1,k2=v2/64"),
+					},
+				},
+				IsTruncated: aws.Bool(false),
+			},
+		}
+		params := &storage.FindProfilesParams{
+			Service:      "svc1",
+			CreatedAtMin: time.Unix(0, 0),
+			CreatedAtMax: time.Unix(0, 0),
+		}
+		ids, err := s.FindProfileIDs(context.Background(), params)
+		if err != nil {
+			t.Errorf("unexpected error from s3")
+		}
+		if len(ids) != 0 {
+			t.Fatalf("unexpected ids returned %v", ids)
 		}
 	})
 }
