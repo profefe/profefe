@@ -27,11 +27,10 @@ func TestStorage_WriteFind(t *testing.T) {
 
 	service := "test-service-1"
 	meta := profile.Meta{
-		ProfileID:  profile.NewID(),
-		Service:    service,
-		Type:       profile.CPUProfile,
-		InstanceID: profile.NewInstanceID(),
-		Labels:     profile.Labels{{"key1", "val1"}},
+		ProfileID: profile.NewID(),
+		Service:   service,
+		Type:      profile.CPUProfile,
+		Labels:    profile.Labels{{"key1", "val1"}},
 	}
 
 	data := testWriteProfile(t, st, "../../../testdata/collector_cpu_1.prof", meta)
@@ -69,17 +68,16 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 	st, teardown := setupTestStorage(t)
 	defer teardown()
 
-	iid := profile.NewInstanceID()
-	service := fmt.Sprintf("test-service-%s", iid)
+	service1 := "test-service-1"
+	service2 := "test-service-2"
 
 	for n := 1; n <= 2; n++ {
 		fileName := fmt.Sprintf("../../../testdata/collector_cpu_%d.prof", n)
 		meta := profile.Meta{
-			ProfileID:  profile.NewID(),
-			Service:    service,
-			Type:       profile.CPUProfile,
-			InstanceID: iid,
-			Labels:     profile.Labels{{"key1", "val1"}},
+			ProfileID: profile.NewID(),
+			Service:   service1,
+			Type:      profile.CPUProfile,
+			Labels:    profile.Labels{{"key1", "val1"}},
 		}
 		testWriteProfile(t, st, fileName, meta)
 	}
@@ -90,11 +88,10 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		st,
 		"../../../testdata/collector_cpu_3.prof",
 		profile.Meta{
-			ProfileID:  profile.NewID(),
-			Service:    "another-service",
-			Type:       profile.CPUProfile,
-			InstanceID: profile.NewInstanceID(),
-			Labels:     profile.Labels{{"key1", "val1"}},
+			ProfileID: profile.NewID(),
+			Service:   service2,
+			Type:      profile.CPUProfile,
+			Labels:    profile.Labels{{"key1", "val1"}},
 		},
 	)
 
@@ -104,11 +101,10 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		st,
 		"../../../testdata/collector_heap_1.prof",
 		profile.Meta{
-			ProfileID:  profile.NewID(),
-			Service:    service,
-			Type:       profile.HeapProfile,
-			InstanceID: iid,
-			Labels:     profile.Labels{{"key1", "val1"}, {"key2", "val2"}},
+			ProfileID: profile.NewID(),
+			Service:   service1,
+			Type:      profile.HeapProfile,
+			Labels:    profile.Labels{{"key1", "val1"}, {"key2", "val2"}},
 		},
 	)
 
@@ -118,11 +114,10 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		st,
 		"../../../testdata/collector_heap_2.prof",
 		profile.Meta{
-			ProfileID:  profile.NewID(),
-			Service:    service,
-			Type:       profile.HeapProfile,
-			InstanceID: iid,
-			Labels:     profile.Labels{{"key3", "val3"}},
+			ProfileID: profile.NewID(),
+			Service:   service1,
+			Type:      profile.HeapProfile,
+			Labels:    profile.Labels{{"key3", "val3"}},
 		},
 	)
 
@@ -131,7 +126,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 
 	t.Run("by service", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
-			Service:      service,
+			Service:      service1,
 			CreatedAtMin: createdAtMin,
 		}
 		ids, err := st.FindProfileIDs(context.Background(), params)
@@ -141,7 +136,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 
 	t.Run("by service type", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
-			Service:      service,
+			Service:      service1,
 			Type:         profile.CPUProfile,
 			CreatedAtMin: createdAtMin,
 		}
@@ -152,7 +147,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 
 	t.Run("by service labels", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
-			Service:      service,
+			Service:      service1,
 			Labels:       profile.Labels{{"key1", "val1"}},
 			CreatedAtMin: createdAtMin,
 		}
@@ -163,7 +158,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 
 	t.Run("by service labels type", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
-			Service:      service,
+			Service:      service1,
 			Type:         profile.HeapProfile,
 			Labels:       profile.Labels{{"key2", "val2"}},
 			CreatedAtMin: createdAtMin,
@@ -175,7 +170,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 
 	t.Run("with limit", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
-			Service:      service,
+			Service:      service1,
 			CreatedAtMin: createdAtMin,
 			Limit:        2,
 		}
@@ -186,7 +181,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 
 	t.Run("nothing found", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
-			Service:      service,
+			Service:      service1,
 			Type:         profile.HeapProfile,
 			Labels:       profile.Labels{{"key3", "val1"}},
 			CreatedAtMin: createdAtMin,
@@ -200,8 +195,7 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 	st, teardown := setupTestStorage(t)
 	defer teardown()
 
-	iid := profile.NewInstanceID()
-	service := fmt.Sprintf("test-service-%s", iid)
+	service1 := "test-service-1"
 
 	var (
 		pids []profile.ID
@@ -213,11 +207,10 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 		pids = append(pids, pid)
 		fileName := fmt.Sprintf("../../../testdata/collector_cpu_%d.prof", n)
 		meta := profile.Meta{
-			ProfileID:  pid,
-			Service:    service,
-			Type:       profile.CPUProfile,
-			InstanceID: iid,
-			Labels:     profile.Labels{{"key1", "val1"}},
+			ProfileID: pid,
+			Service:   service1,
+			Type:      profile.CPUProfile,
+			Labels:    profile.Labels{{"key1", "val1"}},
 		}
 		data := testWriteProfile(t, st, fileName, meta)
 

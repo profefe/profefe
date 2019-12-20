@@ -32,10 +32,9 @@ func (c *Collector) CollectProfileFrom(ctx context.Context, src io.Reader, req *
 }
 
 type WriteProfileRequest struct {
-	Service    string
-	Type       profile.ProfileType
-	InstanceID profile.InstanceID
-	Labels     profile.Labels
+	Service string
+	Type    profile.ProfileType
+	Labels  profile.Labels
 }
 
 func (req *WriteProfileRequest) UnmarshalURL(q url.Values) error {
@@ -48,12 +47,6 @@ func (req *WriteProfileRequest) UnmarshalURL(q url.Values) error {
 		Type:    profile.UnknownProfile,
 		Labels:  nil,
 	}
-
-	iid, err := getInstanceID(q)
-	if err != nil {
-		return err
-	}
-	req.InstanceID = iid
 
 	ptype, err := getProfileType(q)
 	if err != nil {
@@ -78,9 +71,6 @@ func (req *WriteProfileRequest) Validate() error {
 	if req.Service == "" {
 		return xerrors.Errorf("service empty: req %v", req)
 	}
-	if req.InstanceID.IsNil() {
-		return xerrors.Errorf("instance_id empty: req: %v", req)
-	}
 	if req.Type == profile.UnknownProfile {
 		return xerrors.Errorf("unknown profile type %s: req %v", req.Type, req)
 	}
@@ -88,5 +78,5 @@ func (req *WriteProfileRequest) Validate() error {
 }
 
 func (req *WriteProfileRequest) NewProfileMeta() profile.Meta {
-	return profile.NewProfileMeta(req.Service, req.Type, req.InstanceID, req.Labels)
+	return profile.NewProfileMeta(req.Service, req.Type, req.Labels)
 }

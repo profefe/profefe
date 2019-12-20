@@ -10,7 +10,6 @@ usuage() {
 
 service=
 labels=
-instance_id="imported-profile"
 prof_type=
 
 while true
@@ -65,7 +64,7 @@ api_profile_url="$PROFEFE_COLLECTOR/api/0/profiles"
 create_profile() {
     local file_path="$1"
     echo -n "uploading ${file_path}..."
-    curl -s -XPOST "$api_profile_url?service=$service&instance_id=$instance_id&type=$prof_type&labels=$labels" --data-binary "@$file_path" >/dev/null
+    curl -s -XPOST "${api_profile_url}?service=${service}&type=${prof_type}&labels=${labels}" --data-binary "@${file_path}" >/dev/null
     echo "OK"
 }
 

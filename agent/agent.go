@@ -3,15 +3,12 @@ package agent
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/url"
-	"os"
 	"runtime/pprof"
 	"strings"
 	"sync"
@@ -55,9 +52,8 @@ type Agent struct {
 	GoroutineProfile    bool
 	ThreadcreateProfile bool
 
-	service    string
-	instanceID profile.InstanceID
-	rawLabels  strings.Builder
+	service   string
+	rawLabels strings.Builder
 
 	logf func(format string, v ...interface{})
 
@@ -89,8 +85,6 @@ func New(addr, service string, opts ...Option) *Agent {
 		opt(a)
 	}
 
-	a.instanceID = a.getInstanceID()
-
 	return a
 }
 
@@ -108,23 +102,6 @@ func (a *Agent) Stop() error {
 	close(a.stop)
 	<-a.done
 	return nil
-}
-
-func (a *Agent) getInstanceID() profile.InstanceID {
-	prog := os.Args[0]
-	f, err := os.Open(prog)
-	if err != nil {
-		a.logf("failed to read binary %s: %v", prog, err)
-		return profile.NewInstanceID()
-	}
-	defer f.Close()
-
-	h := md5.New()
-	if _, err := io.Copy(h, f); err != nil {
-		a.logf("failed to generate hash from binary %s: %v", prog, err)
-		return profile.NewInstanceID()
-	}
-	return profile.InstanceID(hex.EncodeToString(h.Sum(nil)))
 }
 
 func (a *Agent) collectProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
@@ -164,7 +141,6 @@ func (a *Agent) collectProfile(ctx context.Context, ptype profile.ProfileType, b
 func (a *Agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
 	q := url.Values{}
 	q.Set("service", a.service)
-	q.Set("instance_id", a.instanceID.String())
 	q.Set("labels", a.rawLabels.String())
 	q.Set("type", ptype.String())
 
