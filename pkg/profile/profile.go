@@ -67,35 +67,19 @@ func (pid ID) String() string {
 	return string(text)
 }
 
-type InstanceID []byte
-
-func NewInstanceID() InstanceID {
-	return xid.New().Bytes()
-}
-
-func (iid InstanceID) IsNil() bool {
-	return iid == nil
-}
-
-func (iid InstanceID) String() string {
-	return encoding.EncodeToString(iid)
-}
-
 type Meta struct {
 	ProfileID  ID          `json:"profile_id"`
 	Service    string      `json:"service"`
 	Type       ProfileType `json:"type"`
-	InstanceID InstanceID  `json:"instance_id"`
 	Labels     Labels      `json:"labels,omitempty"`
 	CreatedAt  time.Time   `json:"created_at,omitempty"`
 }
 
-func NewProfileMeta(service string, ptyp ProfileType, iid InstanceID, labels Labels) Meta {
+func NewProfileMeta(service string, ptyp ProfileType, labels Labels) Meta {
 	return Meta{
 		ProfileID:  NewID(),
 		Service:    service,
 		Type:       ptyp,
-		InstanceID: iid,
 		Labels:     labels,
 		CreatedAt:  time.Now().UTC(),
 	}

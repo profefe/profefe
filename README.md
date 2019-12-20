@@ -58,9 +58,9 @@ To start the example, in a separate terminal window run:
 After a brief period, the application will start sending CPU profiles to the collector:
 
 ```
-send profile: http://localhost:10100/api/0/profiles?instance_id=87cdc549c84507f24944793b1ddbdc34&labels=version%3D1.0.0&service=hotapp-service&type=cpu
-send profile: http://localhost:10100/api/0/profiles?instance_id=87cdc549c84507f24944793b1ddbdc34&labels=version%3D1.0.0&service=hotapp-service&type=cpu
-send profile: http://localhost:10100/api/0/profiles?instance_id=87cdc549c84507f24944793b1ddbdc34&labels=version%3D1.0.0&service=hotapp-service&type=cpu
+send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&labels=version=1.0.0&type=cpu
+send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&labels=version=1.0.0&type=cpu
+send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&labels=version=1.0.0&type=cpu
 ```
 
 ### Querying Profiles
@@ -108,7 +108,7 @@ uploading service1-cpu-backend1-20190313-0948Z.prof...OK
 ### Save pprof data
 
 ```
-POST /api/0/profiles?service=<service>&instance_id=<iid>&type=[cpu|heap|...]&labels=<key=value,key=value>
+POST /api/0/profiles?service=<service>&type=[cpu|heap|...]&labels=<key=value,key=value>
 body pprof.pb.gz
 
 < 200 OK
@@ -124,7 +124,6 @@ body pprof.pb.gz
 ```
 
 - `service` — service name (string)
-- `instance_id` — an identifier of running instance (string) (*TODO: why do we still need instance_id?*)
 - `type` — profile type (cpu, heap, block, mutex, goroutine, threadcreate or other)
 - `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
 
