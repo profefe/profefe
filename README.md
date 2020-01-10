@@ -8,7 +8,7 @@ the profiling samples base on metadata associated with the application.
 
 ---
 
-**The project is still in the early prototyping stage. Things will change. Opinions and contributions are welcome.**
+**The project is still in its early stage. Opinions and contributions are welcome.**
 
 ---
 
@@ -23,8 +23,6 @@ See [Design Docs](DESIGN.md) documentation.
 
 ## Quickstart
 
-**TODO add quickstart**
-
 To build and start profefe collector, run:
 
 ```
@@ -34,22 +32,22 @@ To build and start profefe collector, run:
 2019-06-06T00:07:58.499+0200    info    profefe/main.go:86    server is running    {"addr": ":10100"}
 ```
 
-### Docker
+---
 
-You can build a docker image with the command:
+You can build a docker image with the collector running the command:
 
 ```
 > make docker-image
 ```
 
-More documentation can be found in [./contrib/docker/README.md](./contrib/docker/README.md).
+More documentation about running profefe in docker can be found in [contrib/docker/README.md](./contrib/docker/README.md).
 
 ---
 
 The project includes a fork of [Google Stackdriver Profiler's example application][5], modified to use profefe agent,
-that sends profiles to the local collector.
+that sends profiling data to profefe collector.
 
-To start the example, in a separate terminal window run:
+To start the example, in a separate terminal window, run:
 
 ```
 > go run ./examples/hotapp/main.go
@@ -63,9 +61,7 @@ send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&label
 send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&labels=version=1.0.0&type=cpu
 ```
 
-### Querying Profiles
-
-Querying profiling data is an HTTP call to profefe collector API endpoint:
+To query stored profiling data, make an HTTP call to profefe collector API endpoint ([_see documentation for collector's HTTP API_](#http-api)):
 
 ```
 > go tool pprof 'http://localhost:10100/api/0/profiles/merge?service=hotapp-service&type=cpu&from=2019-05-30T11:49:00&to=2019-05-30T12:49:00&labels=version=1.0.0'
@@ -91,11 +87,11 @@ Showing top 10 nodes out of 12
          0     0% 99.15%     1020ms  2.35%  runtime.mstart
 ```
 
-Note, above we requested all profiling data associated with the given meta data (service and time period),
+Note, above we requested all profiling data associated with the given meta-information (service and time period),
 as a single *merged* profile.
 
 profefe includes an experimental tool, that allows importing existing pprof data into the collector.
-While the collector running, run the tool as following:
+While the profefe collector is running, you can use the tool as following:
 
 ```
 > ./scripts/pprof_import.sh --service service1 --label region=europe-west3 --label host=backend1 --type cpu -- path/to/cpu.prof
