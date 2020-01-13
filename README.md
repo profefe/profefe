@@ -178,7 +178,7 @@ The feedback and contribution are very welcome.
 While the topic of continuous profiling in the production is a bit unrepresented in the public internet, some
 research or commercial projects are already exist
 
-- [Stackdriver profiler][3]
+- [Stackdriver profiler](https://cloud.google.com/profiler/)
 - [Google-Wide Profiling: A Continuous Profiling Infrastructure for Data Centers](https://ai.google/research/pubs/pub36575) (paper)
 - [StackImpact](https://stackimpact.com/docs/go-profiling/)
 - [conprof](https://github.com/conprof/conprof)
