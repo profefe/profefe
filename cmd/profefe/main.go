@@ -55,6 +55,9 @@ func run(logger *log.Logger, conf config.Config) error {
 
 	profefe.SetupRoutes(mux, logger, st, st)
 
+	uiHandler := handler.NewUIHandler(log, profileRepo)
+	uiHandler.RegisterRoutes(mux)
+
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 
