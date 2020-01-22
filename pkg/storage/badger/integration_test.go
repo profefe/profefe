@@ -242,6 +242,45 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 	})
 }
 
+func TestStorage_ListServices(t *testing.T) {
+	st, teardown := setupTestStorage(t)
+	defer teardown()
+
+	_, err := st.ListServices(context.Background())
+	require.Equal(t, storage.ErrNotFound, err)
+
+	service1 := "test-service-1"
+	service2 := "test-service-2"
+
+	for n := 1; n <= 2; n++ {
+		fileName := fmt.Sprintf("../../../testdata/collector_cpu_%d.prof", n)
+		meta := profile.Meta{
+			ProfileID: profile.NewID(),
+			Service:   service1,
+			Type:      profile.CPUProfile,
+			Labels:    profile.Labels{{"key1", "val1"}},
+		}
+		testWriteProfile(t, st, fileName, meta)
+	}
+
+	// a profile of different service
+	testWriteProfile(
+		t,
+		st,
+		"../../../testdata/collector_cpu_3.prof",
+		profile.Meta{
+			ProfileID: profile.NewID(),
+			Service:   service2,
+			Type:      profile.CPUProfile,
+			Labels:    profile.Labels{{"key1", "val1"}},
+		},
+	)
+
+	services, err := st.ListServices(context.Background())
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{service1, service2}, services)
+}
+
 func testWriteProfile(t testing.TB, st *badgerStorage.Storage, fileName string, meta profile.Meta) []byte {
 	data, err := ioutil.ReadFile(fileName)
 	require.NoError(t, err)

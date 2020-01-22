@@ -20,6 +20,7 @@ type Writer interface {
 }
 
 type Reader interface {
+	ListServices(ctx context.Context) ([]string, error)
 	FindProfiles(ctx context.Context, params *FindProfilesParams) ([]profile.Meta, error)
 	FindProfileIDs(ctx context.Context, params *FindProfilesParams) ([]profile.ID, error)
 	ListProfiles(ctx context.Context, pid []profile.ID) (ProfileList, error)

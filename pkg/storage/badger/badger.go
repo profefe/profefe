@@ -163,6 +163,44 @@ func appendLabelKV(b []byte, key, val string) []byte {
 	return h.Sum(b)
 }
 
+func (st *Storage) ListServices(ctx context.Context) ([]string, error) {
+	uniqueServices := make(map[string]uint64)
+	err := st.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // keys-only iteration
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte{serviceIndexID}
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := it.Item().Key()
+			service := key[1 : len(key)-sizeOfProfileID-8] // 8 is for ts-nanos
+			if v, ok := uniqueServices[string(service)]; ok {
+				if v < it.Item().ExpiresAt() {
+					delete(uniqueServices, string(service))
+				}
+			} else {
+				uniqueServices[string(service)] = it.Item().ExpiresAt()
+			}
+		}
+
+		if len(uniqueServices) == 0 {
+			return storage.ErrNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	services := make([]string, 0, len(uniqueServices))
+	for service := range uniqueServices {
+		services = append(services, service)
+	}
+	return services, nil
+}
+
 func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage.ProfileList, error) {
 	if len(pids) == 0 {
 		return nil, xerrors.New("empty profile ids")
