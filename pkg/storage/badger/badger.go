@@ -39,6 +39,8 @@ type Storage struct {
 	logger *log.Logger
 	db     *badger.DB
 	ttl    time.Duration
+	// holds the cache of stored services
+	cache *cache
 }
 
 var _ storage.Reader = (*Storage)(nil)
@@ -49,6 +51,7 @@ func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 		logger: logger,
 		db:     db,
 		ttl:    ttl,
+		cache:  newCache(db),
 	}
 }
 
@@ -66,9 +69,13 @@ func (st *Storage) WriteProfile(ctx context.Context, meta profile.Meta, r io.Rea
 }
 
 func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, data []byte) error {
-	entries := make([]*badger.Entry, 0, 1+1+2+len(meta.Labels)) // 1 for profile entry, 1 for meta entry, 2 for general indexes
-
+	var expiresAt uint64
+	if st.ttl > 0 {
+		expiresAt = uint64(time.Now().Add(st.ttl).Unix())
+	}
 	createdAt := meta.CreatedAt.UnixNano()
+
+	entries := make([]*badger.Entry, 0, 1+1+2+len(meta.Labels)) // 1 for profile entry, 1 for meta entry, 2 for general indexes
 
 	entries = append(entries, st.newBadgerEntry(createProfilePK(meta.ProfileID, createdAt), data))
 
@@ -103,7 +110,7 @@ func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, data
 		}
 	}
 
-	return st.db.Update(func(txn *badger.Txn) error {
+	err = st.db.Update(func(txn *badger.Txn) error {
 		for i := range entries {
 			st.logger.Debugw("writeProfile: set entry", "pid", meta.ProfileID, log.ByteString("key", entries[i].Key), "expires_at", entries[i].ExpiresAt)
 			if err := txn.SetEntry(entries[i]); err != nil {
@@ -112,6 +119,13 @@ func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, data
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	st.cache.PutService(meta.Service, expiresAt)
+
+	return nil
 }
 
 func (st *Storage) newBadgerEntry(key, val []byte) *badger.Entry {
@@ -164,39 +178,9 @@ func appendLabelKV(b []byte, key, val string) []byte {
 }
 
 func (st *Storage) ListServices(ctx context.Context) ([]string, error) {
-	uniqueServices := make(map[string]uint64)
-	err := st.db.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false // keys-only iteration
-		it := txn.NewIterator(opts)
-		defer it.Close()
-
-		prefix := []byte{serviceIndexID}
-
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			key := it.Item().Key()
-			service := key[1 : len(key)-sizeOfProfileID-8] // 8 is for ts-nanos
-			if v, ok := uniqueServices[string(service)]; ok {
-				if v < it.Item().ExpiresAt() {
-					delete(uniqueServices, string(service))
-				}
-			} else {
-				uniqueServices[string(service)] = it.Item().ExpiresAt()
-			}
-		}
-
-		if len(uniqueServices) == 0 {
-			return storage.ErrNotFound
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	services := make([]string, 0, len(uniqueServices))
-	for service := range uniqueServices {
-		services = append(services, service)
+	services := st.cache.Services()
+	if len(services) == 0 {
+		return nil, storage.ErrNotFound
 	}
 	return services, nil
 }
