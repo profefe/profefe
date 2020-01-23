@@ -18,8 +18,8 @@ type Querier struct {
 
 func NewQuerier(logger *log.Logger, sr storage.Reader) *Querier {
 	return &Querier{
-		sr:     sr,
 		logger: logger,
+		sr:     sr,
 	}
 }
 
@@ -77,4 +77,8 @@ func (q *Querier) FindMergeProfileTo(ctx context.Context, dst io.Writer, params 
 		return xerrors.Errorf("could not merge %d profiles: %w", len(pps), err)
 	}
 	return pp.Write(dst)
+}
+
+func (q *Querier) GetServices(ctx context.Context) ([]string, error) {
+	return q.sr.ListServices(ctx)
 }
