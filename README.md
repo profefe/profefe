@@ -8,7 +8,7 @@ the profiling samples base on metadata associated with the application.
 
 ---
 
-**The project is still in its early stage. Opinions and contributions are welcome.**
+**The project is still in its early state. Feedback and contribution are very welcome.**
 
 ---
 
@@ -169,9 +169,38 @@ GET /api/0/profiles/<id>
 
 - `id` - id of stored pprof file; returned with the request for meta information query
 
-## Feedback
+### Get services for which profiling data is stored
 
-The feedback and contribution are very welcome.
+```
+GET /api/0/services
+
+< 200 OK
+<
+{
+  "code": 200,
+  "body": [
+    <service1>,
+    ···
+  ]
+}
+```
+
+### Get profefe server version
+
+```
+GET /api/0/version
+
+< 200 OK
+<
+{
+  "code": 200,
+  "body": {
+    "version": <version>,
+    "commit": <git revision>,
+    "build_time": <build timestamp>"
+  }
+}
+```
 
 ## Further reading
 
