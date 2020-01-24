@@ -24,8 +24,7 @@ func TestServicesHandler_success(t *testing.T) {
 	}
 
 	testLogger := log.New(zaptest.NewLogger(t))
-	querier := NewQuerier(testLogger, sr)
-	h := NewServicesHandler(testLogger, querier)
+	h := NewServicesHandler(testLogger, NewQuerier(testLogger, sr))
 
 	rec := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/api/0/services", nil)
@@ -34,6 +33,7 @@ func TestServicesHandler_success(t *testing.T) {
 	h.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 	var resp jsonResponse
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
@@ -50,8 +50,7 @@ func TestServicesHandler_nothingFound(t *testing.T) {
 	}
 
 	testLogger := log.New(zaptest.NewLogger(t))
-	querier := NewQuerier(testLogger, sr)
-	h := NewServicesHandler(testLogger, querier)
+	h := NewServicesHandler(testLogger, NewQuerier(testLogger, sr))
 
 	rec := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/api/0/services", nil)
@@ -60,6 +59,7 @@ func TestServicesHandler_nothingFound(t *testing.T) {
 	h.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusNotFound, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 }
 
 func TestServicesHandler_storageFailure(t *testing.T) {
@@ -70,8 +70,7 @@ func TestServicesHandler_storageFailure(t *testing.T) {
 	}
 
 	testLogger := log.New(zaptest.NewLogger(t))
-	querier := NewQuerier(testLogger, sr)
-	h := NewServicesHandler(testLogger, querier)
+	h := NewServicesHandler(testLogger, NewQuerier(testLogger, sr))
 
 	rec := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/api/0/services", nil)
@@ -80,4 +79,5 @@ func TestServicesHandler_storageFailure(t *testing.T) {
 	h.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 }

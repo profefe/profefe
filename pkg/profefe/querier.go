@@ -79,6 +79,6 @@ func (q *Querier) FindMergeProfileTo(ctx context.Context, dst io.Writer, params 
 	return pp.Write(dst)
 }
 
-func (q *Querier) GetServices(ctx context.Context) ([]string, error) {
+func (q *Querier) ListServices(ctx context.Context) ([]string, error) {
 	return q.sr.ListServices(ctx)
 }

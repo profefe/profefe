@@ -27,7 +27,7 @@ func (h *ServicesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	services, err := h.querier.GetServices(r.Context())
+	services, err := h.querier.ListServices(r.Context())
 	if err != nil {
 		if err == storage.ErrNotFound {
 			err = ErrNotFound
