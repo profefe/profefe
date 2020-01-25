@@ -18,11 +18,8 @@ LDFLAGS += -X $(PKG)/version.Version=$(VERSION)
 LDFLAGS += -X $(PKG)/version.Commit=$(GITSHA)
 LDFLAGS += -X $(PKG)/version.BuildTime=$(BUILDTIME)
 
-IMAGE_VERSION := $(VERSION)
 DOCKER_IMAGE := profefe/profefe
-
-DOCKER_BUILD_ARGS += --build-arg VERSION=$(VERSION)
-DOCKER_BUILD_ARGS += --build-arg GITSHA=$(GITSHA)
+DOCKER_IMAGE_TAG := $(VERSION)
 
 BUILDDIR := BUILD
 
@@ -44,10 +41,5 @@ test:
 
 .PHONY: docker-image
 docker-image:
-	$(DOCKER) build $(DOCKER_BUILD_ARGS) -t $(DOCKER_IMAGE):$(IMAGE_VERSION) -f ./contrib/docker/Dockerfile .
-
-.PHONY: docker-push-image
-docker-push-image: docker-image
-	$(DOCKER) tag $(DOCKER_IMAGE):$(IMAGE_VERSION) $(DOCKER_IMAGE):latest
-	$(DOCKER) push $(DOCKER_IMAGE):$(IMAGE_VERSION)
-	$(DOCKER) push $(DOCKER_IMAGE):latest
+	GITSHA=$(GITSHA) VERSION=$(VERSION) \
+		./scripts/ci_build_image.sh $(DOCKER_IMAGE) $(DOCKER_IMAGE_TAG)
