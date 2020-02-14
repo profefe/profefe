@@ -11,7 +11,7 @@ const (
 	defaultAddr        = ":10100"
 	defaultExitTimeout = 5 * time.Second
 
-	defaultRetentionPeriod = 5*24*time.Hour
+	defaultRetentionPeriod = 5 * 24 * time.Hour
 )
 
 type Config struct {

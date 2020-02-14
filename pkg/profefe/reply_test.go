@@ -83,9 +83,9 @@ func TestReplyError(t *testing.T) {
 			"internal error",
 		},
 		{
-				ErrEmpty,
-				http.StatusNoContent,
-				"empty results",
+			ErrEmpty,
+			http.StatusNoContent,
+			"empty results",
 		},
 		{
 			ErrNotFound,

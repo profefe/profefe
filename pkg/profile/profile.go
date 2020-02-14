@@ -68,19 +68,19 @@ func (pid ID) String() string {
 }
 
 type Meta struct {
-	ProfileID  ID          `json:"profile_id"`
-	Service    string      `json:"service"`
-	Type       ProfileType `json:"type"`
-	Labels     Labels      `json:"labels,omitempty"`
-	CreatedAt  time.Time   `json:"created_at,omitempty"`
+	ProfileID ID          `json:"profile_id"`
+	Service   string      `json:"service"`
+	Type      ProfileType `json:"type"`
+	Labels    Labels      `json:"labels,omitempty"`
+	CreatedAt time.Time   `json:"created_at,omitempty"`
 }
 
 func NewProfileMeta(service string, ptyp ProfileType, labels Labels) Meta {
 	return Meta{
-		ProfileID:  NewID(),
-		Service:    service,
-		Type:       ptyp,
-		Labels:     labels,
-		CreatedAt:  time.Now().UTC(),
+		ProfileID: NewID(),
+		Service:   service,
+		Type:      ptyp,
+		Labels:    labels,
+		CreatedAt: time.Now().UTC(),
 	}
 }
