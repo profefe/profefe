@@ -57,7 +57,7 @@ func LoggingHandler(out io.Writer, next http.Handler) http.Handler {
 
 		fmt.Fprintf(
 			out,
-			"rid=%s ts=%s method=%s uri=%s status=%v host=%s ip=%s rtime=%s\n",
+			"rid=%s ts=%s method=%s uri=%s code=%v host=%s ip=%s rtime=%s\n",
 			rid,
 			ts.Format(time.RFC3339),
 			r.Method,
