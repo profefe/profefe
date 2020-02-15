@@ -18,6 +18,7 @@ import (
 	"github.com/profefe/profefe/pkg/profefe"
 	badgerStorage "github.com/profefe/profefe/pkg/storage/badger"
 	"github.com/profefe/profefe/version"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/xerrors"
 )
@@ -54,7 +55,7 @@ func run(logger *log.Logger, conf config.Config, stdout io.Writer) error {
 
 	mux := http.NewServeMux()
 
-	profefe.SetupRoutes(mux, logger, st, st)
+	profefe.SetupRoutes(mux, logger, prometheus.DefaultRegisterer, st, st)
 
 	setupDebugRoutes(mux)
 

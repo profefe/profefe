@@ -8,38 +8,96 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var apiRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-	Namespace: "profefe",
-	Name:      "api_request_duration_seconds",
-	Help:      "API request duration in seconds",
-	Buckets:   prometheus.DefBuckets,
-}, []string{"method", "path", "code"})
+func metricsHandler(registry prometheus.Registerer, next http.Handler) http.Handler {
+	var reqTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "profefe",
+		Name:      "api_requests_total",
+	}, []string{"method", "path", "code"})
 
-func metricsHandler(obs prometheus.ObserverVec, next http.Handler) http.Handler {
-	prometheus.MustRegister(obs)
+	var reqDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "profefe",
+		Name:      "api_request_duration_seconds",
+	}, []string{"method", "path", "code"})
+
+	var reqSize = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Namespace: "profefe",
+		Name:      "api_request_size_bytes",
+	}, []string{"method", "path"})
+
+	var respSize = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Namespace: "profefe",
+		Name:      "api_response_size_bytes",
+	}, []string{"method", "path"})
+
+	registry.MustRegister(
+		reqTotal,
+		reqDuration,
+		reqSize,
+		respSize,
+	)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		respw := &responseWriter{w, http.StatusOK}
-
-		defer func(start time.Time) {
-			labels := prometheus.Labels{
-				"method": r.Method,
-				"path":   r.URL.Path,
-				"code":   strconv.Itoa(respw.statusCode),
-			}
-			obs.With(labels).Observe(time.Since(start).Seconds())
-		}(time.Now())
+		start := time.Now()
+		respw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
 		next.ServeHTTP(respw, r)
+
+		labels := []string{
+			r.Method,
+			r.URL.Path,
+			strconv.Itoa(respw.statusCode),
+		}
+		reqTotal.WithLabelValues(labels...).Inc()
+		reqDuration.WithLabelValues(labels...).Observe(time.Since(start).Seconds())
+
+		reqSize.WithLabelValues(r.Method, r.URL.Path).Observe(float64(calcReqSize(r)))
+		respSize.WithLabelValues(r.Method, r.URL.Path).Observe(float64(respw.written))
 	})
 }
 
 type responseWriter struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode  int
+	wroteHeader bool
+	written     int64
 }
 
 func (r *responseWriter) WriteHeader(statusCode int) {
 	r.ResponseWriter.WriteHeader(statusCode)
 	r.statusCode = statusCode
+	r.wroteHeader = true
+}
+
+func (r *responseWriter) Write(b []byte) (int, error) {
+	if !r.wroteHeader {
+		r.WriteHeader(http.StatusOK)
+	}
+	n, err := r.ResponseWriter.Write(b)
+	r.written += int64(n)
+	return n, err
+}
+
+// refer to https://github.com/banzaicloud/go-gin-prometheus/blob/df9373ad532734d669123fdb23a78817b6de408a/middleware.go
+func calcReqSize(r *http.Request) int {
+	s := 0
+	if r.URL != nil {
+		s = len(r.URL.String())
+	}
+
+	s += len(r.Method)
+	s += len(r.Proto)
+	for name, values := range r.Header {
+		s += len(name)
+		for _, value := range values {
+			s += len(value)
+		}
+	}
+	s += len(r.Host)
+
+	// N.B. r.Form and r.MultipartForm are assumed to be included in r.URL.
+
+	if r.ContentLength != -1 {
+		s += int(r.ContentLength)
+	}
+	return s
 }

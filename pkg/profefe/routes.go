@@ -5,6 +5,7 @@ import (
 
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/storage"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
@@ -17,6 +18,7 @@ const (
 func SetupRoutes(
 	mux *http.ServeMux,
 	logger *log.Logger,
+	registry prometheus.Registerer,
 	sr storage.Reader,
 	sw storage.Writer,
 ) {
@@ -29,5 +31,5 @@ func SetupRoutes(
 	// XXX(narqo): everything else under /api/0/ is served by profiles handler
 	apiv0Mux.Handle("/api/0/", NewProfilesHandler(logger, collector, querier))
 
-	mux.Handle("/api/0/", metricsHandler(apiRequestDuration, apiv0Mux))
+	mux.Handle("/api/0/", metricsHandler(registry, apiv0Mux))
 }
