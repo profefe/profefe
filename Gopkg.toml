@@ -26,3 +26,7 @@
 [[constraint]]
   name = "github.com/cespare/xxhash"
   version = "2.1.0"
+
+[[constraint]]
+  name = "github.com/prometheus/client_golang"
+  version = "1.1.0"
