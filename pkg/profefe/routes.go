@@ -23,10 +23,11 @@ func SetupRoutes(
 	querier := NewQuerier(logger, sr)
 	collector := NewCollector(logger, sw)
 
-	mux.HandleFunc(apiVersionPath, VersionHandler)
-
-	mux.Handle(apiServicesPath, NewServicesHandler(logger, querier))
-
+	apiv0Mux := http.NewServeMux()
+	apiv0Mux.HandleFunc(apiVersionPath, VersionHandler)
+	apiv0Mux.Handle(apiServicesPath, NewServicesHandler(logger, querier))
 	// XXX(narqo): everything else under /api/0/ is served by profiles handler
-	mux.Handle("/api/0/", NewProfilesHandler(logger, collector, querier))
+	apiv0Mux.Handle("/api/0/", NewProfilesHandler(logger, collector, querier))
+
+	mux.Handle("/api/0/", metricsHandler(apiRequestDuration, apiv0Mux))
 }
