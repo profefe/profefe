@@ -18,6 +18,7 @@ import (
 	"github.com/profefe/profefe/pkg/profefe"
 	badgerStorage "github.com/profefe/profefe/pkg/storage/badger"
 	"github.com/profefe/profefe/version"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/xerrors"
 )
 
@@ -39,12 +40,12 @@ func main() {
 		panic(err)
 	}
 
-	if err := run(logger, conf); err != nil {
+	if err := run(logger, conf, os.Stdout); err != nil {
 		logger.Error(err)
 	}
 }
 
-func run(logger *log.Logger, conf config.Config) error {
+func run(logger *log.Logger, conf config.Config, stdout io.Writer) error {
 	st, closer, err := initBadgerStorage(logger, conf)
 	if err != nil {
 		return err
@@ -55,10 +56,10 @@ func run(logger *log.Logger, conf config.Config) error {
 
 	profefe.SetupRoutes(mux, logger, st, st)
 
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	setupDebugRoutes(mux)
 
-	h := middleware.LoggingHandler(os.Stdout, mux)
+	// TODO(narqo) hardcoded stdout when setup logging middleware
+	h := middleware.LoggingHandler(stdout, mux)
 	h = middleware.RecoveryHandler(h)
 
 	server := http.Server{
@@ -99,4 +100,19 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*badgerStorage.S
 
 	st := badgerStorage.New(logger, db, conf.Badger.ProfileTTL)
 	return st, db, nil
+}
+
+func setupDebugRoutes(mux *http.ServeMux) {
+	// pprof handlers, see https://github.com/golang/go/blob/master/src/net/http/pprof/pprof.go
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
+	mux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+
+	// prometheus handlers
+	mux.Handle("/debug/metrics", promhttp.Handler())
 }
