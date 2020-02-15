@@ -65,6 +65,13 @@ func (q *Querier) FindMergeProfileTo(ctx context.Context, dst io.Writer, params 
 
 	pps := make([]*pprofProfile.Profile, 0, len(pids))
 	for list.Next() {
+		// exit fast if context canceled
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		p, err := list.Profile()
 		if err != nil {
 			return err
