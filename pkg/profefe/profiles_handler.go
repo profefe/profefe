@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"path"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
@@ -134,62 +132,4 @@ func (h *ProfilesHandler) HandleMergeProfile(w http.ResponseWriter, r *http.Requ
 		return ErrEmpty
 	}
 	return err
-}
-
-func parseFindProfileParams(in *storage.FindProfilesParams, r *http.Request) (err error) {
-	if in == nil {
-		return xerrors.New("parseFindProfileParams: nil request receiver")
-	}
-
-	q := r.URL.Query()
-
-	if v := q.Get("service"); v != "" {
-		in.Service = v
-	} else {
-		return StatusError(http.StatusBadRequest, "bad request: missing service", nil)
-	}
-
-	if pt, err := getProfileType(q); err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad profile type %q", q.Get("type")), err)
-	} else {
-		in.Type = pt
-	}
-
-	timeFormat := "2006-01-02T15:04:05"
-
-	if v := q.Get("from"); v != "" {
-		tm, err := time.Parse(timeFormat, v)
-		if err != nil || tm.IsZero() {
-			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad from %q", v), err)
-		}
-		in.CreatedAtMin = tm
-	}
-
-	if v := q.Get("to"); v != "" {
-		tm, err := time.Parse(timeFormat, v)
-		if err != nil || tm.IsZero() {
-			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad to %q", v), err)
-		}
-		in.CreatedAtMax = tm
-	}
-
-	if labels, err := getLabels(q); err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad labels %q", q.Get("labels")), err)
-	} else {
-		in.Labels = labels
-	}
-
-	if v := q.Get("limit"); v != "" {
-		l, err := strconv.Atoi(v)
-		if err != nil {
-			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad limit %q", v), err)
-		}
-		in.Limit = l
-	}
-
-	if err := in.Validate(); err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
-	}
-
-	return nil
 }
