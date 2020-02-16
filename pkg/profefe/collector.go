@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/url"
+	"time"
 
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
@@ -32,9 +33,10 @@ func (c *Collector) CollectProfileFrom(ctx context.Context, src io.Reader, req *
 }
 
 type WriteProfileRequest struct {
-	Service string
-	Type    profile.ProfileType
-	Labels  profile.Labels
+	Service   string
+	Type      profile.ProfileType
+	CreatedAt time.Time
+	Labels    profile.Labels
 }
 
 func (req *WriteProfileRequest) UnmarshalURL(q url.Values) error {
@@ -53,6 +55,14 @@ func (req *WriteProfileRequest) UnmarshalURL(q url.Values) error {
 		return err
 	}
 	req.Type = ptype
+
+	if v := q.Get("created_at"); v != "" {
+		tm, err := parseTime(v)
+		if err != nil {
+			return err
+		}
+		req.CreatedAt = tm
+	}
 
 	labels, err := getLabels(q)
 	if err != nil {
@@ -78,5 +88,9 @@ func (req *WriteProfileRequest) Validate() error {
 }
 
 func (req *WriteProfileRequest) NewProfileMeta() profile.Meta {
-	return profile.NewProfileMeta(req.Service, req.Type, req.Labels)
+	meta := profile.NewProfileMeta(req.Service, req.Type, req.Labels)
+	if !req.CreatedAt.IsZero() {
+		meta.CreatedAt = req.CreatedAt
+	}
+	return meta
 }
