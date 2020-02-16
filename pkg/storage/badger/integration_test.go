@@ -29,7 +29,7 @@ func TestStorage_WriteFind(t *testing.T) {
 	meta := profile.Meta{
 		ProfileID: profile.NewID(),
 		Service:   service,
-		Type:      profile.CPUProfile,
+		Type:      profile.TypeCPU,
 		Labels:    profile.Labels{{"key1", "val1"}},
 	}
 
@@ -40,7 +40,7 @@ func TestStorage_WriteFind(t *testing.T) {
 
 	params := &storage.FindProfilesParams{
 		Service:      service,
-		Type:         profile.CPUProfile,
+		Type:         profile.TypeCPU,
 		CreatedAtMin: time.Unix(0, pp.TimeNanos),
 	}
 	found, err := st.FindProfiles(context.Background(), params)
@@ -48,7 +48,7 @@ func TestStorage_WriteFind(t *testing.T) {
 	require.Len(t, found, 1)
 
 	assert.Equal(t, service, found[0].Service)
-	assert.Equal(t, profile.CPUProfile, found[0].Type)
+	assert.Equal(t, profile.TypeCPU, found[0].Type)
 
 	list, err := st.ListProfiles(context.Background(), []profile.ID{found[0].ProfileID})
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		meta := profile.Meta{
 			ProfileID: profile.NewID(),
 			Service:   service1,
-			Type:      profile.CPUProfile,
+			Type:      profile.TypeCPU,
 			Labels:    profile.Labels{{"key1", "val1"}},
 		}
 		testWriteProfile(t, st, fileName, meta)
@@ -90,7 +90,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		profile.Meta{
 			ProfileID: profile.NewID(),
 			Service:   service2,
-			Type:      profile.CPUProfile,
+			Type:      profile.TypeCPU,
 			Labels:    profile.Labels{{"key1", "val1"}},
 		},
 	)
@@ -103,7 +103,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		profile.Meta{
 			ProfileID: profile.NewID(),
 			Service:   service1,
-			Type:      profile.HeapProfile,
+			Type:      profile.TypeHeap,
 			Labels:    profile.Labels{{"key1", "val1"}, {"key2", "val2"}},
 		},
 	)
@@ -116,7 +116,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		profile.Meta{
 			ProfileID: profile.NewID(),
 			Service:   service1,
-			Type:      profile.HeapProfile,
+			Type:      profile.TypeHeap,
 			Labels:    profile.Labels{{"key3", "val3"}},
 		},
 	)
@@ -137,7 +137,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 	t.Run("by service type", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
 			Service:      service1,
-			Type:         profile.CPUProfile,
+			Type:         profile.TypeCPU,
 			CreatedAtMin: createdAtMin,
 		}
 		ids, err := st.FindProfileIDs(context.Background(), params)
@@ -159,7 +159,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 	t.Run("by service labels type", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
 			Service:      service1,
-			Type:         profile.HeapProfile,
+			Type:         profile.TypeHeap,
 			Labels:       profile.Labels{{"key2", "val2"}},
 			CreatedAtMin: createdAtMin,
 		}
@@ -182,7 +182,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 	t.Run("nothing found", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
 			Service:      service1,
-			Type:         profile.HeapProfile,
+			Type:         profile.TypeHeap,
 			Labels:       profile.Labels{{"key3", "val1"}},
 			CreatedAtMin: createdAtMin,
 		}
@@ -209,7 +209,7 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 		meta := profile.Meta{
 			ProfileID: pid,
 			Service:   service1,
-			Type:      profile.CPUProfile,
+			Type:      profile.TypeCPU,
 			Labels:    profile.Labels{{"key1", "val1"}},
 		}
 		data := testWriteProfile(t, st, fileName, meta)
@@ -257,7 +257,7 @@ func TestStorage_ListServices(t *testing.T) {
 		meta := profile.Meta{
 			ProfileID: profile.NewID(),
 			Service:   service1,
-			Type:      profile.CPUProfile,
+			Type:      profile.TypeCPU,
 			Labels:    profile.Labels{{"key1", "val1"}},
 		}
 		testWriteProfile(t, st, fileName, meta)
@@ -271,7 +271,7 @@ func TestStorage_ListServices(t *testing.T) {
 		profile.Meta{
 			ProfileID: profile.NewID(),
 			Service:   service2,
-			Type:      profile.CPUProfile,
+			Type:      profile.TypeCPU,
 			Labels:    profile.Labels{{"key1", "val1"}},
 		},
 	)

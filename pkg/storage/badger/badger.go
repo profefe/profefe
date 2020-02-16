@@ -335,7 +335,7 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 	indexesToScan := make([][]byte, 0, 1)
 	{
 		indexKey := make([]byte, 0, 64)
-		if params.Type != profile.UnknownProfile {
+		if params.Type != profile.TypeUnknown {
 			// by-service-type
 			indexKey = append(indexKey, typeIndexID)
 			indexKey = append(indexKey, params.Service...)

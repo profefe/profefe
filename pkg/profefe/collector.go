@@ -44,7 +44,7 @@ func (req *WriteProfileRequest) UnmarshalURL(q url.Values) error {
 
 	*req = WriteProfileRequest{
 		Service: q.Get("service"),
-		Type:    profile.UnknownProfile,
+		Type:    profile.TypeUnknown,
 		Labels:  nil,
 	}
 
@@ -71,7 +71,7 @@ func (req *WriteProfileRequest) Validate() error {
 	if req.Service == "" {
 		return xerrors.Errorf("service empty: req %v", req)
 	}
-	if req.Type == profile.UnknownProfile {
+	if req.Type == profile.TypeUnknown {
 		return xerrors.Errorf("unknown profile type %s: req %v", req.Type, req)
 	}
 	return nil

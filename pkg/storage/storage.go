@@ -42,7 +42,7 @@ func (params *FindProfilesParams) Validate() error {
 	if params.Service == "" {
 		return xerrors.New("service empty")
 	}
-	if params.Type == profile.UnknownProfile {
+	if params.Type == profile.TypeUnknown {
 		return xerrors.Errorf("unknown profile type %s", params.Type)
 	}
 	if params.CreatedAtMin.IsZero() || params.CreatedAtMax.IsZero() {

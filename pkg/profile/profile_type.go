@@ -5,61 +5,66 @@ import (
 	"strings"
 )
 
-type ProfileType int8
+type ProfileType uint8
 
 const (
-	UnknownProfile ProfileType = iota
-	CPUProfile
-	HeapProfile
-	BlockProfile
-	MutexProfile
-	GoroutineProfile
-	ThreadcreateProfile
+	TypeUnknown ProfileType = iota
+	TypeCPU
+	TypeHeap
+	TypeBlock
+	TypeMutex
+	TypeGoroutine
+	TypeThreadcreate
 
-	OtherProfile = 127
+	TypeOther ProfileType = 127
+	TypeTrace ProfileType = 128
 )
 
 func (ptype *ProfileType) FromString(s string) error {
 	s = strings.TrimSpace(s)
 	switch s {
 	case "cpu":
-		*ptype = CPUProfile
+		*ptype = TypeCPU
 	case "heap":
-		*ptype = HeapProfile
+		*ptype = TypeHeap
 	case "block":
-		*ptype = BlockProfile
+		*ptype = TypeBlock
 	case "mutex":
-		*ptype = MutexProfile
+		*ptype = TypeMutex
 	case "goroutine":
-		*ptype = GoroutineProfile
+		*ptype = TypeGoroutine
 	case "threadcreate":
-		*ptype = ThreadcreateProfile
+		*ptype = TypeThreadcreate
 	case "other":
-		*ptype = OtherProfile
+		*ptype = TypeOther
+	case "trace":
+		*ptype = TypeTrace
 	default:
-		*ptype = UnknownProfile
+		*ptype = TypeUnknown
 	}
 	return nil
 }
 
 func (ptype ProfileType) String() string {
 	switch ptype {
-	case UnknownProfile:
+	case TypeUnknown:
 		return "unknown"
-	case CPUProfile:
+	case TypeCPU:
 		return "cpu"
-	case HeapProfile:
+	case TypeHeap:
 		return "heap"
-	case BlockProfile:
+	case TypeBlock:
 		return "block"
-	case MutexProfile:
+	case TypeMutex:
 		return "mutex"
-	case GoroutineProfile:
+	case TypeGoroutine:
 		return "goroutine"
-	case ThreadcreateProfile:
+	case TypeThreadcreate:
 		return "threadcreate"
-	case OtherProfile:
+	case TypeOther:
 		return "other"
+	case TypeTrace:
+		return "trace"
 	}
-	return fmt.Sprintf("%d", ptype)
+	return fmt.Sprintf("ProfileType(%d)", ptype)
 }
