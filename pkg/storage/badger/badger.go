@@ -51,7 +51,7 @@ func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 		logger: logger,
 		db:     db,
 		ttl:    ttl,
-		cache:  newCache(db),
+		cache:  newCache(logger, db),
 	}
 }
 
