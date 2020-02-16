@@ -21,7 +21,7 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
-func TestStorage_WriteFind(t *testing.T) {
+func TestStorage_WriteFindProfile(t *testing.T) {
 	st, teardown := setupTestStorage(t)
 	defer teardown()
 
@@ -62,6 +62,33 @@ func TestStorage_WriteFind(t *testing.T) {
 	require.False(t, list.Next())
 
 	assert.NoError(t, list.Close())
+}
+
+func TestStorage_WriteProfile_MetaCreatedAt(t *testing.T) {
+	st, teardown := setupTestStorage(t)
+	defer teardown()
+
+	service := "test-service-1"
+	createdAt := time.Now().Truncate(time.Minute).Add(time.Hour)
+	meta := profile.Meta{
+		ProfileID: profile.NewID(),
+		Service:   service,
+		Type:      profile.TypeCPU,
+		CreatedAt: createdAt, // must overwrite profile's timestamp
+		Labels:    profile.Labels{{"key1", "val1"}},
+	}
+
+	testWriteProfile(t, st, "../../../testdata/collector_cpu_1.prof", meta)
+
+	// we've asked to store the profile with custom timestamp
+	params := &storage.FindProfilesParams{
+		Service:      service,
+		Type:         profile.TypeCPU,
+		CreatedAtMin: createdAt,
+	}
+	list, err := st.FindProfiles(context.Background(), params)
+	require.NoError(t, err)
+	assert.Len(t, list, 1)
 }
 
 func TestStorage_FindProfileIDs_Indexes(t *testing.T) {

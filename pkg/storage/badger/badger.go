@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
+	"io/ioutil"
 	"time"
 
 	"github.com/cespare/xxhash"
@@ -56,24 +57,45 @@ func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 }
 
 func (st *Storage) WriteProfile(ctx context.Context, meta profile.Meta, r io.Reader) error {
+	// for tracing profiles we can't do much but just write the data into the storage
+	if meta.Type == profile.TypeTrace {
+		data, err := ioutil.ReadAll(r)
+		if err != nil {
+			return xerrors.Errorf("could not read data, meta %v: %w", meta, err)
+		}
+		return st.writeProfileData(ctx, meta, meta.CreatedAt, data)
+	}
+
+	return st.writePprofProfile(ctx, meta, r)
+}
+
+// reads and parses pprof-formatted profiling data, extracting missing meta information,
+// before persisting data into the storage
+func (st *Storage) writePprofProfile(ctx context.Context, meta profile.Meta, r io.Reader) error {
 	var buf bytes.Buffer
 	pp, err := pprofProfile.Parse(io.TeeReader(r, &buf))
 	if err != nil {
-		return xerrors.Errorf("could not parse profile: %w", err)
+		return xerrors.Errorf("could not parse pprof profile, meta %v: %w", meta, err)
 	}
 
-	// XXX(narqo): update meta with time from parsed profile
-	meta.CreatedAt = time.Unix(0, pp.TimeNanos)
+	createdAtTime := meta.CreatedAt
+	if createdAtTime.IsZero() && pp.TimeNanos > 0 {
+		createdAtTime = time.Unix(0, pp.TimeNanos)
+	}
 
-	return st.writeProfileData(ctx, meta, buf.Bytes())
+	return st.writeProfileData(ctx, meta, createdAtTime, buf.Bytes())
 }
 
-func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, data []byte) error {
+func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, createdAtTime time.Time, data []byte) error {
 	var expiresAt uint64
 	if st.ttl > 0 {
 		expiresAt = uint64(time.Now().Add(st.ttl).Unix())
 	}
-	createdAt := meta.CreatedAt.UnixNano()
+
+	if createdAtTime.IsZero() {
+		createdAtTime = time.Now().UTC()
+	}
+	createdAt := createdAtTime.UnixNano()
 
 	entries := make([]*badger.Entry, 0, 1+1+2+len(meta.Labels)) // 1 for profile entry, 1 for meta entry, 2 for general indexes
 
@@ -239,7 +261,7 @@ func (pl *ProfileList) Next() bool {
 
 		valid := pl.it.ValidForPrefix(pl.prefix)
 		if valid {
-			pl.logger.Debugw("next", log.ByteString("prefix", pl.prefix), "valid", valid)
+			pl.logger.Debugw("profileList: next", log.ByteString("prefix", pl.prefix), "valid", valid)
 			return true
 		}
 		pl.prefix = nil
@@ -330,6 +352,9 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 	createdAtMax := params.CreatedAtMax
 	if createdAtMax.IsZero() {
 		createdAtMax = time.Now().UTC()
+	}
+	if params.CreatedAtMin.After(createdAtMax) {
+		createdAtMax = params.CreatedAtMin
 	}
 
 	indexesToScan := make([][]byte, 0, 1)
