@@ -67,7 +67,7 @@ func TestStorage_WriteFindProfile(t *testing.T) {
 	assert.NoError(t, list.Close())
 }
 
-func TestStorage_WriteProfile_MetaCreatedAt(t *testing.T) {
+func TestStorage_WriteProfile_TypeTrace(t *testing.T) {
 	st, teardown := setupTestStorage(t)
 	defer teardown()
 
@@ -76,22 +76,37 @@ func TestStorage_WriteProfile_MetaCreatedAt(t *testing.T) {
 	meta := profile.Meta{
 		ProfileID: profile.NewID(),
 		Service:   service,
-		Type:      profile.TypeCPU,
+		Type:      profile.TypeTrace,
 		CreatedAt: createdAt, // must overwrite profile's timestamp
 		Labels:    profile.Labels{{"key1", "val1"}},
 	}
 
-	testWriteProfile(t, st, "../../../testdata/collector_cpu_1.prof", meta)
+	data := testWriteProfile(t, st, "../../../testdata/collector_trace_1.out", meta)
 
-	// we've asked to store the profile with custom timestamp
 	params := &storage.FindProfilesParams{
 		Service:      service,
-		Type:         profile.TypeCPU,
+		Type:         profile.TypeTrace,
 		CreatedAtMin: createdAt,
 	}
-	list, err := st.FindProfiles(context.Background(), params)
+	found, err := st.FindProfiles(context.Background(), params)
 	require.NoError(t, err)
-	assert.Len(t, list, 1)
+	assert.Len(t, found, 1)
+	assert.Equal(t, profile.TypeTrace, found[0].Type)
+
+	list, err := st.ListProfiles(context.Background(), []profile.ID{found[0].ProfileID})
+	require.NoError(t, err)
+
+	require.True(t, list.Next())
+
+	ppr, err := list.Profile()
+	require.NoError(t, err)
+
+	gotData, err := ioutil.ReadAll(ppr)
+	require.NoError(t, err)
+	assert.Equal(t, data, gotData)
+
+	assert.False(t, list.Next())
+	assert.NoError(t, list.Close())
 }
 
 func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
@@ -314,7 +329,7 @@ func TestStorage_ListServices(t *testing.T) {
 	assert.ElementsMatch(t, []string{service1, service2}, services)
 }
 
-func testWriteProfile(t testing.TB, st *badgerStorage.Storage, fileName string, meta profile.Meta) []byte {
+func testWriteProfile(t testing.TB, st storage.Writer, fileName string, meta profile.Meta) []byte {
 	data, err := ioutil.ReadFile(fileName)
 	require.NoError(t, err)
 
