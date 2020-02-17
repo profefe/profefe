@@ -2,11 +2,11 @@ package profefe
 
 import (
 	"context"
+	"io"
 	"io/ioutil"
 	"testing"
 	"time"
 
-	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
@@ -56,4 +56,4 @@ func (pl *unboundProfileList) Close() error {
 	return nil
 }
 
-func (pl *unboundProfileList) Profile() (p *pprofProfile.Profile, err error) { return }
+func (pl *unboundProfileList) Profile() (pr io.Reader, err error) { return }

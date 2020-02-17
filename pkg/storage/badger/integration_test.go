@@ -54,9 +54,12 @@ func TestStorage_WriteFindProfile(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, list.Next())
-	gotpp, err := list.Profile()
+
+	ppr, err := list.Profile()
 	require.NoError(t, err)
 
+	gotpp, err := pprofProfile.Parse(ppr)
+	require.NoError(t, err)
 	assert.True(t, pprofutil.ProfilesEqual(pp, gotpp))
 
 	require.False(t, list.Next())
@@ -255,7 +258,10 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 
 		var found int
 		for list.Next() {
-			gotpp, err := list.Profile()
+			ppr, err := list.Profile()
+			require.NoError(t, err)
+
+			gotpp, err := pprofProfile.Parse(ppr)
 			require.NoError(t, err)
 
 			found++

@@ -242,6 +242,7 @@ type ProfileList struct {
 	prefix   []byte
 	nPrefix  int
 
+	pr  *bytes.Reader
 	err error
 }
 
@@ -269,19 +270,23 @@ func (pl *ProfileList) Next() bool {
 	return false
 }
 
-func (pl *ProfileList) Profile() (*pprofProfile.Profile, error) {
-	var pp *pprofProfile.Profile
-	err := pl.it.Item().Value(func(val []byte) (err error) {
-		pp, err = pprofProfile.ParseData(val)
-		return err
+func (pl *ProfileList) Profile() (io.Reader, error) {
+	err := pl.it.Item().Value(func(val []byte) error {
+		if pl.pr == nil {
+			pl.pr = bytes.NewReader(val)
+		} else {
+			pl.pr.Reset(val)
+		}
+		return nil
 	})
-	if err != nil {
-		pl.setErr(err)
-	}
-	return pp, err
+	pl.setErr(err)
+	return pl.pr, err
 }
 
 func (pl *ProfileList) Close() error {
+	if pl.pr != nil {
+		pl.pr.Reset(nil)
+	}
 	pl.it.Close()
 	pl.txn.Discard()
 	return pl.err

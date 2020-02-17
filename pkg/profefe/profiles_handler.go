@@ -82,16 +82,18 @@ func (h *ProfilesHandler) HandleGetProfile(w http.ResponseWriter, r *http.Reques
 		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad profile id %q", rawPid), err)
 	}
 
-	pp, err := h.querier.GetProfile(r.Context(), pid)
-	if err == storage.ErrNotFound {
-		return ErrNotFound
-	} else if err != nil {
-		return xerrors.Errorf("could not get profile by id %v: %w", pid, err)
-	}
-
 	w.Header().Set("Content-Type", "application/octet-stream")
 
-	return pp.Write(w)
+	err = h.querier.GetProfileTo(r.Context(), w, pid)
+	if err == storage.ErrNotFound {
+		return ErrNotFound
+	} else if err == storage.ErrEmpty {
+		return ErrEmpty
+	} else if err != nil {
+		err = xerrors.Errorf("could not get profile by id %q: %w", pid, err)
+		return StatusError(http.StatusInternalServerError, fmt.Sprintf("failed to get profile by id %q", pid), err)
+	}
+	return nil
 }
 
 func (h *ProfilesHandler) HandleFindProfiles(w http.ResponseWriter, r *http.Request) error {

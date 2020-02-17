@@ -5,7 +5,6 @@ import (
 	"io"
 	"time"
 
-	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/profile"
 	"golang.org/x/xerrors"
 )
@@ -56,6 +55,6 @@ func (params *FindProfilesParams) Validate() error {
 
 type ProfileList interface {
 	Next() bool
-	Profile() (*pprofProfile.Profile, error)
+	Profile() (io.Reader, error)
 	Close() error
 }
