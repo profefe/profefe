@@ -23,17 +23,22 @@ func NewQuerier(logger *log.Logger, sr storage.Reader) *Querier {
 	}
 }
 
-func (q *Querier) GetProfile(ctx context.Context, pid profile.ID) (*pprofProfile.Profile, error) {
+func (q *Querier) GetProfileTo(ctx context.Context, dst io.Writer, pid profile.ID) error {
 	list, err := q.sr.ListProfiles(ctx, []profile.ID{pid})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer list.Close()
 
 	if !list.Next() {
-		return nil, storage.ErrNotFound
+		return storage.ErrNotFound
 	}
-	return list.Profile()
+	pr, err := list.Profile()
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(dst, pr)
+	return err
 }
 
 func (q *Querier) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]Profile, error) {
@@ -72,7 +77,11 @@ func (q *Querier) FindMergeProfileTo(ctx context.Context, dst io.Writer, params 
 		default:
 		}
 
-		p, err := list.Profile()
+		pr, err := list.Profile()
+		if err != nil {
+			return err
+		}
+		p, err := pprofProfile.Parse(pr)
 		if err != nil {
 			return err
 		}

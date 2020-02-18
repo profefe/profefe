@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
+	"io/ioutil"
 	"time"
 
 	"github.com/cespare/xxhash"
@@ -51,29 +52,50 @@ func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 		logger: logger,
 		db:     db,
 		ttl:    ttl,
-		cache:  newCache(db),
+		cache:  newCache(logger, db),
 	}
 }
 
 func (st *Storage) WriteProfile(ctx context.Context, meta profile.Meta, r io.Reader) error {
+	// for tracing profiles we can't do much but just write the data into the storage
+	if meta.Type == profile.TypeTrace {
+		data, err := ioutil.ReadAll(r)
+		if err != nil {
+			return xerrors.Errorf("could not read data, meta %v: %w", meta, err)
+		}
+		return st.writeProfileData(ctx, meta, meta.CreatedAt, data)
+	}
+
+	return st.writePprofProfile(ctx, meta, r)
+}
+
+// reads and parses pprof-formatted profiling data, extracting missing meta information,
+// before persisting data into the storage
+func (st *Storage) writePprofProfile(ctx context.Context, meta profile.Meta, r io.Reader) error {
 	var buf bytes.Buffer
 	pp, err := pprofProfile.Parse(io.TeeReader(r, &buf))
 	if err != nil {
-		return xerrors.Errorf("could not parse profile: %w", err)
+		return xerrors.Errorf("could not parse pprof profile, meta %v: %w", meta, err)
 	}
 
-	// XXX(narqo): update meta with time from parsed profile
-	meta.CreatedAt = time.Unix(0, pp.TimeNanos)
+	createdAtTime := meta.CreatedAt
+	if createdAtTime.IsZero() && pp.TimeNanos > 0 {
+		createdAtTime = time.Unix(0, pp.TimeNanos)
+	}
 
-	return st.writeProfileData(ctx, meta, buf.Bytes())
+	return st.writeProfileData(ctx, meta, createdAtTime, buf.Bytes())
 }
 
-func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, data []byte) error {
+func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, createdAtTime time.Time, data []byte) error {
 	var expiresAt uint64
 	if st.ttl > 0 {
 		expiresAt = uint64(time.Now().Add(st.ttl).Unix())
 	}
-	createdAt := meta.CreatedAt.UnixNano()
+
+	if createdAtTime.IsZero() {
+		createdAtTime = time.Now().UTC()
+	}
+	createdAt := createdAtTime.UnixNano()
 
 	entries := make([]*badger.Entry, 0, 1+1+2+len(meta.Labels)) // 1 for profile entry, 1 for meta entry, 2 for general indexes
 
@@ -220,6 +242,7 @@ type ProfileList struct {
 	prefix   []byte
 	nPrefix  int
 
+	pr  *bytes.Reader
 	err error
 }
 
@@ -239,7 +262,7 @@ func (pl *ProfileList) Next() bool {
 
 		valid := pl.it.ValidForPrefix(pl.prefix)
 		if valid {
-			pl.logger.Debugw("next", log.ByteString("prefix", pl.prefix), "valid", valid)
+			pl.logger.Debugw("profileList: next", log.ByteString("prefix", pl.prefix), "valid", valid)
 			return true
 		}
 		pl.prefix = nil
@@ -247,19 +270,23 @@ func (pl *ProfileList) Next() bool {
 	return false
 }
 
-func (pl *ProfileList) Profile() (*pprofProfile.Profile, error) {
-	var pp *pprofProfile.Profile
-	err := pl.it.Item().Value(func(val []byte) (err error) {
-		pp, err = pprofProfile.ParseData(val)
-		return err
+func (pl *ProfileList) Profile() (io.Reader, error) {
+	err := pl.it.Item().Value(func(val []byte) error {
+		if pl.pr == nil {
+			pl.pr = bytes.NewReader(val)
+		} else {
+			pl.pr.Reset(val)
+		}
+		return nil
 	})
-	if err != nil {
-		pl.setErr(err)
-	}
-	return pp, err
+	pl.setErr(err)
+	return pl.pr, err
 }
 
 func (pl *ProfileList) Close() error {
+	if pl.pr != nil {
+		pl.pr.Reset(nil)
+	}
 	pl.it.Close()
 	pl.txn.Discard()
 	return pl.err
@@ -331,11 +358,14 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 	if createdAtMax.IsZero() {
 		createdAtMax = time.Now().UTC()
 	}
+	if params.CreatedAtMin.After(createdAtMax) {
+		createdAtMax = params.CreatedAtMin
+	}
 
 	indexesToScan := make([][]byte, 0, 1)
 	{
 		indexKey := make([]byte, 0, 64)
-		if params.Type != profile.UnknownProfile {
+		if params.Type != profile.TypeUnknown {
 			// by-service-type
 			indexKey = append(indexKey, typeIndexID)
 			indexKey = append(indexKey, params.Service...)

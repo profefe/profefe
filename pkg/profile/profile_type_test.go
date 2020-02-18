@@ -12,10 +12,12 @@ func TestProfileType_FromString(t *testing.T) {
 		in   string
 		want ProfileType
 	}{
-		{"cpu", CPUProfile},
-		{"heap", HeapProfile},
-		{"threadcreate", ThreadcreateProfile},
-		{"blah", UnknownProfile},
+		{"cpu", TypeCPU},
+		{"heap", TypeHeap},
+		{"threadcreate", TypeThreadcreate},
+		{"other", TypeOther},
+		{"trace", TypeTrace},
+		{"blah", TypeUnknown},
 	}
 
 	for _, tc := range cases {

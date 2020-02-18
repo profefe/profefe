@@ -9,7 +9,7 @@ import (
 )
 
 func TestProfileBuilder_IsEmpty(t *testing.T) {
-	b := NewProfileBuilder(profile.CPUProfile)
+	b := NewProfileBuilder(profile.TypeCPU)
 	assert.True(t, b.IsEmpty())
 
 	b.AddSample(&pprofProfile.Sample{})

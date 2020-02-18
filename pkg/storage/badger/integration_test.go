@@ -21,7 +21,7 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
-func TestStorage_WriteFind(t *testing.T) {
+func TestStorage_WriteFindProfile(t *testing.T) {
 	st, teardown := setupTestStorage(t)
 	defer teardown()
 
@@ -29,7 +29,7 @@ func TestStorage_WriteFind(t *testing.T) {
 	meta := profile.Meta{
 		ProfileID: profile.NewID(),
 		Service:   service,
-		Type:      profile.CPUProfile,
+		Type:      profile.TypeCPU,
 		Labels:    profile.Labels{{"key1", "val1"}},
 	}
 
@@ -40,7 +40,7 @@ func TestStorage_WriteFind(t *testing.T) {
 
 	params := &storage.FindProfilesParams{
 		Service:      service,
-		Type:         profile.CPUProfile,
+		Type:         profile.TypeCPU,
 		CreatedAtMin: time.Unix(0, pp.TimeNanos),
 	}
 	found, err := st.FindProfiles(context.Background(), params)
@@ -48,19 +48,64 @@ func TestStorage_WriteFind(t *testing.T) {
 	require.Len(t, found, 1)
 
 	assert.Equal(t, service, found[0].Service)
-	assert.Equal(t, profile.CPUProfile, found[0].Type)
+	assert.Equal(t, profile.TypeCPU, found[0].Type)
 
 	list, err := st.ListProfiles(context.Background(), []profile.ID{found[0].ProfileID})
 	require.NoError(t, err)
 
 	require.True(t, list.Next())
-	gotpp, err := list.Profile()
+
+	ppr, err := list.Profile()
 	require.NoError(t, err)
 
+	gotpp, err := pprofProfile.Parse(ppr)
+	require.NoError(t, err)
 	assert.True(t, pprofutil.ProfilesEqual(pp, gotpp))
 
 	require.False(t, list.Next())
 
+	assert.NoError(t, list.Close())
+}
+
+func TestStorage_WriteProfile_TypeTrace(t *testing.T) {
+	st, teardown := setupTestStorage(t)
+	defer teardown()
+
+	service := "test-service-1"
+	createdAt := time.Now().Truncate(time.Minute).Add(time.Hour)
+	meta := profile.Meta{
+		ProfileID: profile.NewID(),
+		Service:   service,
+		Type:      profile.TypeTrace,
+		CreatedAt: createdAt, // must overwrite profile's timestamp
+		Labels:    profile.Labels{{"key1", "val1"}},
+	}
+
+	data := testWriteProfile(t, st, "../../../testdata/collector_trace_1.out", meta)
+
+	params := &storage.FindProfilesParams{
+		Service:      service,
+		Type:         profile.TypeTrace,
+		CreatedAtMin: createdAt,
+	}
+	found, err := st.FindProfiles(context.Background(), params)
+	require.NoError(t, err)
+	assert.Len(t, found, 1)
+	assert.Equal(t, profile.TypeTrace, found[0].Type)
+
+	list, err := st.ListProfiles(context.Background(), []profile.ID{found[0].ProfileID})
+	require.NoError(t, err)
+
+	require.True(t, list.Next())
+
+	ppr, err := list.Profile()
+	require.NoError(t, err)
+
+	gotData, err := ioutil.ReadAll(ppr)
+	require.NoError(t, err)
+	assert.Equal(t, data, gotData)
+
+	assert.False(t, list.Next())
 	assert.NoError(t, list.Close())
 }
 
@@ -76,7 +121,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		meta := profile.Meta{
 			ProfileID: profile.NewID(),
 			Service:   service1,
-			Type:      profile.CPUProfile,
+			Type:      profile.TypeCPU,
 			Labels:    profile.Labels{{"key1", "val1"}},
 		}
 		testWriteProfile(t, st, fileName, meta)
@@ -90,7 +135,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		profile.Meta{
 			ProfileID: profile.NewID(),
 			Service:   service2,
-			Type:      profile.CPUProfile,
+			Type:      profile.TypeCPU,
 			Labels:    profile.Labels{{"key1", "val1"}},
 		},
 	)
@@ -103,7 +148,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		profile.Meta{
 			ProfileID: profile.NewID(),
 			Service:   service1,
-			Type:      profile.HeapProfile,
+			Type:      profile.TypeHeap,
 			Labels:    profile.Labels{{"key1", "val1"}, {"key2", "val2"}},
 		},
 	)
@@ -116,7 +161,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 		profile.Meta{
 			ProfileID: profile.NewID(),
 			Service:   service1,
-			Type:      profile.HeapProfile,
+			Type:      profile.TypeHeap,
 			Labels:    profile.Labels{{"key3", "val3"}},
 		},
 	)
@@ -137,7 +182,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 	t.Run("by service type", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
 			Service:      service1,
-			Type:         profile.CPUProfile,
+			Type:         profile.TypeCPU,
 			CreatedAtMin: createdAtMin,
 		}
 		ids, err := st.FindProfileIDs(context.Background(), params)
@@ -159,7 +204,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 	t.Run("by service labels type", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
 			Service:      service1,
-			Type:         profile.HeapProfile,
+			Type:         profile.TypeHeap,
 			Labels:       profile.Labels{{"key2", "val2"}},
 			CreatedAtMin: createdAtMin,
 		}
@@ -182,7 +227,7 @@ func TestStorage_FindProfileIDs_Indexes(t *testing.T) {
 	t.Run("nothing found", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
 			Service:      service1,
-			Type:         profile.HeapProfile,
+			Type:         profile.TypeHeap,
 			Labels:       profile.Labels{{"key3", "val1"}},
 			CreatedAtMin: createdAtMin,
 		}
@@ -209,7 +254,7 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 		meta := profile.Meta{
 			ProfileID: pid,
 			Service:   service1,
-			Type:      profile.CPUProfile,
+			Type:      profile.TypeCPU,
 			Labels:    profile.Labels{{"key1", "val1"}},
 		}
 		data := testWriteProfile(t, st, fileName, meta)
@@ -228,7 +273,10 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 
 		var found int
 		for list.Next() {
-			gotpp, err := list.Profile()
+			ppr, err := list.Profile()
+			require.NoError(t, err)
+
+			gotpp, err := pprofProfile.Parse(ppr)
 			require.NoError(t, err)
 
 			found++
@@ -257,7 +305,7 @@ func TestStorage_ListServices(t *testing.T) {
 		meta := profile.Meta{
 			ProfileID: profile.NewID(),
 			Service:   service1,
-			Type:      profile.CPUProfile,
+			Type:      profile.TypeCPU,
 			Labels:    profile.Labels{{"key1", "val1"}},
 		}
 		testWriteProfile(t, st, fileName, meta)
@@ -271,7 +319,7 @@ func TestStorage_ListServices(t *testing.T) {
 		profile.Meta{
 			ProfileID: profile.NewID(),
 			Service:   service2,
-			Type:      profile.CPUProfile,
+			Type:      profile.TypeCPU,
 			Labels:    profile.Labels{{"key1", "val1"}},
 		},
 	)
@@ -281,7 +329,7 @@ func TestStorage_ListServices(t *testing.T) {
 	assert.ElementsMatch(t, []string{service1, service2}, services)
 }
 
-func testWriteProfile(t testing.TB, st *badgerStorage.Storage, fileName string, meta profile.Meta) []byte {
+func testWriteProfile(t testing.TB, st storage.Writer, fileName string, meta profile.Meta) []byte {
 	data, err := ioutil.ReadFile(fileName)
 	require.NoError(t, err)
 

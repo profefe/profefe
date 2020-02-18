@@ -21,7 +21,7 @@ const (
 	defaultDuration     = 10 * time.Second
 	defaultTickInterval = time.Minute
 
-	defaultProfileType = profile.CPUProfile
+	defaultProfileType = profile.TypeCPU
 
 	backoffMinDelay = time.Minute
 	backoffMaxDelay = 30 * time.Minute
@@ -106,22 +106,22 @@ func (a *Agent) Stop() error {
 
 func (a *Agent) collectProfile(ctx context.Context, ptype profile.ProfileType, buf *bytes.Buffer) error {
 	switch ptype {
-	case profile.CPUProfile:
+	case profile.TypeCPU:
 		err := pprof.StartCPUProfile(buf)
 		if err != nil {
 			return fmt.Errorf("failed to start CPU profile: %v", err)
 		}
 		sleep(a.CPUProfileDuration, ctx.Done())
 		pprof.StopCPUProfile()
-	case profile.HeapProfile:
+	case profile.TypeHeap:
 		err := pprof.WriteHeapProfile(buf)
 		if err != nil {
 			return fmt.Errorf("failed to write heap profile: %v", err)
 		}
-	case profile.BlockProfile,
-		profile.MutexProfile,
-		profile.GoroutineProfile,
-		profile.ThreadcreateProfile:
+	case profile.TypeBlock,
+		profile.TypeMutex,
+		profile.TypeGoroutine,
+		profile.TypeThreadcreate:
 
 		p := pprof.Lookup(ptype.String())
 		if p == nil {
@@ -200,7 +200,7 @@ func (a *Agent) collectAndSend(ctx context.Context) {
 	}()
 
 	var (
-		ptype = a.nextProfileType(profile.UnknownProfile)
+		ptype = a.nextProfileType(profile.TypeUnknown)
 		timer = time.NewTimer(tickInterval(0))
 
 		buf bytes.Buffer
@@ -237,39 +237,39 @@ func (a *Agent) collectAndSend(ctx context.Context) {
 
 func (a *Agent) nextProfileType(ptype profile.ProfileType) profile.ProfileType {
 	// special case to choose initial profile type on the first call
-	if ptype == profile.UnknownProfile {
+	if ptype == profile.TypeUnknown {
 		return defaultProfileType
 	}
 
 	for {
 		switch ptype {
-		case profile.CPUProfile:
-			ptype = profile.HeapProfile
+		case profile.TypeCPU:
+			ptype = profile.TypeHeap
 			if a.HeapProfile {
 				return ptype
 			}
-		case profile.HeapProfile:
-			ptype = profile.BlockProfile
+		case profile.TypeHeap:
+			ptype = profile.TypeBlock
 			if a.BlockProfile {
 				return ptype
 			}
-		case profile.BlockProfile:
-			ptype = profile.MutexProfile
+		case profile.TypeBlock:
+			ptype = profile.TypeMutex
 			if a.MutexProfile {
 				return ptype
 			}
-		case profile.MutexProfile:
-			ptype = profile.GoroutineProfile
+		case profile.TypeMutex:
+			ptype = profile.TypeGoroutine
 			if a.GoroutineProfile {
 				return ptype
 			}
-		case profile.GoroutineProfile:
-			ptype = profile.ThreadcreateProfile
+		case profile.TypeGoroutine:
+			ptype = profile.TypeThreadcreate
 			if a.ThreadcreateProfile {
 				return ptype
 			}
-		case profile.ThreadcreateProfile:
-			ptype = profile.CPUProfile
+		case profile.TypeThreadcreate:
+			ptype = profile.TypeCPU
 			if a.CPUProfile {
 				return ptype
 			}

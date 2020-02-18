@@ -48,9 +48,9 @@ func (pb *ProfileBuilder) AddFunction(fn *pprofProfile.Function) {
 
 func (pb *ProfileBuilder) Build() (*pprofProfile.Profile, error) {
 	switch pb.ptyp {
-	case profile.CPUProfile:
+	case profile.TypeCPU:
 		pb.buildCPU()
-	case profile.HeapProfile:
+	case profile.TypeHeap:
 		pb.buildHeap()
 	}
 

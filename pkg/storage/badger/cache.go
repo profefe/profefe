@@ -6,19 +6,22 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger"
+	"github.com/profefe/profefe/pkg/log"
 )
 
 type cache struct {
-	mu       sync.RWMutex
+	mu       sync.Mutex
 	services map[string]uint64
 }
 
-func newCache(db *badger.DB) *cache {
+func newCache(logger *log.Logger, db *badger.DB) *cache {
 	c := &cache{
 		services: make(map[string]uint64),
 	}
 
-	c.prefillServices(db)
+	if err := c.prefillServices(db); err != nil {
+		logger.Errorw("failed to fill services cache", "error", err)
+	}
 
 	return c
 }
@@ -61,7 +64,7 @@ func (cache *cache) Services() []string {
 	now := time.Now().Unix()
 	services := make([]string, 0, len(cache.services))
 
-	cache.mu.RLock()
+	cache.mu.Lock()
 	for s, v := range cache.services {
 		if v > uint64(now) || v == 0 {
 			services = append(services, s)
@@ -70,7 +73,7 @@ func (cache *cache) Services() []string {
 			delete(cache.services, s)
 		}
 	}
-	cache.mu.RUnlock()
+	cache.mu.Unlock()
 
 	sort.Strings(services)
 

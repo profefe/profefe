@@ -5,7 +5,6 @@ import (
 	"io"
 	"time"
 
-	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/profile"
 	"golang.org/x/xerrors"
 )
@@ -42,7 +41,7 @@ func (params *FindProfilesParams) Validate() error {
 	if params.Service == "" {
 		return xerrors.New("service empty")
 	}
-	if params.Type == profile.UnknownProfile {
+	if params.Type == profile.TypeUnknown {
 		return xerrors.Errorf("unknown profile type %s", params.Type)
 	}
 	if params.CreatedAtMin.IsZero() || params.CreatedAtMax.IsZero() {
@@ -56,6 +55,6 @@ func (params *FindProfilesParams) Validate() error {
 
 type ProfileList interface {
 	Next() bool
-	Profile() (*pprofProfile.Profile, error)
+	Profile() (io.Reader, error)
 	Close() error
 }

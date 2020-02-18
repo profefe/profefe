@@ -102,7 +102,7 @@ uploading service1-cpu-backend1-20190313-0948Z.prof...OK
 
 ## HTTP API
 
-### Save pprof data
+### Save pprof-formatted profile
 
 ```
 POST /api/0/profiles?service=<service>&type=[cpu|heap|...]&labels=<key=value,key=value>
@@ -121,7 +121,36 @@ body pprof.pb.gz
 ```
 
 - `service` — service name (string)
-- `type` — profile type (cpu, heap, block, mutex, goroutine, threadcreate or other)
+- `type` — profile type ("cpu", "heap", "block", "mutex", "goroutine", "threadcreate", or "other")
+- `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
+
+#### Save runtime execution traces (experimental)
+
+Go's [runtime traces](https://golang.org/pkg/runtime/trace/) are a special case of profiling data, that can be stored
+and queried with profefe.
+
+Currently, profefe doesn't support extracting the timestamp of when the trace was created. Client may provide
+this information via `created_at` parameter, see below:
+
+```
+POST /api/0/profiles?service=<service>&type=trace&created_at=<created_at>&labels=<key=value,key=value>
+body trace.out
+
+< 200 OK
+<
+{
+  "code": 200,
+  "body": {
+    "id": <id>,
+    "type": "trace",
+    ···
+  }
+}
+```
+
+- `service` — service name (string)
+- `type` — profile type ("trace")
+- `created_at` — trace profile creation time, e.g. "2006-01-02T15:04:05" (defaults to server's current time)
 - `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
 
 ### Query saved meta information
@@ -144,11 +173,11 @@ GET /api/0/profiles?service=<service>&type=<type>&from=<created_from>&to=<create
 ```
 
 - `service` — service name
-- `type` — profile type
-- `created_from`, `created_to` — a time window between which pprof data was collected, e.g. "from=2006-01-02T15:04:05"
+- `type` — profile type ("cpu", "heap", "block", "mutex", "goroutine", "threadcreate", "trace", "other")
+- `created_from`, `created_to` — a time window between which profiling data was collected, e.g. "from=2006-01-02T15:04:05"
 - `labels` — a set of key-value pairs
 
-### Query saved pprof data returning it as a single merged profile
+### Query saved profiling data returning it as a single merged profile
 
 ```
 GET /api/0/profiles/merge?service=<service>&type=<type>&from=<created_from>&to=<created_to>&labels=<key=value,key=value>
@@ -159,7 +188,9 @@ GET /api/0/profiles/merge?service=<service>&type=<type>&from=<created_from>&to=<
 
 Request parameters are the same as for querying meta information.
 
-### Return individual pprof data
+*Note, merging runtime traces is not supported.*
+
+### Return individual profiling data
 
 ```
 GET /api/0/profiles/<id>
@@ -168,7 +199,7 @@ GET /api/0/profiles/<id>
 < pprof.pb.gz
 ```
 
-- `id` - id of stored pprof file; returned with the request for meta information query
+- `id` - id of stored profile, returned with the request for meta information above
 
 ### Get services for which profiling data is stored
 

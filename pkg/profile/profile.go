@@ -81,6 +81,5 @@ func NewProfileMeta(service string, ptyp ProfileType, labels Labels) Meta {
 		Service:   service,
 		Type:      ptyp,
 		Labels:    labels,
-		CreatedAt: time.Now().UTC(),
 	}
 }
