@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/profefe/profefe/pkg/log"
+	"go.uber.org/zap"
 	"golang.org/x/xerrors"
 )
 
@@ -75,7 +76,7 @@ func HandleErrorHTTP(logger *log.Logger, err error, w http.ResponseWriter, r *ht
 		err = origErr
 	}
 	if err != nil {
-		logger.Errorw("request failed", "url", r.URL.String(), "err", err)
+		logger.Errorw("request failed", "url", r.URL.String(), zap.Error(err))
 	}
 }
 

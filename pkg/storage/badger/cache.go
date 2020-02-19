@@ -7,6 +7,7 @@ import (
 
 	"github.com/dgraph-io/badger"
 	"github.com/profefe/profefe/pkg/log"
+	"go.uber.org/zap"
 )
 
 type cache struct {
@@ -20,7 +21,7 @@ func newCache(logger *log.Logger, db *badger.DB) *cache {
 	}
 
 	if err := c.prefillServices(db); err != nil {
-		logger.Errorw("failed to fill services cache", "error", err)
+		logger.Errorw("badger failed to fill services cache", zap.Error(err))
 	}
 
 	return c
