@@ -47,14 +47,12 @@ var _ storage.Reader = (*Storage)(nil)
 var _ storage.Writer = (*Storage)(nil)
 
 func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
-	s := &Storage{
+	return &Storage{
 		logger: logger,
 		db:     db,
 		ttl:    ttl,
 		cache:  newCache(db),
 	}
-	go s.cleanUpLoop()
-	return s
 }
 
 func (st *Storage) WriteProfile(ctx context.Context, meta profile.Meta, r io.Reader) error {
@@ -421,20 +419,6 @@ func (st *Storage) scanIndexKeys(indexKey []byte, createdAtMin, createdAtMax tim
 	})
 
 	return keys, err
-}
-
-// cleanUpLoop removes expired values from the badger log. Code is taken from
-// https://github.com/dgraph-io/badger#garbage-collection
-func (st *Storage) cleanUpLoop() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-	for range ticker.C {
-	again:
-		err := st.db.RunValueLogGC(0.7)
-		if err == nil {
-			goto again
-		}
-	}
 }
 
 func scanIteratorValid(it *badger.Iterator, prefix []byte, tsMax int64) bool {
