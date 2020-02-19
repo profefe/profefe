@@ -106,7 +106,7 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*badgerStorage.S
 		defer ticker.Stop()
 		for range ticker.C {
 		again:
-			err := st.db.RunValueLogGC(conf.Badger.GCDiscardRatio)
+			err := db.RunValueLogGC(conf.Badger.GCDiscardRatio)
 			if err == nil {
 				goto again
 			}
