@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/dgraph-io/badger"
 	"github.com/profefe/profefe/pkg/config"
@@ -98,6 +99,19 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*badgerStorage.S
 	if err != nil {
 		return nil, nil, xerrors.Errorf("could not open db: %w", err)
 	}
+
+	// run cleanup loop as described at https://github.com/dgraph-io/badger#garbage-collection
+	go func() {
+		ticker := time.NewTicker(conf.Badger.GCInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+		again:
+			err := db.RunValueLogGC(conf.Badger.GCDiscardRatio)
+			if err == nil {
+				goto again
+			}
+		}
+	}()
 
 	st := badgerStorage.New(logger, db, conf.Badger.ProfileTTL)
 	return st, db, nil
