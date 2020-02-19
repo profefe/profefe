@@ -17,10 +17,11 @@ import (
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/middleware"
 	"github.com/profefe/profefe/pkg/profefe"
-	badgerStorage "github.com/profefe/profefe/pkg/storage/badger"
+	storageBadger "github.com/profefe/profefe/pkg/storage/badger"
 	"github.com/profefe/profefe/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 	"golang.org/x/xerrors"
 )
 
@@ -93,27 +94,29 @@ func run(logger *log.Logger, conf config.Config, stdout io.Writer) error {
 	return server.Shutdown(ctx)
 }
 
-func initBadgerStorage(logger *log.Logger, conf config.Config) (*badgerStorage.Storage, io.Closer, error) {
+func initBadgerStorage(logger *log.Logger, conf config.Config) (*storageBadger.Storage, io.Closer, error) {
 	opt := badger.DefaultOptions(conf.Badger.Dir)
 	db, err := badger.Open(opt)
 	if err != nil {
 		return nil, nil, xerrors.Errorf("could not open db: %w", err)
 	}
 
-	// run cleanup loop as described at https://github.com/dgraph-io/badger#garbage-collection
+	// run values garbage collection, see https://github.com/dgraph-io/badger#garbage-collection
 	go func() {
-		ticker := time.NewTicker(conf.Badger.GCInterval)
-		defer ticker.Stop()
-		for range ticker.C {
-		again:
+		for {
 			err := db.RunValueLogGC(conf.Badger.GCDiscardRatio)
 			if err == nil {
-				goto again
+				// nil error is not the expected behaviour, because
+				// badger returns ErrNoRewrite as an indicator that everything went ok
+				continue
+			} else if err != badger.ErrNoRewrite {
+				logger.Errorw("badger failed to run value log garbage collection", zap.Error(err))
 			}
+			time.Sleep(conf.Badger.GCInterval)
 		}
 	}()
 
-	st := badgerStorage.New(logger, db, conf.Badger.ProfileTTL)
+	st := storageBadger.New(logger, db, conf.Badger.ProfileTTL)
 	return st, db, nil
 }
 
