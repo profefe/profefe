@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"expvar"
 	"flag"
 	"fmt"
 	"io"
@@ -121,7 +122,7 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*storageBadger.S
 }
 
 func setupDebugRoutes(mux *http.ServeMux) {
-	// pprof handlers, see https://github.com/golang/go/blob/master/src/net/http/pprof/pprof.go
+	// pprof handlers, see https://github.com/golang/go/blob/release-branch.go1.13/src/net/http/pprof/pprof.go
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
@@ -130,6 +131,9 @@ func setupDebugRoutes(mux *http.ServeMux) {
 	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
 	mux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
 	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+
+	// expvar handlers, see https://github.com/golang/go/blob/release-branch.go1.13/src/expvar/expvar.go
+	mux.Handle("/debug/vars", expvar.Handler())
 
 	// prometheus handlers
 	mux.Handle("/debug/metrics", promhttp.Handler())
