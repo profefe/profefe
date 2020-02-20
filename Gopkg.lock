@@ -169,12 +169,11 @@
   version = "v0.0.9"
 
 [[projects]]
-  digest = "1:757b110984b77e820e01c60d3ac03a376a0fdb05c990dd9d6bd4f9ba0d606261"
+  digest = "1:019a856558d36e1a87d276e07ccc31b5d7b1fbc7b9379aa98408a945dbc5c404"
   name = "github.com/rs/xid"
   packages = ["."]
   pruneopts = "UT"
-  revision = "2c7e97ce663ff82c49656bca3048df0fdd83c5f9"
-  version = "v1.2.0"
+  revision = "d13a6085d55cbbaaf2baf1d5518d9e2897cb10da"
 
 [[projects]]
   digest = "1:c40d65817cdd41fac9aa7af8bed56927bb2d6d47e4fea566a74880f5c2b1c41e"
