@@ -1,3 +1,6 @@
+ignored = [
+  "golang.org/x/lint"
+]
 
 [prune]
   go-tests = true
@@ -9,7 +12,7 @@
 
 [[constraint]]
   name = "go.uber.org/zap"
-  version = "1.10.0"
+  version = "1.14.0"
 
 [[constraint]]
   name = "github.com/stretchr/testify"
