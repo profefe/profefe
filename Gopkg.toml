@@ -8,7 +8,7 @@ ignored = [
 
 [[constraint]]
   name = "github.com/rs/xid"
-  version = "1.2.0"
+  revision = "d13a6085d55cbbaaf2baf1d5518d9e2897cb10da"
 
 [[constraint]]
   name = "go.uber.org/zap"
