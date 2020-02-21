@@ -9,6 +9,11 @@ jobs:
     - stage: test
       script: make test
 
+    - stage: code check
+      if: type = pull_request
+      install: make bootstrap
+      script: make staticcheck
+
     - stage: deploy docker
       if: type != pull_request
       services: docker
