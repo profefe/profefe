@@ -1,5 +1,9 @@
+required = [
+  "honnef.co/go/tools/cmd/staticcheck",
+]
+
 ignored = [
-  "golang.org/x/lint"
+  "golang.org/x/lint",
 ]
 
 [prune]
@@ -33,3 +37,7 @@ ignored = [
 [[constraint]]
   name = "github.com/prometheus/client_golang"
   version = "1.1.0"
+
+[[constraint]]
+  name = "honnef.co/go/tools"
+  version = "2020.1.2"
