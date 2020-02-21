@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var whitespaceRe = regexp.MustCompile("\\s+")
+var whitespaceRe = regexp.MustCompile(`\s+`)
 
 type multiLineString struct {
 	string
