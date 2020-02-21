@@ -193,10 +193,8 @@ func (a *Agent) collectAndSend(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() {
-		select {
-		case <-a.stop:
-			cancel()
-		}
+		<-a.stop
+		cancel()
 	}()
 
 	var (
