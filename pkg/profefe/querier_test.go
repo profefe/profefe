@@ -16,11 +16,11 @@ import (
 
 func TestQuerier_FindMergeProfileTo_contextCancelled(t *testing.T) {
 	list := &unboundProfileList{}
-	sr := &storage.MockReader{
-		FindProfileIDsMock: func(ctx context.Context, _ *storage.FindProfilesParams) ([]profile.ID, error) {
-			return []profile.ID{profile.NewID()}, nil
+	sr := &storage.StubReader{
+		FindProfileIDsFunc: func(ctx context.Context, _ *storage.FindProfilesParams) ([]profile.ID, error) {
+			return []profile.ID{profile.TestID}, nil
 		},
-		ListProfilesMock: func(ctx context.Context, _ []profile.ID) (storage.ProfileList, error) {
+		ListProfilesfunc: func(ctx context.Context, _ []profile.ID) (storage.ProfileList, error) {
 			return list, nil
 		},
 	}
