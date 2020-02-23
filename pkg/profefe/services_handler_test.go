@@ -17,8 +17,8 @@ import (
 
 func TestServicesHandler_success(t *testing.T) {
 	services := []string{"service1", "service2"}
-	sr := &storage.MockReader{
-		ListServicesMock: func(ctx context.Context) ([]string, error) {
+	sr := &storage.StubReader{
+		ListServicesFunc: func(ctx context.Context) ([]string, error) {
 			return services, nil
 		},
 	}
@@ -43,8 +43,8 @@ func TestServicesHandler_success(t *testing.T) {
 }
 
 func TestServicesHandler_nothingFound(t *testing.T) {
-	sr := &storage.MockReader{
-		ListServicesMock: func(ctx context.Context) ([]string, error) {
+	sr := &storage.StubReader{
+		ListServicesFunc: func(ctx context.Context) ([]string, error) {
 			return nil, storage.ErrNotFound
 		},
 	}
@@ -63,8 +63,8 @@ func TestServicesHandler_nothingFound(t *testing.T) {
 }
 
 func TestServicesHandler_storageFailure(t *testing.T) {
-	sr := &storage.MockReader{
-		ListServicesMock: func(ctx context.Context) ([]string, error) {
+	sr := &storage.StubReader{
+		ListServicesFunc: func(ctx context.Context) ([]string, error) {
 			return nil, xerrors.New("unexpected storage error")
 		},
 	}

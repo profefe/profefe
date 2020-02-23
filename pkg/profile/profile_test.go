@@ -3,19 +3,18 @@ package profile
 import (
 	"testing"
 
+	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestID_MarshalJSON(t *testing.T) {
-	testPID, _ := IDFromString("blk30gth5s5jab509hk0")
-
 	cases := []struct {
 		pid ID
 	}{
 		{nil},
-		{NewID()},
-		{testPID},
+		{newTestXIDProfileID()},
+		{TestID},
 	}
 
 	for _, tc := range cases {
@@ -31,13 +30,11 @@ func TestID_MarshalJSON(t *testing.T) {
 }
 
 func TestIDFromString(t *testing.T) {
-	testPID, _ := IDFromString("blk30gth5s5jab509hk0")
-
 	cases := []struct {
 		pid ID
 	}{
-		{testPID},
-		{NewID()},
+		{TestID},
+		{newTestXIDProfileID()},
 	}
 
 	for _, tc := range cases {
@@ -45,4 +42,8 @@ func TestIDFromString(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, tc.pid, gotPid)
 	}
+}
+
+func newTestXIDProfileID() ID {
+	return xid.New().Bytes()
 }

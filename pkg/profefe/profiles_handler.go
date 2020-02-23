@@ -55,14 +55,14 @@ func (h *ProfilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProfilesHandler) HandleCreateProfile(w http.ResponseWriter, r *http.Request) error {
-	req := &WriteProfileRequest{}
-	if err := req.UnmarshalURL(r.URL.Query()); err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %v", err), nil)
+	params := &storage.WriteProfileParams{}
+	if err := parseWriteProfileParams(params, r); err != nil {
+		return err
 	}
 
-	profModel, err := h.collector.CollectProfileFrom(r.Context(), r.Body, req)
+	profModel, err := h.collector.WriteProfile(r.Context(), params, r.Body)
 	if err != nil {
-		return StatusError(http.StatusInternalServerError, "failed to create profile", err)
+		return StatusError(http.StatusInternalServerError, "failed to collect profile", err)
 	}
 
 	ReplyJSON(w, profModel)
