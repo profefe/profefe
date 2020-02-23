@@ -11,10 +11,10 @@ import (
 
 	"github.com/cespare/xxhash"
 	"github.com/dgraph-io/badger"
-	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
+	"github.com/rs/xid"
 	"golang.org/x/xerrors"
 )
 
@@ -36,6 +36,10 @@ const (
 	labelSep byte = '\xff'
 )
 
+func newProfileID() profile.ID {
+	return xid.New().Bytes()
+}
+
 type Storage struct {
 	logger *log.Logger
 	db     *badger.DB
@@ -56,42 +60,32 @@ func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 	}
 }
 
-func (st *Storage) WriteProfile(ctx context.Context, meta profile.Meta, r io.Reader) error {
-	// for tracing profiles we can't do much but just write the data into the storage
-	if meta.Type == profile.TypeTrace {
-		data, err := ioutil.ReadAll(r)
-		if err != nil {
-			return xerrors.Errorf("could not read data, meta %v: %w", meta, err)
-		}
-		return st.writeProfileData(ctx, meta, meta.CreatedAt, data)
-	}
-
-	return st.writePprofProfile(ctx, meta, r)
-}
-
-// reads and parses pprof-formatted profiling data, extracting missing meta information,
-// before persisting data into the storage
-func (st *Storage) writePprofProfile(ctx context.Context, meta profile.Meta, r io.Reader) error {
-	var buf bytes.Buffer
-	pp, err := pprofProfile.Parse(io.TeeReader(r, &buf))
+func (st *Storage) WriteProfile(ctx context.Context, params *storage.WriteProfileParams, r io.Reader) (profile.Meta, error) {
+	data, err := ioutil.ReadAll(r)
 	if err != nil {
-		return xerrors.Errorf("could not parse pprof profile, meta %v: %w", meta, err)
+		return profile.Meta{}, xerrors.Errorf("could not read data, params %v: %w", params, err)
 	}
 
-	createdAtTime := meta.CreatedAt
-	if createdAtTime.IsZero() && pp.TimeNanos > 0 {
-		createdAtTime = time.Unix(0, pp.TimeNanos)
+	meta := profile.Meta{
+		ProfileID: newProfileID(),
+		Service:   params.Service,
+		Type:      params.Type,
+		Labels:    params.Labels,
+		CreatedAt: params.CreatedAt,
 	}
-
-	return st.writeProfileData(ctx, meta, createdAtTime, buf.Bytes())
+	if err := st.writeProfileData(ctx, meta, data); err != nil {
+		return profile.Meta{}, xerrors.Errorf("could not write profile data, params %v: %w", params, err)
+	}
+	return meta, nil
 }
 
-func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, createdAtTime time.Time, data []byte) error {
+func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, data []byte) error {
 	var expiresAt uint64
 	if st.ttl > 0 {
 		expiresAt = uint64(time.Now().Add(st.ttl).Unix())
 	}
 
+	createdAtTime := meta.CreatedAt
 	if createdAtTime.IsZero() {
 		createdAtTime = time.Now().UTC()
 	}
