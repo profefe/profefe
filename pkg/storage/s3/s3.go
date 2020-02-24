@@ -18,10 +18,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
-	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
+	"github.com/rs/xid"
 )
 
 const (
@@ -74,8 +74,17 @@ type s3Meta struct {
 
 // WriteProfile uploads the profile to s3.
 // Context can be canceled and this is safe for multiple go routines.
-func (s *Store) WriteProfile(ctx context.Context, meta profile.Meta, r io.Reader) error {
-	profilePath := profilePath(meta.ProfileID)
+func (s *Store) WriteProfile(ctx context.Context, props *storage.WriteProfileParams, r io.Reader) (profile.Meta, error) {
+	pid := xid.New().Bytes()
+	meta := profile.Meta{
+		ProfileID: pid,
+		Service:   props.Service,
+		Type:      props.Type,
+		Labels:    props.Labels,
+		CreatedAt: props.CreatedAt,
+	}
+
+	profilePath := profilePath(pid)
 	// obj is a breadcrumb from the s3 index to the actual s3 path.
 	obj := s3Meta{
 		Meta: meta,
@@ -84,16 +93,19 @@ func (s *Store) WriteProfile(ctx context.Context, meta profile.Meta, r io.Reader
 
 	b, err := json.Marshal(obj)
 	if err != nil {
-		return err
+		return profile.Meta{}, err
 	}
 
 	// First, we save the meta data at a searchable key.
 	if err := s.put(ctx, key(meta), bytes.NewBuffer(b)); err != nil {
-		return err
+		return profile.Meta{}, err
 	}
 
 	// Next, we write the entire profile at /profiles/id
-	return s.put(ctx, profilePath, r)
+	if err := s.put(ctx, profilePath, r); err != nil {
+		return profile.Meta{}, err
+	}
+	return meta, nil
 }
 
 var _ storage.ProfileList = (*profileList)(nil)
@@ -103,7 +115,6 @@ type profileList struct {
 	pids   []profile.ID
 	cur    profile.ID
 	getter func(ctx context.Context, key string) ([]byte, error)
-	parser func(data []byte) (*pprofProfile.Profile, error)
 
 	err error // first error preserved and always returned
 }
@@ -124,7 +135,7 @@ func (p *profileList) Next() (n bool) {
 	return true
 }
 
-func (p *profileList) Profile() (*pprofProfile.Profile, error) {
+func (p *profileList) Profile() (io.Reader, error) {
 	if err := p.ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -139,11 +150,7 @@ func (p *profileList) Profile() (*pprofProfile.Profile, error) {
 		return nil, err
 	}
 
-	prof, err := pprofProfile.ParseData(b)
-	if err != nil {
-		p.err = err
-	}
-	return prof, err
+	return bytes.NewReader(b), nil
 }
 
 func (p *profileList) Close() error {
@@ -157,8 +164,11 @@ func (s *Store) ListProfiles(ctx context.Context, pids []profile.ID) (storage.Pr
 		ctx:    ctx,
 		pids:   pids,
 		getter: s.get,
-		parser: pprofProfile.ParseData,
 	}, nil
+}
+
+func (s *Store) ListServices(ctx context.Context) ([]string, error) {
+	panic("not implemented")
 }
 
 // FindProfiles searches s3 for profile meta data.

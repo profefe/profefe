@@ -1,7 +1,6 @@
 package s3
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -17,7 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
-	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
@@ -33,10 +31,9 @@ func Test_key(t *testing.T) {
 		{
 			name: "multiple labels",
 			meta: profile.Meta{
-				ProfileID:  profile.ID("1"),
-				Service:    "svc1",
-				Type:       profile.CPUProfile,
-				InstanceID: profile.InstanceID("1"),
+				ProfileID: profile.ID("1"),
+				Service:   "svc1",
+				Type:      profile.TypeCPU,
 				Labels: profile.Labels{
 					profile.Label{
 						Key:   "k1",
@@ -54,11 +51,10 @@ func Test_key(t *testing.T) {
 		{
 			name: "no labels",
 			meta: profile.Meta{
-				ProfileID:  profile.ID("1"),
-				Service:    "svc1",
-				Type:       profile.CPUProfile,
-				InstanceID: profile.InstanceID("1"),
-				CreatedAt:  time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
+				ProfileID: profile.ID("1"),
+				Service:   "svc1",
+				Type:      profile.TypeCPU,
+				CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
 			},
 			want: "svc1/cpu/1257894000000000000//64",
 		},
@@ -105,7 +101,7 @@ func Test_meta(t *testing.T) {
 			want: &profile.Meta{
 				ProfileID: profile.ID("1"),
 				Service:   "svc1",
-				Type:      profile.CPUProfile,
+				Type:      profile.TypeCPU,
 				Labels: profile.Labels{
 					profile.Label{
 						Key:   "k1",
@@ -235,7 +231,7 @@ func Test_profilePath(t *testing.T) {
 func Test_prefix(t *testing.T) {
 	params := &storage.FindProfilesParams{
 		Service:      "svc1",
-		Type:         profile.CPUProfile,
+		Type:         profile.TypeCPU,
 		CreatedAtMin: time.Unix(0, 0),
 		CreatedAtMax: time.Now(),
 		Limit:        10,
@@ -251,7 +247,7 @@ func Test_prefix(t *testing.T) {
 func Test_startAfter(t *testing.T) {
 	params := &storage.FindProfilesParams{
 		Service:      "svc1",
-		Type:         profile.CPUProfile,
+		Type:         profile.TypeCPU,
 		CreatedAtMin: time.Unix(0, 0),
 		CreatedAtMax: time.Now(),
 		Limit:        10,
@@ -288,7 +284,7 @@ func TestStore_WriteProfile(t *testing.T) {
 		name     string
 		uploader *mockUploaderAPI
 		bucket   string
-		meta     profile.Meta
+		params   *storage.WriteProfileParams
 		r        *strings.Reader
 		want     []inputs
 		wantErr  bool
@@ -297,11 +293,9 @@ func TestStore_WriteProfile(t *testing.T) {
 			name:     "test writing data into mock",
 			uploader: &mockUploaderAPI{err: nil},
 			bucket:   "b1",
-			meta: profile.Meta{
-				ProfileID:  []byte("1"),
-				Service:    "svc1",
-				Type:       profile.CPUProfile,
-				InstanceID: []byte("2"),
+			params: &storage.WriteProfileParams{
+				Service: "svc1",
+				Type:    profile.TypeCPU,
 				Labels: profile.Labels{
 					{
 						Key:   "k1",
@@ -311,7 +305,7 @@ func TestStore_WriteProfile(t *testing.T) {
 			},
 			r: strings.NewReader("profile"),
 			want: []inputs{
-				{"b1", `{"meta":{"profile_id":"64","service":"svc1","type":1,"instance_id":"Mg==","labels":[{"key":"k1","value":"v1"}],"created_at":"0001-01-01T00:00:00Z"},"path":"v0/profiles/64"}`},
+				{"b1", `{"meta":{"profile_id":"64","service":"svc1","type":1,"labels":[{"key":"k1","value":"v1"}],"created_at":"0001-01-01T00:00:00Z"},"path":"v0/profiles/64"}`},
 				{"b1", "profile"},
 			},
 		},
@@ -320,7 +314,7 @@ func TestStore_WriteProfile(t *testing.T) {
 			uploader: &mockUploaderAPI{
 				err: fmt.Errorf("error"),
 			},
-			meta:    profile.Meta{},
+			params:  &storage.WriteProfileParams{},
 			wantErr: true,
 		},
 	}
@@ -330,7 +324,8 @@ func TestStore_WriteProfile(t *testing.T) {
 				uploader: tt.uploader,
 				S3Bucket: tt.bucket,
 			}
-			if err := s.WriteProfile(context.Background(), tt.meta, tt.r); (err != nil) != tt.wantErr {
+			_, err := s.WriteProfile(context.Background(), tt.params, tt.r)
+			if (err != nil) != tt.wantErr {
 				t.Errorf("Store.WriteProfile() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
@@ -359,26 +354,12 @@ type mockDownloaderAPI struct {
 }
 
 func (m *mockDownloaderAPI) DownloadWithContext(ctx aws.Context, wa io.WriterAt, input *s3.GetObjectInput, _ ...func(*s3manager.Downloader)) (int64, error) {
-	b, err := mockProfile()
-	if err != nil {
-		return 0, err
-	}
+	b := make([]byte, 0)
 	n, err := wa.WriteAt(b, 0)
 	if err != nil {
 		return 0, err
 	}
 	return int64(n), m.err
-}
-
-func mockProfile() ([]byte, error) {
-	p := &pprofProfile.Profile{}
-	return encodeProfile(p)
-}
-
-func encodeProfile(p *pprofProfile.Profile) ([]byte, error) {
-	buf := &bytes.Buffer{}
-	err := p.WriteUncompressed(buf)
-	return buf.Bytes(), err
 }
 
 func TestStore_ListProfiles(t *testing.T) {
@@ -396,14 +377,14 @@ func TestStore_ListProfiles(t *testing.T) {
 			return
 		}
 		count := 0
-		profiles := []*pprofProfile.Profile{}
+		var profiles []io.Reader
 		for itr.Next() {
 			count++
-			p, err := itr.Profile()
+			pr, err := itr.Profile()
 			if err != nil {
 				t.Errorf("Store.ListProfiles().Profile() error = %v", err)
 			}
-			profiles = append(profiles, p)
+			profiles = append(profiles, pr)
 		}
 		if count != 2 {
 			t.Errorf("Store.ListProfiles().Next() = %d, want %d ", count, 2)
