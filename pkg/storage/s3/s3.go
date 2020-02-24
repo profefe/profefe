@@ -8,11 +8,9 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
@@ -25,12 +23,9 @@ import (
 )
 
 const (
-	// MaxRetries is the number of times to retry reading from s3.
-	MaxRetries = 3
+	// number of times to retry reading from s3.
+	maxRetries = 3
 )
-
-var _ storage.Writer = (*Storage)(nil)
-var _ storage.Reader = (*Storage)(nil)
 
 // Storage stores and loads profiles from s3 using carefully constructed
 // object key.
@@ -43,27 +38,34 @@ type Storage struct {
 
 	logger *log.Logger
 
-	session client.ConfigProvider
-	svc     s3iface.S3API
-
-	mu         sync.Mutex // protects the creation of uploader/downloader
+	svc        s3iface.S3API
 	uploader   s3manageriface.UploaderAPI
 	downloader s3manageriface.DownloaderAPI
 }
 
+var _ storage.Writer = (*Storage)(nil)
+var _ storage.Reader = (*Storage)(nil)
+
 // NewStorage reads and writes profiles from region and bucket.
 func NewStorage(logger *log.Logger, region, s3bucket string) (*Storage, error) {
-	session, err := newSession(region)
+	awsSession, err := session.NewSession(&aws.Config{
+		Region:     aws.String(region),
+		MaxRetries: aws.Int(maxRetries),
+	})
 	if err != nil {
 		return nil, err
 	}
 
+	svc := s3.New(awsSession)
+
 	return &Storage{
 		Region:   region,
 		S3Bucket: s3bucket,
-		session:  session,
 		logger:   logger,
-		svc:      newService(session),
+
+		svc:        svc,
+		uploader:   s3manager.NewUploaderWithClient(svc),
+		downloader: s3manager.NewDownloaderWithClient(svc),
 	}, nil
 }
 
@@ -252,14 +254,11 @@ func (st *Storage) find(ctx context.Context, params *storage.FindProfilesParams)
 }
 
 func (st *Storage) put(ctx context.Context, key string, body io.Reader) error {
-	st.newUploader()
-
 	input := &s3manager.UploadInput{
 		Body:   body,
 		Bucket: &st.S3Bucket,
 		Key:    &key,
 	}
-
 	_, err := st.uploader.UploadWithContext(ctx, input)
 	return err
 }
@@ -267,8 +266,6 @@ func (st *Storage) put(ctx context.Context, key string, body io.Reader) error {
 // get downloads a value from a key. Context can be canceled.
 // This is safe for multiple go routines.
 func (st *Storage) get(ctx context.Context, key string) ([]byte, error) {
-	st.newDownloader()
-
 	input := &s3.GetObjectInput{
 		Bucket: &st.S3Bucket,
 		Key:    &key,
@@ -282,33 +279,6 @@ func (st *Storage) get(ctx context.Context, key string) ([]byte, error) {
 	}
 	buf = w.Bytes()
 	return buf, nil
-}
-
-func (st *Storage) newUploader() {
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	if st.uploader == nil {
-		st.uploader = s3manager.NewUploaderWithClient(st.svc)
-	}
-}
-
-func (st *Storage) newDownloader() {
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	if st.downloader == nil {
-		st.downloader = s3manager.NewDownloaderWithClient(st.svc)
-	}
-}
-
-func newSession(region string) (client.ConfigProvider, error) {
-	return session.NewSession(&aws.Config{
-		Region:     aws.String(region),
-		MaxRetries: aws.Int(MaxRetries),
-	})
-}
-
-func newService(session client.ConfigProvider) *s3.S3 {
-	return s3.New(session)
 }
 
 // key builds a searchable s3 key for the profile.Meta.
