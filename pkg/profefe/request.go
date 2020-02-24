@@ -39,6 +39,61 @@ func parseTime(v string) (time.Time, error) {
 	return tm, nil
 }
 
+func parseProfileParams(q url.Values) (service string, ptype profile.ProfileType, labels profile.Labels, err error) {
+	if v := q.Get("service"); v == "" {
+		return "", profile.TypeUnknown, nil, fmt.Errorf("missing service")
+	} else {
+		service = v
+	}
+
+	if pt, err := getProfileType(q); err != nil {
+		return "", profile.TypeUnknown, nil, fmt.Errorf("bad profile type %q: %s", q.Get("type"), err)
+	} else {
+		ptype = pt
+	}
+
+	if lbs, err := getLabels(q); err != nil {
+		return "", profile.TypeUnknown, nil, fmt.Errorf("bad labels %q: %s", q.Get("labels"), err)
+	} else {
+		labels = lbs
+	}
+
+	return service, ptype, labels, nil
+}
+
+func parseWriteProfileParams(in *storage.WriteProfileParams, r *http.Request) error {
+	if in == nil {
+		return xerrors.New("parseWriteProfileParams: nil request receiver")
+	}
+
+	q := r.URL.Query()
+
+	service, ptype, labels, err := parseProfileParams(q)
+	if err != nil {
+		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), nil)
+	}
+
+	*in = storage.WriteProfileParams{
+		Service: service,
+		Type:    ptype,
+		Labels:  labels,
+	}
+
+	if v := q.Get("created_at"); v != "" {
+		tm, err := parseTime(v)
+		if err != nil {
+			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), nil)
+		}
+		in.CreatedAt = tm
+	}
+
+	if err := in.Validate(); err != nil {
+		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), err)
+	}
+
+	return nil
+}
+
 func parseFindProfileParams(in *storage.FindProfilesParams, r *http.Request) (err error) {
 	if in == nil {
 		return xerrors.New("parseFindProfileParams: nil request receiver")
@@ -46,16 +101,15 @@ func parseFindProfileParams(in *storage.FindProfilesParams, r *http.Request) (er
 
 	q := r.URL.Query()
 
-	if v := q.Get("service"); v != "" {
-		in.Service = v
-	} else {
-		return StatusError(http.StatusBadRequest, "bad request: missing service", nil)
+	service, ptype, labels, err := parseProfileParams(q)
+	if err != nil {
+		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), nil)
 	}
 
-	if pt, err := getProfileType(q); err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad profile type %q: %s", q.Get("type"), err), nil)
-	} else {
-		in.Type = pt
+	*in = storage.FindProfilesParams{
+		Service: service,
+		Type:    ptype,
+		Labels:  labels,
 	}
 
 	if v := q.Get("from"); v != "" {
@@ -72,12 +126,6 @@ func parseFindProfileParams(in *storage.FindProfilesParams, r *http.Request) (er
 			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad \"to\" timestamp %q: %s", v, err), nil)
 		}
 		in.CreatedAtMax = tm
-	}
-
-	if labels, err := getLabels(q); err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad labels %q: %s", q.Get("labels"), err), nil)
-	} else {
-		in.Labels = labels
 	}
 
 	if v := q.Get("limit"); v != "" {

@@ -15,7 +15,27 @@ var (
 )
 
 type Writer interface {
-	WriteProfile(ctx context.Context, meta profile.Meta, r io.Reader) error
+	WriteProfile(ctx context.Context, params *WriteProfileParams, r io.Reader) (profile.Meta, error)
+}
+
+type WriteProfileParams struct {
+	Service   string
+	Type      profile.ProfileType
+	Labels    profile.Labels
+	CreatedAt time.Time
+}
+
+func (params *WriteProfileParams) Validate() error {
+	if params == nil {
+		return xerrors.New("empty params")
+	}
+	if params.Service == "" {
+		return xerrors.New("empty service")
+	}
+	if params.Type == profile.TypeUnknown {
+		return xerrors.Errorf("unknown profile type %s", params.Type)
+	}
+	return nil
 }
 
 type Reader interface {
@@ -36,7 +56,7 @@ type FindProfilesParams struct {
 
 func (params *FindProfilesParams) Validate() error {
 	if params == nil {
-		return xerrors.New("nil request")
+		return xerrors.New("empty params")
 	}
 	if params.Service == "" {
 		return xerrors.New("service empty")

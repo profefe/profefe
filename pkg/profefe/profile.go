@@ -21,6 +21,6 @@ func ProfileFromProfileMeta(meta profile.Meta) Profile {
 		Type:      meta.Type.String(),
 		Service:   meta.Service,
 		Labels:    meta.Labels,
-		CreatedAt: meta.CreatedAt,
+		CreatedAt: meta.CreatedAt.Truncate(time.Second),
 	}
 }

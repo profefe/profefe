@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/base32"
 	"time"
-
-	"github.com/rs/xid"
 )
 
 const encoder = "0123456789abcdefghijklmnopqrstuv"
@@ -14,12 +12,18 @@ var encoding = base32.NewEncoding(encoder).WithPadding(base32.NoPadding)
 
 type ID []byte
 
-func NewID() ID {
-	return xid.New().Bytes()
-}
+var TestID = MustIDFromString("blk30gth5s5jab509hk0")
 
 func IDFromString(s string) (ID, error) {
 	return encoding.DecodeString(s)
+}
+
+func MustIDFromString(s string) ID {
+	pid, err := IDFromString(s)
+	if err != nil {
+		panic(err)
+	}
+	return pid
 }
 
 func IDFromBytes(b []byte) (pid ID, err error) {
@@ -73,13 +77,4 @@ type Meta struct {
 	Type      ProfileType `json:"type"`
 	Labels    Labels      `json:"labels,omitempty"`
 	CreatedAt time.Time   `json:"created_at,omitempty"`
-}
-
-func NewProfileMeta(service string, ptyp ProfileType, labels Labels) Meta {
-	return Meta{
-		ProfileID: NewID(),
-		Service:   service,
-		Type:      ptyp,
-		Labels:    labels,
-	}
 }
