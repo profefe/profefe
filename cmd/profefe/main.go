@@ -70,7 +70,7 @@ func run(logger *log.Logger, conf config.Config, stdout io.Writer) error {
 		}
 		sr, sw = st, st
 	} else {
-		return fmt.Errorf("badger or s3 configuration required")
+		return fmt.Errorf("storage configuration required")
 	}
 
 	mux := http.NewServeMux()
