@@ -205,7 +205,6 @@ func (st *Storage) find(ctx context.Context, params *storage.FindProfilesParams)
 		createdAtMax = time.Now().UTC()
 	}
 
-	// TODO: is this max ok?
 	limit := params.Limit
 	if limit == 0 {
 		limit = 100
@@ -215,7 +214,7 @@ func (st *Storage) find(ctx context.Context, params *storage.FindProfilesParams)
 		Bucket:     &st.S3Bucket,
 		Prefix:     aws.String(prefix(params)),
 		StartAfter: aws.String(startAfter(params)),
-		MaxKeys:    aws.Int64(1000),
+		MaxKeys:    aws.Int64(int64(limit)),
 	}
 
 	metas := []profile.Meta{}
