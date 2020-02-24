@@ -29,15 +29,15 @@ const (
 	MaxRetries = 3
 )
 
-var _ storage.Writer = (*Store)(nil)
-var _ storage.Reader = (*Store)(nil)
+var _ storage.Writer = (*Storage)(nil)
+var _ storage.Reader = (*Storage)(nil)
 
-// S3Store stores and loads profiles from s3 using carefully constructed
+// Storage stores and loads profiles from s3 using carefully constructed
 // object key.
 //
 // The schema for the key is:
 // /service/profile_type/created_at_unix_time/label1=value1,label2=value2/id
-type Store struct {
+type Storage struct {
 	Region   string
 	S3Bucket string
 
@@ -51,14 +51,14 @@ type Store struct {
 	downloader s3manageriface.DownloaderAPI
 }
 
-// NewStore reads and writes profiles from region and bucket.
-func NewStore(logger *log.Logger, region, s3bucket string) (*Store, error) {
+// NewStorage reads and writes profiles from region and bucket.
+func NewStorage(logger *log.Logger, region, s3bucket string) (*Storage, error) {
 	session, err := newSession(region)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Store{
+	return &Storage{
 		Region:   region,
 		S3Bucket: s3bucket,
 		session:  session,
@@ -74,7 +74,7 @@ type s3Meta struct {
 
 // WriteProfile uploads the profile to s3.
 // Context can be canceled and this is safe for multiple go routines.
-func (s *Store) WriteProfile(ctx context.Context, props *storage.WriteProfileParams, r io.Reader) (profile.Meta, error) {
+func (st *Storage) WriteProfile(ctx context.Context, props *storage.WriteProfileParams, r io.Reader) (profile.Meta, error) {
 	pid := xid.New().Bytes()
 	meta := profile.Meta{
 		ProfileID: pid,
@@ -97,12 +97,12 @@ func (s *Store) WriteProfile(ctx context.Context, props *storage.WriteProfilePar
 	}
 
 	// First, we save the meta data at a searchable key.
-	if err := s.put(ctx, key(meta), bytes.NewBuffer(b)); err != nil {
+	if err := st.put(ctx, key(meta), bytes.NewBuffer(b)); err != nil {
 		return profile.Meta{}, err
 	}
 
 	// Next, we write the entire profile at /profiles/id
-	if err := s.put(ctx, profilePath, r); err != nil {
+	if err := st.put(ctx, profilePath, r); err != nil {
 		return profile.Meta{}, err
 	}
 	return meta, nil
@@ -159,26 +159,26 @@ func (p *profileList) Close() error {
 	return nil
 }
 
-func (s *Store) ListProfiles(ctx context.Context, pids []profile.ID) (storage.ProfileList, error) {
+func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage.ProfileList, error) {
 	return &profileList{
 		ctx:    ctx,
 		pids:   pids,
-		getter: s.get,
+		getter: st.get,
 	}, nil
 }
 
-func (s *Store) ListServices(ctx context.Context) ([]string, error) {
+func (st *Storage) ListServices(ctx context.Context) ([]string, error) {
 	panic("not implemented")
 }
 
 // FindProfiles searches s3 for profile meta data.
-func (s *Store) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
-	return s.find(ctx, params)
+func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
+	return st.find(ctx, params)
 }
 
 // FindProfileIDs calls FindProfiles and returns just the IDs.
-func (s *Store) FindProfileIDs(ctx context.Context, params *storage.FindProfilesParams) ([]profile.ID, error) {
-	metas, err := s.find(ctx, params)
+func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfilesParams) ([]profile.ID, error) {
+	metas, err := st.find(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func (s *Store) FindProfileIDs(ctx context.Context, params *storage.FindProfiles
 	return ids, nil
 }
 
-func (s *Store) find(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
+func (st *Storage) find(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
 	if params.Service == "" {
 		return nil, fmt.Errorf("empty service")
 	}
@@ -210,14 +210,14 @@ func (s *Store) find(ctx context.Context, params *storage.FindProfilesParams) ([
 	}
 
 	input := &s3.ListObjectsV2Input{
-		Bucket:     &s.S3Bucket,
+		Bucket:     &st.S3Bucket,
 		Prefix:     aws.String(prefix(params)),
 		StartAfter: aws.String(startAfter(params)),
 		MaxKeys:    aws.Int64(1000),
 	}
 
 	metas := []profile.Meta{}
-	err := s.svc.ListObjectsV2PagesWithContext(ctx, input,
+	err := st.svc.ListObjectsV2PagesWithContext(ctx, input,
 		func(page *s3.ListObjectsV2Output, _ bool) bool {
 			for _, object := range page.Contents {
 				if object.Key == nil {
@@ -225,7 +225,7 @@ func (s *Store) find(ctx context.Context, params *storage.FindProfilesParams) ([
 				}
 				m, err := meta(*object.Key)
 				if err != nil {
-					s.logger.Error(err)
+					st.logger.Error(err)
 					continue
 				}
 
@@ -251,32 +251,32 @@ func (s *Store) find(ctx context.Context, params *storage.FindProfilesParams) ([
 	return metas, err
 }
 
-func (s *Store) put(ctx context.Context, key string, body io.Reader) error {
-	s.newUploader()
+func (st *Storage) put(ctx context.Context, key string, body io.Reader) error {
+	st.newUploader()
 
 	input := &s3manager.UploadInput{
 		Body:   body,
-		Bucket: &s.S3Bucket,
+		Bucket: &st.S3Bucket,
 		Key:    &key,
 	}
 
-	_, err := s.uploader.UploadWithContext(ctx, input)
+	_, err := st.uploader.UploadWithContext(ctx, input)
 	return err
 }
 
 // get downloads a value from a key. Context can be canceled.
 // This is safe for multiple go routines.
-func (s *Store) get(ctx context.Context, key string) ([]byte, error) {
-	s.newDownloader()
+func (st *Storage) get(ctx context.Context, key string) ([]byte, error) {
+	st.newDownloader()
 
 	input := &s3.GetObjectInput{
-		Bucket: &s.S3Bucket,
+		Bucket: &st.S3Bucket,
 		Key:    &key,
 	}
 
 	buf := make([]byte, 0, 16384) // pre-allocated 16KB for the s3 object.
 	w := aws.NewWriteAtBuffer(buf)
-	_, err := s.downloader.DownloadWithContext(ctx, w, input)
+	_, err := st.downloader.DownloadWithContext(ctx, w, input)
 	if err != nil {
 		return nil, err
 	}
@@ -284,19 +284,19 @@ func (s *Store) get(ctx context.Context, key string) ([]byte, error) {
 	return buf, nil
 }
 
-func (s *Store) newUploader() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.uploader == nil {
-		s.uploader = s3manager.NewUploaderWithClient(s.svc)
+func (st *Storage) newUploader() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.uploader == nil {
+		st.uploader = s3manager.NewUploaderWithClient(st.svc)
 	}
 }
 
-func (s *Store) newDownloader() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.downloader == nil {
-		s.downloader = s3manager.NewDownloaderWithClient(s.svc)
+func (st *Storage) newDownloader() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.downloader == nil {
+		st.downloader = s3manager.NewDownloaderWithClient(st.svc)
 	}
 }
 

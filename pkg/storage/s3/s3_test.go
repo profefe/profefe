@@ -275,7 +275,7 @@ func (m *mockUploaderAPI) UploadWithContext(ctx aws.Context, input *s3manager.Up
 	return nil, nil
 }
 
-func TestStore_WriteProfile(t *testing.T) {
+func TestStorage_WriteProfile(t *testing.T) {
 	type inputs struct {
 		bucket string
 		body   string
@@ -320,13 +320,13 @@ func TestStore_WriteProfile(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Store{
+			s := &Storage{
 				uploader: tt.uploader,
 				S3Bucket: tt.bucket,
 			}
 			_, err := s.WriteProfile(context.Background(), tt.params, tt.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Store.WriteProfile() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Storage.WriteProfile() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
 			got := tt.uploader.inputs
@@ -362,9 +362,9 @@ func (m *mockDownloaderAPI) DownloadWithContext(ctx aws.Context, wa io.WriterAt,
 	return int64(n), m.err
 }
 
-func TestStore_ListProfiles(t *testing.T) {
+func TestStorage_ListProfiles(t *testing.T) {
 	t.Run("download two profiles", func(t *testing.T) {
-		s := &Store{
+		s := &Storage{
 			S3Bucket:   "b1",
 			downloader: &mockDownloaderAPI{},
 		}
@@ -373,7 +373,7 @@ func TestStore_ListProfiles(t *testing.T) {
 			[]profile.ID{[]byte("1"), []byte("2")},
 		)
 		if err != nil {
-			t.Errorf("Store.ListProfiles() error = %v", err)
+			t.Errorf("Storage.ListProfiles() error = %v", err)
 			return
 		}
 		count := 0
@@ -382,16 +382,16 @@ func TestStore_ListProfiles(t *testing.T) {
 			count++
 			pr, err := itr.Profile()
 			if err != nil {
-				t.Errorf("Store.ListProfiles().Profile() error = %v", err)
+				t.Errorf("Storage.ListProfiles().Profile() error = %v", err)
 			}
 			profiles = append(profiles, pr)
 		}
 		if count != 2 {
-			t.Errorf("Store.ListProfiles().Next() = %d, want %d ", count, 2)
+			t.Errorf("Storage.ListProfiles().Next() = %d, want %d ", count, 2)
 		}
 
 		if got, want := len(profiles), 2; got != want {
-			t.Errorf("Store.ListProfiles.Profile() = %d, want %d", got, want)
+			t.Errorf("Storage.ListProfiles.Profile() = %d, want %d", got, want)
 		}
 	})
 }
@@ -417,7 +417,7 @@ func (s *mockService) ListObjectsV2PagesWithContext(ctx aws.Context, input *s3.L
 }
 
 func Test_FindProfileIDs(t *testing.T) {
-	s := &Store{
+	s := &Storage{
 		S3Bucket: "b1",
 		logger:   log.New(zaptest.NewLogger(t)),
 	}
