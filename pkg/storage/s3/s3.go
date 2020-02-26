@@ -3,7 +3,6 @@ package s3
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -20,102 +18,110 @@ import (
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
 	"github.com/rs/xid"
+	"go.uber.org/zap"
+	"golang.org/x/xerrors"
 )
 
-const (
-	// number of times to retry reading from s3.
-	maxRetries = 3
-)
+const profileIDVersion = "v0"
 
-// Storage stores and loads profiles from s3 using carefully constructed
-// object key.
+// Storage stores and loads profiles from s3.
 //
 // The schema for the key is:
-// /service/profile_type/created_at_unix_time/label1=value1,label2=value2/id
+// schemaV/service/profile_type/created_at_unix_time/digest/label1=value1,label2=value2
 type Storage struct {
-	Region   string
-	S3Bucket string
-
-	logger *log.Logger
-
+	logger     *log.Logger
 	svc        s3iface.S3API
 	uploader   s3manageriface.UploaderAPI
 	downloader s3manageriface.DownloaderAPI
+
+	s3Bucket string
 }
 
 var _ storage.Writer = (*Storage)(nil)
 var _ storage.Reader = (*Storage)(nil)
 
-// NewStorage reads and writes profiles from region and bucket.
-func NewStorage(logger *log.Logger, region, s3bucket string) (*Storage, error) {
-	awsSession, err := session.NewSession(&aws.Config{
-		Region:     aws.String(region),
-		MaxRetries: aws.Int(maxRetries),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	svc := s3.New(awsSession)
-
+func New(logger *log.Logger, svc s3iface.S3API, s3Bucket string) *Storage {
 	return &Storage{
-		Region:   region,
-		S3Bucket: s3bucket,
-		logger:   logger,
-
+		logger:     logger,
 		svc:        svc,
 		uploader:   s3manager.NewUploaderWithClient(svc),
 		downloader: s3manager.NewDownloaderWithClient(svc),
-	}, nil
-}
 
-type s3Meta struct {
-	Meta profile.Meta `json:"meta"`
-	Path string       `json:"path"`
+		s3Bucket: s3Bucket,
+	}
 }
 
 // WriteProfile uploads the profile to s3.
-// Context can be canceled and this is safe for multiple go routines.
+// Context can be canceled and this is safe for multiple goroutines.
 func (st *Storage) WriteProfile(ctx context.Context, props *storage.WriteProfileParams, r io.Reader) (profile.Meta, error) {
-	pid := xid.New().Bytes()
+	pid := makeProfileID(props.Service, props.Type, props.CreatedAt, xid.New().String())
 	meta := profile.Meta{
-		ProfileID: pid,
+		ProfileID: []byte(pid),
 		Service:   props.Service,
 		Type:      props.Type,
 		Labels:    props.Labels,
 		CreatedAt: props.CreatedAt,
 	}
 
-	profilePath := profilePath(pid)
-	// obj is a breadcrumb from the s3 index to the actual s3 path.
-	obj := s3Meta{
-		Meta: meta,
-		Path: profilePath,
-	}
-
-	b, err := json.Marshal(obj)
+	key := pid + "/" + meta.Labels.String()
+	resp, err := st.uploader.UploadWithContext(ctx, &s3manager.UploadInput{
+		Bucket: aws.String(st.s3Bucket),
+		Key:    aws.String(key),
+		Metadata: map[string]*string{
+			"service": aws.String(props.Service),
+		},
+		Body: r,
+	})
 	if err != nil {
 		return profile.Meta{}, err
 	}
 
-	// First, we save the meta data at a searchable key.
-	if err := st.put(ctx, key(meta), bytes.NewBuffer(b)); err != nil {
-		return profile.Meta{}, err
-	}
+	st.logger.Debugw("s3 upload", "pid", meta.ProfileID, "loc", resp.Location, "upid", resp.UploadID)
 
-	// Next, we write the entire profile at /profiles/id
-	if err := st.put(ctx, profilePath, r); err != nil {
-		return profile.Meta{}, err
-	}
 	return meta, nil
 }
 
-var _ storage.ProfileList = (*profileList)(nil)
+func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage.ProfileList, error) {
+	if len(pids) == 0 {
+		return nil, xerrors.New("empty profile ids")
+	}
+
+	objs := make([]s3manager.BatchDownloadObject, 0, len(pids))
+	for _, pid := range pids {
+		resp, err := st.svc.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
+			Bucket:  aws.String(st.s3Bucket),
+			Prefix:  aws.String(pid.String()),
+			MaxKeys: aws.Int64(1), // at most one object can be found by pid
+		})
+		if err != nil {
+			return nil, err
+		}
+		if aws.Int64Value(resp.KeyCount) == 0 {
+			return nil, storage.ErrNotFound
+		}
+		for _, obj := range resp.Contents {
+			keys = append(keys, obj.Key)
+		}
+	}
+
+	if len(keys) == 0 {
+		return nil, storage.ErrNotFound
+	}
+
+
+
+	pl := &profileList{
+		ctx:    ctx,
+		keys:   keys,
+		getter: st.get,
+	}
+	return pl, nil
+}
 
 type profileList struct {
 	ctx    context.Context
-	pids   []profile.ID
-	cur    profile.ID
+	keys   []*string
+	cur    int
 	getter func(ctx context.Context, key string) ([]byte, error)
 
 	err error // first error preserved and always returned
@@ -161,26 +167,18 @@ func (p *profileList) Close() error {
 	return nil
 }
 
-func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage.ProfileList, error) {
-	return &profileList{
-		ctx:    ctx,
-		pids:   pids,
-		getter: st.get,
-	}, nil
-}
-
 func (st *Storage) ListServices(ctx context.Context) ([]string, error) {
 	panic("not implemented")
 }
 
-// FindProfiles searches s3 for profile meta data.
+// FindProfiles queries s3 for profile metas matched searched criteria.
 func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
-	return st.find(ctx, params)
+	return st.findProfiles(ctx, params)
 }
 
-// FindProfileIDs calls FindProfiles and returns just the IDs.
+// FindProfileIDs queries s3 for profile IDs matched searched criteria.
 func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfilesParams) ([]profile.ID, error) {
-	metas, err := st.find(ctx, params)
+	metas, err := st.findProfiles(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +189,7 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 	return ids, nil
 }
 
-func (st *Storage) find(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
+func (st *Storage) findProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
 	if params.Service == "" {
 		return nil, fmt.Errorf("empty service")
 	}
@@ -204,69 +202,64 @@ func (st *Storage) find(ctx context.Context, params *storage.FindProfilesParams)
 	if createdAtMax.IsZero() {
 		createdAtMax = time.Now().UTC()
 	}
+	if params.CreatedAtMin.After(createdAtMax) {
+		createdAtMax = params.CreatedAtMin
+	}
 
 	limit := params.Limit
 	if limit == 0 {
 		limit = 100
 	}
 
+	prefix := fmt.Sprintf("%s/%s/%d/", profileIDVersion, params.Service, params.Type)
+	startAfter := fmt.Sprintf("%s/%d", prefix, params.CreatedAtMin.UnixNano())
 	input := &s3.ListObjectsV2Input{
-		Bucket:     &st.S3Bucket,
-		Prefix:     aws.String(prefix(params)),
-		StartAfter: aws.String(startAfter(params)),
+		Bucket:     &st.s3Bucket,
+		Prefix:     aws.String(prefix),
+		StartAfter: aws.String(startAfter),
 		MaxKeys:    aws.Int64(int64(limit)),
 	}
 
-	metas := []profile.Meta{}
-	err := st.svc.ListObjectsV2PagesWithContext(ctx, input,
-		func(page *s3.ListObjectsV2Output, _ bool) bool {
-			for _, object := range page.Contents {
-				if object.Key == nil {
-					continue
-				}
-				m, err := meta(*object.Key)
-				if err != nil {
-					st.logger.Error(err)
-					continue
-				}
-
-				if m.CreatedAt.After(createdAtMax) {
-					return false
-				}
-
-				if !includes(m.Labels, params.Labels) {
-					continue
-				}
-				metas = append(metas, *m)
+	var metas []profile.Meta
+	err := st.svc.ListObjectsV2PagesWithContext(ctx, input, func(page *s3.ListObjectsV2Output, _ bool) bool {
+		for _, object := range page.Contents {
+			key := aws.StringValue(object.Key)
+			if key == "" {
+				continue
+			}
+			meta, err := parseMetaFromKey(key)
+			if err != nil {
+				st.logger.Errorw("storage s3 failed to parse profile meta from object key", "key", key, zap.Error(err))
+				continue
 			}
 
-			if len(metas) >= limit {
+			if meta.CreatedAt.After(createdAtMax) {
 				return false
 			}
 
-			if page.IsTruncated == nil {
-				return false
+			if !labelsInclude(meta.Labels, params.Labels) {
+				continue
 			}
-			return *page.IsTruncated
-		})
+			metas = append(metas, meta)
+		}
+
+		if len(metas) >= limit {
+			return false
+		}
+
+		if page.IsTruncated == nil {
+			return false
+		}
+		return *page.IsTruncated
+	})
 	return metas, err
-}
-
-func (st *Storage) put(ctx context.Context, key string, body io.Reader) error {
-	input := &s3manager.UploadInput{
-		Body:   body,
-		Bucket: &st.S3Bucket,
-		Key:    &key,
-	}
-	_, err := st.uploader.UploadWithContext(ctx, input)
-	return err
 }
 
 // get downloads a value from a key. Context can be canceled.
 // This is safe for multiple go routines.
 func (st *Storage) get(ctx context.Context, key string) ([]byte, error) {
 	input := &s3.GetObjectInput{
-		Bucket: &st.S3Bucket,
+		Bucket: &st.s3Bucket,
 		Key:    &key,
 	}
 
@@ -280,96 +273,65 @@ func (st *Storage) get(ctx context.Context, key string) ([]byte, error) {
 	return buf, nil
 }
 
-// key builds a searchable s3 key for the profile.Meta.
-// The schema is: /service/profile_type/created_at_unix_time/label1,label2/id
-//
-// This schema allows us to do to prefix searches to select service,
-// profile_type, and time range.
-func key(meta profile.Meta) string {
-	return strings.Join(
-		[]string{
-			meta.Service,
-			meta.Type.String(),
-			strconv.FormatInt(meta.CreatedAt.UnixNano(), 10),
-			meta.Labels.String(),
-			meta.ProfileID.String(),
-		},
-		"/",
-	)
+func makeProfileID(service string, ptype profile.ProfileType, createdAt time.Time, digest string) string {
+	return fmt.Sprintf("%s/%s/%d/%d/%s", profileIDVersion, service, ptype, createdAt.UnixNano(), digest)
 }
 
-// meta parses the s3 key by splitting by / to create a profile.Meta.
-//
-// Note: InstanceID is not set.
-func meta(key string) (*profile.Meta, error) {
-	ks := strings.Split(key, "/")
-	var svc, typ, tm, pid, lbls string
+// parses the s3 key by splitting by / to create a profile.Meta.
+// the format of the key is:
+// schemaV/service/profile_type/created_at_unix_time/digest/label1,label2
+func parseMetaFromKey(key string) (profile.Meta, error) {
+	ks := strings.SplitN(key, "/", 4)
+	if len(ks) == 0 {
+		return profile.Meta{}, fmt.Errorf("invalid key format %q", key)
+	}
+	if ks[0] != profileIDVersion {
+		return profile.Meta{}, fmt.Errorf("invalid key format %q, schema version mismatch", key)
+	}
+
+	ks = ks[1:]
+	var service, pt, tm, digest, lbls string
 	switch len(ks) {
-	case 4: // no labels are set in the path
-		svc, typ, tm, pid, lbls = ks[0], ks[1], ks[2], ks[3], ""
-	case 5:
-		svc, typ, tm, lbls, pid = ks[0], ks[1], ks[2], ks[3], ks[4]
+	case 3: // no labels are set in the path
+		service, pt, tm, digest = ks[0], ks[1], ks[2], ks[3]
+	case 4:
+		service, pt, tm, digest, lbls = ks[0], ks[1], ks[2], ks[3], ks[4]
 	default:
-		return nil, fmt.Errorf("invalid key format %s; expected 5 fields", key)
+		return profile.Meta{}, fmt.Errorf("invalid key format %s; expected 4 fields", key)
 	}
 
-	profileID, err := profile.IDFromString(pid)
-	if err != nil {
-		return nil, err
-	}
-
-	var profileType profile.ProfileType
-	if err := profileType.FromString(typ); err != nil {
-		return nil, err
-	}
-
-	var labels profile.Labels
-	if err := labels.FromString(lbls); err != nil {
-		return nil, err
+	v, _ := strconv.Atoi(pt)
+	ptype := profile.ProfileType(v)
+	if ptype == profile.TypeUnknown {
+		return profile.Meta{}, fmt.Errorf("could not parse profile type %q", pt)
 	}
 
 	ns, err := strconv.ParseInt(tm, 10, 64)
 	if err != nil {
-		return nil, err
+		return profile.Meta{}, err
 	}
-
 	createdAt := time.Unix(0, ns).UTC()
 
-	return &profile.Meta{
-		ProfileID: profileID,
-		Service:   svc,
-		Type:      profileType,
+	pid := makeProfileID(service, ptype, createdAt, digest)
+
+	var labels profile.Labels
+	if err := labels.FromString(lbls); err != nil {
+		return profile.Meta{}, err
+	}
+
+	meta := profile.Meta{
+		ProfileID: []byte(pid),
+		Service:   service,
+		Type:      ptype,
 		Labels:    labels,
 		CreatedAt: createdAt,
-	}, nil
-}
-
-// startAfter starts the s3 list after the CreatedAtMin time.
-func startAfter(params *storage.FindProfilesParams) string {
-	return strings.Join(
-		[]string{
-			params.Service,
-			params.Type.String(),
-			strconv.FormatInt(params.CreatedAtMin.UnixNano(), 10),
-		},
-		"/",
-	)
-}
-
-// prefix is used to filter down the s3 objects by service and type.
-func prefix(params *storage.FindProfilesParams) string {
-	return strings.Join(
-		[]string{
-			params.Service,
-			params.Type.String(),
-		},
-		"/",
-	)
+	}
+	return meta, nil
 }
 
 // includes checks if a includes all of b keys and values.
-func includes(a, b profile.Labels) bool {
-	hash := make(map[string]string)
+func labelsInclude(a, b profile.Labels) bool {
+	hash := make(map[string]string, len(a))
 	for _, l := range a {
 		hash[l.Key] = l.Value
 	}
@@ -384,8 +346,4 @@ func includes(a, b profile.Labels) bool {
 		}
 	}
 	return true
-}
-
-func profilePath(id profile.ID) string {
-	return fmt.Sprintf("v0/profiles/%s", id)
 }
