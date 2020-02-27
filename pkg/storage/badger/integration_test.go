@@ -231,6 +231,23 @@ func TestStorage_ListProfiles_MultipleResults(t *testing.T) {
 		_, err := st.ListProfiles(context.Background(), nil)
 		require.Error(t, err)
 	})
+
+	t.Run("context cancel", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		list, err := st.ListProfiles(ctx, pids[1:])
+		require.NoError(t, err)
+		defer list.Close()
+
+		assert.True(t, list.Next())
+
+		cancel()
+
+		assert.False(t, list.Next())
+		_, err = list.Profile()
+		assert.Equal(t, context.Canceled, err)
+	})
 }
 
 func TestStorage_ListServices(t *testing.T) {

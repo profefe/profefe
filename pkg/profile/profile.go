@@ -1,75 +1,12 @@
 package profile
 
 import (
-	"bytes"
-	"encoding/base32"
 	"time"
 )
 
-const encoder = "0123456789abcdefghijklmnopqrstuv"
+const TestID = ID("bpc00mript33iv4net00")
 
-var encoding = base32.NewEncoding(encoder).WithPadding(base32.NoPadding)
-
-type ID []byte
-
-var TestID = MustIDFromString("blk30gth5s5jab509hk0")
-
-func IDFromString(s string) (ID, error) {
-	return encoding.DecodeString(s)
-}
-
-func MustIDFromString(s string) ID {
-	pid, err := IDFromString(s)
-	if err != nil {
-		panic(err)
-	}
-	return pid
-}
-
-func IDFromBytes(b []byte) (pid ID, err error) {
-	err = pid.UnmarshalText(b)
-	return pid, err
-}
-
-func (pid ID) IsNil() bool {
-	return pid == nil
-}
-
-func (pid ID) MarshalText() ([]byte, error) {
-	buf := make([]byte, encoding.EncodedLen(len(pid)))
-	encoding.Encode(buf, pid)
-	return buf, nil
-}
-
-func (pid *ID) UnmarshalText(b []byte) error {
-	buf := make([]byte, encoding.DecodedLen(len(b)))
-	_, err := encoding.Decode(buf, b)
-	*pid = buf
-	return err
-}
-
-func (pid ID) MarshalJSON() ([]byte, error) {
-	if pid.IsNil() {
-		return []byte("null"), nil
-	}
-	buf := make([]byte, encoding.EncodedLen(len(pid))+2)
-	buf[0] = '"'
-	encoding.Encode(buf[1:len(buf)-1], pid)
-	buf[len(buf)-1] = '"'
-	return buf, nil
-}
-
-func (pid *ID) UnmarshalJSON(b []byte) error {
-	if bytes.Equal(b, []byte("null")) {
-		return nil
-	}
-	return pid.UnmarshalText(b[1 : len(b)-1])
-}
-
-func (pid ID) String() string {
-	text, _ := pid.MarshalText()
-	return string(text)
-}
+type ID string
 
 type Meta struct {
 	ProfileID ID          `json:"profile_id"`
