@@ -3,6 +3,7 @@ package badger
 import (
 	"bytes"
 	"context"
+	"encoding/base32"
 	"encoding/binary"
 	"encoding/json"
 	"io"
@@ -36,8 +37,24 @@ const (
 	labelSep byte = '\xff'
 )
 
-func newProfileID() profile.ID {
+const encoder = "0123456789abcdefghijklmnopqrstuv"
+
+var encoding = base32.NewEncoding(encoder).WithPadding(base32.NoPadding)
+
+func newProfileID() []byte {
 	return xid.New().Bytes()
+}
+
+func encodeProfileID(rpid []byte) profile.ID {
+	return profile.ID(encoding.EncodeToString(rpid))
+}
+
+func decodeProfileID(pid profile.ID) ([]byte, error) {
+	rpid, err := encoding.DecodeString(string(pid))
+	if err != nil {
+		return nil, xerrors.Errorf("could not decode profile id %q: %w", pid, err)
+	}
+	return rpid, nil
 }
 
 type Storage struct {
@@ -66,20 +83,21 @@ func (st *Storage) WriteProfile(ctx context.Context, params *storage.WriteProfil
 		return profile.Meta{}, xerrors.Errorf("could not read data, params %v: %w", params, err)
 	}
 
+	id := newProfileID()
 	meta := profile.Meta{
-		ProfileID: newProfileID(),
+		ProfileID: encodeProfileID(id),
 		Service:   params.Service,
 		Type:      params.Type,
 		Labels:    params.Labels,
 		CreatedAt: params.CreatedAt,
 	}
-	if err := st.writeProfileData(ctx, meta, data); err != nil {
+	if err := st.writeProfileData(ctx, meta, id, data); err != nil {
 		return profile.Meta{}, xerrors.Errorf("could not write profile data, params %v: %w", params, err)
 	}
 	return meta, nil
 }
 
-func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, data []byte) error {
+func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, id, data []byte) error {
 	var expiresAt uint64
 	if st.ttl > 0 {
 		expiresAt = uint64(time.Now().Add(st.ttl).Unix())
@@ -93,9 +111,9 @@ func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, data
 
 	entries := make([]*badger.Entry, 0, 1+1+2+len(meta.Labels)) // 1 for profile entry, 1 for meta entry, 2 for general indexes
 
-	entries = append(entries, st.newBadgerEntry(createProfilePK(meta.ProfileID, createdAt), data))
+	entries = append(entries, st.newBadgerEntry(createProfilePK(id, createdAt), data))
 
-	mk, mv, err := createMetaKV(meta)
+	mk, mv, err := createMetaKV(id, meta)
 	if err != nil {
 		return xerrors.Errorf("could not encode meta %v: %w", meta, err)
 	}
@@ -107,14 +125,14 @@ func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, data
 	// by-service index
 	{
 		indexVal = append(indexVal, meta.Service...)
-		entries = append(entries, st.newBadgerEntry(createIndexKey(serviceIndexID, indexVal, meta.ProfileID, createdAt), nil))
+		entries = append(entries, st.newBadgerEntry(createIndexKey(serviceIndexID, indexVal, id, createdAt), nil))
 	}
 
 	// by-service-type index
 	{
 		indexVal = append(indexVal[:0], meta.Service...)
 		indexVal = append(indexVal, byte(meta.Type))
-		entries = append(entries, st.newBadgerEntry(createIndexKey(typeIndexID, indexVal, meta.ProfileID, createdAt), nil))
+		entries = append(entries, st.newBadgerEntry(createIndexKey(typeIndexID, indexVal, id, createdAt), nil))
 	}
 
 	// by-labels index
@@ -122,7 +140,7 @@ func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, data
 		for _, label := range meta.Labels {
 			indexVal = append(indexVal[:0], meta.Service...)
 			indexVal = appendLabelKV(indexVal, label.Key, label.Value)
-			entries = append(entries, st.newBadgerEntry(createIndexKey(labelsIndexID, indexVal, meta.ProfileID, createdAt), nil))
+			entries = append(entries, st.newBadgerEntry(createIndexKey(labelsIndexID, indexVal, id, createdAt), nil))
 		}
 	}
 
@@ -152,11 +170,11 @@ func (st *Storage) newBadgerEntry(key, val []byte) *badger.Entry {
 	return entry
 }
 
-// profile primary key profilePrefix<pid><created-at>
-func createProfilePK(pid profile.ID, createdAt int64) []byte {
+// profile primary key profilePrefix<id><created-at>
+func createProfilePK(id []byte, createdAt int64) []byte {
 	var buf bytes.Buffer
 	buf.WriteByte(profilePrefix)
-	buf.Write(pid)
+	buf.Write(id)
 	// special case to re-use the function for both write and read
 	if createdAt != 0 {
 		binary.Write(&buf, binary.BigEndian, createdAt)
@@ -164,24 +182,24 @@ func createProfilePK(pid profile.ID, createdAt int64) []byte {
 	return buf.Bytes()
 }
 
-// meta primary key metaPrefix<pid>, value json-encoded
-func createMetaKV(meta profile.Meta) ([]byte, []byte, error) {
-	key := make([]byte, 0, len(meta.ProfileID)+1)
+// meta primary key metaPrefix<id>, value json-encoded
+func createMetaKV(id []byte, meta profile.Meta) ([]byte, []byte, error) {
+	key := make([]byte, 0, len(id)+1)
 	key = append(key, metaPrefix)
-	key = append(key, meta.ProfileID...)
+	key = append(key, id...)
 
 	val, err := json.Marshal(meta)
 
 	return key, val, err
 }
 
-// index key <index-id><index-val><created-at><pid>
-func createIndexKey(indexID byte, indexVal []byte, pid profile.ID, createdAt int64) []byte {
+// index key <index-id><index-val><created-at><id>
+func createIndexKey(indexID byte, indexVal []byte, id []byte, createdAt int64) []byte {
 	var buf bytes.Buffer
 	buf.WriteByte(indexID)
 	buf.Write(indexVal)
 	binary.Write(&buf, binary.BigEndian, createdAt)
-	buf.Write(pid)
+	buf.Write(id)
 	return buf.Bytes()
 }
 
@@ -208,8 +226,12 @@ func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage
 
 	prefixes := make([][]byte, 0, len(pids))
 	for _, pid := range pids {
-		key := createProfilePK(pid, 0)
-		st.logger.Debugw("listProfiles: create key", "pid", pid, "key", key)
+		id, err := decodeProfileID(pid)
+		if err != nil {
+			return nil, err
+		}
+		key := createProfilePK(id, 0)
+		st.logger.Debugw("listProfiles: create key", "pid", pid, log.ByteString("key", key))
 		prefixes = append(prefixes, key)
 	}
 
@@ -293,20 +315,20 @@ func (pl *ProfileList) setErr(err error) {
 }
 
 func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
-	pids, err := st.FindProfileIDs(ctx, params)
+	rawIds, err := st.findRawProfileIDs(ctx, params)
 	if err != nil {
 		return nil, err
 	}
 
-	prefixes := make([][]byte, 0, len(pids))
-	for _, pid := range pids {
+	prefixes := make([][]byte, 0, len(rawIds))
+	for _, pid := range rawIds {
 		key := append(make([]byte, 0, 1+len(pid)), metaPrefix)
 		key = append(key, pid...)
-		st.logger.Debugw("findProfiles: create key", "pid", pid, log.ByteString("key", key))
+		st.logger.Debugw("findProfiles: create key", log.ByteString("key", key))
 		prefixes = append(prefixes, key)
 	}
 
-	metas := make([]profile.Meta, 0, len(pids))
+	metas := make([]profile.Meta, 0, len(rawIds))
 
 	err = st.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -340,6 +362,19 @@ func (st *Storage) FindProfiles(ctx context.Context, params *storage.FindProfile
 }
 
 func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfilesParams) ([]profile.ID, error) {
+	rawIds, err := st.findRawProfileIDs(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	pids := make([]profile.ID, 0, len(rawIds))
+	for _, id := range rawIds {
+		pids = append(pids, encodeProfileID(id))
+	}
+	return pids, nil
+}
+
+func (st *Storage) findRawProfileIDs(ctx context.Context, params *storage.FindProfilesParams) ([][]byte, error) {
 	if params.Service == "" {
 		return nil, xerrors.New("empty service")
 	}
@@ -405,11 +440,11 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 		return nil, storage.ErrNotFound
 	}
 
-	pids := mergeJoinIDs(ids, params)
-	if len(pids) == 0 {
+	rawIds := mergeJoinIDs(ids, params)
+	if len(rawIds) == 0 {
 		return nil, storage.ErrNotFound
 	}
-	return pids, nil
+	return rawIds, nil
 }
 
 func (st *Storage) scanIndexKeys(indexKey []byte, createdAtMin, createdAtMax time.Time) (keys [][]byte, err error) {
@@ -458,7 +493,7 @@ func scanIteratorValid(it *badger.Iterator, prefix []byte, tsMax int64) bool {
 }
 
 // does merge part of sort-merge join of N lists of ids
-func mergeJoinIDs(ids [][][]byte, params *storage.FindProfilesParams) []profile.ID {
+func mergeJoinIDs(ids [][][]byte, params *storage.FindProfilesParams) [][]byte {
 	mergedIDs := ids[0]
 
 	if len(ids) > 1 {
@@ -500,9 +535,5 @@ func mergeJoinIDs(ids [][][]byte, params *storage.FindProfilesParams) []profile.
 		mergedIDs[left], mergedIDs[right] = mergedIDs[right], mergedIDs[left]
 	}
 
-	pids := make([]profile.ID, 0, len(mergedIDs))
-	for _, id := range mergedIDs {
-		pids = append(pids, id)
-	}
-	return pids
+	return mergedIDs
 }

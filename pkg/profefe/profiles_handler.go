@@ -71,20 +71,15 @@ func (h *ProfilesHandler) HandleCreateProfile(w http.ResponseWriter, r *http.Req
 }
 
 func (h *ProfilesHandler) HandleGetProfile(w http.ResponseWriter, r *http.Request) error {
-	rawPid := r.URL.Path[len(apiProfilesPath):] // id part of the path
-	rawPid = strings.Trim(rawPid, "/")
-	if rawPid == "" {
+	pid := r.URL.Path[len(apiProfilesPath):] // id part of the path
+	pid = strings.Trim(pid, "/")
+	if pid == "" {
 		return StatusError(http.StatusBadRequest, "no profile id", nil)
-	}
-
-	pid, err := profile.IDFromString(rawPid)
-	if err != nil {
-		return StatusError(http.StatusBadRequest, fmt.Sprintf("bad profile id %q", rawPid), err)
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 
-	err = h.querier.GetProfileTo(r.Context(), w, pid)
+	err := h.querier.GetProfileTo(r.Context(), w, profile.ID(pid))
 	if err == storage.ErrNotFound {
 		return ErrNotFound
 	} else if err == storage.ErrEmpty {
