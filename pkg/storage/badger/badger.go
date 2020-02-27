@@ -241,6 +241,7 @@ func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage
 	opts.PrefetchSize = 10
 
 	pl := &ProfileList{
+		ctx:      ctx,
 		txn:      txn,
 		it:       txn.NewIterator(opts),
 		logger:   st.logger,
@@ -250,6 +251,8 @@ func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage
 }
 
 type ProfileList struct {
+	ctx context.Context
+
 	txn    *badger.Txn
 	it     *badger.Iterator
 	logger *log.Logger
@@ -258,12 +261,17 @@ type ProfileList struct {
 	prefix   []byte
 	nPrefix  int
 
-	pr  *bytes.Reader
+	pr  bytes.Reader
 	err error
 }
 
 func (pl *ProfileList) Next() bool {
 	if pl.err != nil {
+		return false
+	}
+
+	if err := pl.ctx.Err(); err != nil {
+		pl.setErr(err)
 		return false
 	}
 
@@ -287,22 +295,21 @@ func (pl *ProfileList) Next() bool {
 }
 
 func (pl *ProfileList) Profile() (io.Reader, error) {
+	if err := pl.ctx.Err(); err != nil {
+		pl.setErr(err)
+		return nil, err
+	}
+
 	err := pl.it.Item().Value(func(val []byte) error {
-		if pl.pr == nil {
-			pl.pr = bytes.NewReader(val)
-		} else {
-			pl.pr.Reset(val)
-		}
+		pl.pr.Reset(val)
 		return nil
 	})
 	pl.setErr(err)
-	return pl.pr, err
+	return &pl.pr, err
 }
 
 func (pl *ProfileList) Close() error {
-	if pl.pr != nil {
-		pl.pr.Reset(nil)
-	}
+	pl.pr.Reset(nil)
 	pl.it.Close()
 	pl.txn.Discard()
 	return pl.err
