@@ -28,14 +28,15 @@ func NewCollector(logger *log.Logger, sw storage.Writer) *Collector {
 func (c *Collector) WriteProfile(ctx context.Context, params *storage.WriteProfileParams, r io.Reader) (Profile, error) {
 	if params.Type != profile.TypeTrace && params.CreatedAt.IsZero() {
 		var buf bytes.Buffer
-		r = io.TeeReader(r, &buf)
-		pp, err := pprofProfile.Parse(r)
+		pp, err := pprofProfile.Parse(io.TeeReader(r, &buf))
 		if err != nil {
 			return Profile{}, xerrors.Errorf("could not parse pprof profile: %w", err)
 		}
 		if pp.TimeNanos > 0 {
 			params.CreatedAt = time.Unix(0, pp.TimeNanos).UTC()
 		}
+		// overwrite reader to point to the buffer with parsed pprof data
+		r = &buf
 	}
 
 	if params.CreatedAt.IsZero() {
