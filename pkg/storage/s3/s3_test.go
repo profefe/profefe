@@ -1,3 +1,5 @@
+// +build ignore
+
 package s3
 
 import (
@@ -118,7 +120,7 @@ func Test_meta(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseMetaFromKey(tt.key)
+			got, err := metaFromProfileKey(tt.key)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("meta() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -322,7 +324,7 @@ func TestStorage_WriteProfile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Storage{
 				uploader: tt.uploader,
-				s3Bucket: tt.bucket,
+				bucket:   tt.bucket,
 			}
 			_, err := s.WriteProfile(context.Background(), tt.params, tt.r)
 			if (err != nil) != tt.wantErr {
@@ -365,7 +367,7 @@ func (m *mockDownloaderAPI) DownloadWithContext(ctx aws.Context, wa io.WriterAt,
 func TestStorage_ListProfiles(t *testing.T) {
 	t.Run("download two profiles", func(t *testing.T) {
 		s := &Storage{
-			s3Bucket:   "b1",
+			bucket:     "b1",
 			downloader: &mockDownloaderAPI{},
 		}
 		itr, err := s.ListProfiles(
@@ -418,8 +420,8 @@ func (s *mockService) ListObjectsV2PagesWithContext(ctx aws.Context, input *s3.L
 
 func Test_FindProfileIDs(t *testing.T) {
 	s := &Storage{
-		s3Bucket: "b1",
-		logger:   log.New(zaptest.NewLogger(t)),
+		bucket: "b1",
+		logger: log.New(zaptest.NewLogger(t)),
 	}
 
 	t.Run("no service returns error", func(t *testing.T) {
