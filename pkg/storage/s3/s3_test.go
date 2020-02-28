@@ -23,52 +23,6 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
-//func Test_key(t *testing.T) {
-//	tests := []struct {
-//		name string
-//		meta profile.Meta
-//		want string
-//	}{
-//		{
-//			name: "multiple labels",
-//			meta: profile.Meta{
-//				ProfileID: profile.ID("1"),
-//				Service:   "svc1",
-//				Type:      profile.TypeCPU,
-//				Labels: profile.Labels{
-//					profile.Label{
-//						Key:   "k1",
-//						Value: "v1",
-//					},
-//					profile.Label{
-//						Key:   "k2",
-//						Value: "v2",
-//					},
-//				},
-//				CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
-//			},
-//			want: "svc1/cpu/1257894000000000000/k1=v1,k2=v2/64",
-//		},
-//		{
-//			name: "no labels",
-//			meta: profile.Meta{
-//				ProfileID: profile.ID("1"),
-//				Service:   "svc1",
-//				Type:      profile.TypeCPU,
-//				CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
-//			},
-//			want: "svc1/cpu/1257894000000000000//64",
-//		},
-//	}
-//	for _, tt := range tests {
-//		t.Run(tt.name, func(t *testing.T) {
-//			if got := key(tt.meta); got != tt.want {
-//				t.Errorf("path() = %v, want %v", got, tt.want)
-//			}
-//		})
-//	}
-//}
-
 func TestMetaFromProfileKey(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -117,6 +71,16 @@ func TestMetaFromProfileKey(t *testing.T) {
 					{"k1", "v1"},
 					{"k2", "v2"},
 				},
+				CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			name: "valid key, no labels",
+			key:  "P0.svc1/1/9bsv0s3ipt32jfck6kt0",
+			want: profile.Meta{
+				ProfileID: profile.ID("P0.svc1/1/9bsv0s3ipt32jfck6kt0"),
+				Service:   "svc1",
+				Type:      profile.TypeCPU,
 				CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
 			},
 		},
