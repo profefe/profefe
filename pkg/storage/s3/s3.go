@@ -324,7 +324,7 @@ func profileKeyPrefix(service string, ptype profile.ProfileType) string {
 // schemaV.service/profile_type/digest/label1,label2
 func metaFromProfileKey(schemaV, key string) (meta profile.Meta, err error) {
 	if !strings.HasPrefix(key, schemaV) {
-		return meta, xerrors.Errorf("bad key format %q: schema version mismatch, want %s", key, schemaV)
+		return meta, xerrors.Errorf("invalid key format %q: schema version mismatch, want %s", key, schemaV)
 	}
 
 	// create profile ID from the original object's key
@@ -333,7 +333,7 @@ func metaFromProfileKey(schemaV, key string) (meta profile.Meta, err error) {
 	key = strings.TrimPrefix(key, schemaV)
 	ks := strings.SplitN(key, "/", 4)
 	if len(ks) == 0 {
-		return meta, xerrors.Errorf("input key format %q", key)
+		return meta, xerrors.Errorf("invalid key format %q", key)
 	}
 
 	var service, pt, dgst, lbls string
