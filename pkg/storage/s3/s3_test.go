@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -19,60 +18,62 @@ import (
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
 
-func Test_key(t *testing.T) {
-	tests := []struct {
-		name string
-		meta profile.Meta
-		want string
-	}{
-		{
-			name: "multiple labels",
-			meta: profile.Meta{
-				ProfileID: profile.ID("1"),
-				Service:   "svc1",
-				Type:      profile.TypeCPU,
-				Labels: profile.Labels{
-					profile.Label{
-						Key:   "k1",
-						Value: "v1",
-					},
-					profile.Label{
-						Key:   "k2",
-						Value: "v2",
-					},
-				},
-				CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
-			},
-			want: "svc1/cpu/1257894000000000000/k1=v1,k2=v2/64",
-		},
-		{
-			name: "no labels",
-			meta: profile.Meta{
-				ProfileID: profile.ID("1"),
-				Service:   "svc1",
-				Type:      profile.TypeCPU,
-				CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
-			},
-			want: "svc1/cpu/1257894000000000000//64",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := key(tt.meta); got != tt.want {
-				t.Errorf("path() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
+//func Test_key(t *testing.T) {
+//	tests := []struct {
+//		name string
+//		meta profile.Meta
+//		want string
+//	}{
+//		{
+//			name: "multiple labels",
+//			meta: profile.Meta{
+//				ProfileID: profile.ID("1"),
+//				Service:   "svc1",
+//				Type:      profile.TypeCPU,
+//				Labels: profile.Labels{
+//					profile.Label{
+//						Key:   "k1",
+//						Value: "v1",
+//					},
+//					profile.Label{
+//						Key:   "k2",
+//						Value: "v2",
+//					},
+//				},
+//				CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
+//			},
+//			want: "svc1/cpu/1257894000000000000/k1=v1,k2=v2/64",
+//		},
+//		{
+//			name: "no labels",
+//			meta: profile.Meta{
+//				ProfileID: profile.ID("1"),
+//				Service:   "svc1",
+//				Type:      profile.TypeCPU,
+//				CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
+//			},
+//			want: "svc1/cpu/1257894000000000000//64",
+//		},
+//	}
+//	for _, tt := range tests {
+//		t.Run(tt.name, func(t *testing.T) {
+//			if got := key(tt.meta); got != tt.want {
+//				t.Errorf("path() = %v, want %v", got, tt.want)
+//			}
+//		})
+//	}
+//}
 
-func Test_meta(t *testing.T) {
-	tests := []struct {
+func TestMetaFromProfileKey(t *testing.T) {
+	cases := []struct {
 		name    string
 		key     string
-		want    *profile.Meta
+		want    profile.Meta
 		wantErr bool
 	}{
 		{
@@ -81,182 +82,51 @@ func Test_meta(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "error when id is an invalid format",
-			key:     "svc1/cpu/1257894000000000000/k1=v1,k2=v2/zz",
+			name:    "error when key doesn't contain schema",
+			key:     "svc1/1/9bsv0s3ipt32jfck6kt0/k1=v1,k2=v2",
+			wantErr: true,
+		},
+		{
+			name:    "error when type is incorrect",
+			key:     "P0.svc1/cpu/9bsv0s3ipt32jfck6kt0/k1=v1,k2=v2",
+			wantErr: true,
+		},
+		{
+			name:    "error when type is unknown",
+			key:     "P0.svc1/0/9bsv0s3ipt32jfck6kt0/k1=v1,k2=v2",
+			wantErr: true,
+		},
+		{
+			name:    "error when digest is an invalid format",
+			key:     "P0.svc1/1/b49int/k1=v1,k2=v2",
 			wantErr: true,
 		},
 		{
 			name:    "error when label encoding is incorrect",
-			key:     "svc1/cpu/1257894000000000000/%GG=v1/64",
+			key:     "P0.svc1/1/9bsv0s3ipt32jfck6kt0/%GG=v1",
 			wantErr: true,
 		},
 		{
-			name:    "error when time is an invalid format",
-			key:     "svc1/cpu/badint/k1=v1,k2=v2/64",
-			wantErr: true,
-		},
-		{
-			name: "able to parse",
-			key:  "svc1/cpu/1257894000000000000/k1=v1,k2=v2/64",
-			want: &profile.Meta{
-				ProfileID: profile.ID("1"),
+			name: "valid key",
+			key:  "P0.svc1/1/9bsv0s3ipt32jfck6kt0/k1=v1,k2=v2",
+			want: profile.Meta{
+				ProfileID: profile.ID("P0.svc1/1/9bsv0s3ipt32jfck6kt0/k1=v1,k2=v2"),
 				Service:   "svc1",
 				Type:      profile.TypeCPU,
 				Labels: profile.Labels{
-					profile.Label{
-						Key:   "k1",
-						Value: "v1",
-					},
-					profile.Label{
-						Key:   "k2",
-						Value: "v2",
-					},
+					{"k1", "v1"},
+					{"k2", "v2"},
 				},
 				CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
 			},
 		},
 	}
-	for _, tt := range tests {
+	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := meta(tt.key)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("meta() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("meta() = %v, want %v", got, tt.want)
-			}
+			got, err := metaFromProfileKey(profefeSchema, tt.key)
+			require.Equal(t, tt.wantErr, err != nil, "error = %v, wantErr %v", err, tt.wantErr)
+			assert.Equal(t, tt.want, got)
 		})
-	}
-}
-
-func Test_includes(t *testing.T) {
-	tests := []struct {
-		name string
-		a    profile.Labels
-		b    profile.Labels
-		want bool
-	}{
-		{
-			name: "empty a includes empty b",
-			a:    profile.Labels{},
-			b:    profile.Labels{},
-			want: true,
-		},
-		{
-			name: "a includes empty b",
-			a: profile.Labels{
-				{
-					Key:   "k1",
-					Value: "v1",
-				},
-			},
-			b:    profile.Labels{},
-			want: true,
-		},
-		{
-			name: "a includes b",
-			a: profile.Labels{
-				{
-					Key:   "k1",
-					Value: "v1",
-				},
-				{
-					Key:   "k2",
-					Value: "v2",
-				},
-			},
-			b: profile.Labels{
-				{
-					Key:   "k1",
-					Value: "v1",
-				},
-			},
-			want: true,
-		},
-		{
-			name: "a does NOT include all of  b",
-			a: profile.Labels{
-				{
-					Key:   "k1",
-					Value: "v1",
-				},
-			},
-			b: profile.Labels{
-				{
-					Key:   "k1",
-					Value: "v1",
-				},
-				{
-					Key:   "k2",
-					Value: "v2",
-				},
-			},
-			want: false,
-		},
-		{
-			name: "includes same key but different value",
-			a: profile.Labels{
-				{
-					Key:   "k1",
-					Value: "v1",
-				},
-			},
-			b: profile.Labels{
-				{
-					Key:   "k1",
-					Value: "v2",
-				},
-			},
-			want: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := includes(tt.a, tt.b); got != tt.want {
-				t.Errorf("includes() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_profilePath(t *testing.T) {
-	got := profilePath(profile.ID("1"))
-	want := "v0/profiles/64"
-	if got != want {
-		t.Errorf("profilePath() = %s, want %s", got, want)
-	}
-}
-
-func Test_prefix(t *testing.T) {
-	params := &storage.FindProfilesParams{
-		Service:      "svc1",
-		Type:         profile.TypeCPU,
-		CreatedAtMin: time.Unix(0, 0),
-		CreatedAtMax: time.Now(),
-		Limit:        10,
-	}
-
-	got := prefix(params)
-	want := "svc1/cpu"
-	if got != want {
-		t.Errorf("prefix() = %s, want %s", got, want)
-	}
-}
-
-func Test_startAfter(t *testing.T) {
-	params := &storage.FindProfilesParams{
-		Service:      "svc1",
-		Type:         profile.TypeCPU,
-		CreatedAtMin: time.Unix(0, 0),
-		CreatedAtMax: time.Now(),
-		Limit:        10,
-	}
-
-	got := startAfter(params)
-	want := "svc1/cpu/0"
-	if got != want {
-		t.Errorf("startAfter() = %s, want %s", got, want)
 	}
 }
 
@@ -290,23 +160,24 @@ func TestStorage_WriteProfile(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "test writing data into mock",
+			name:     "write data into mock",
 			uploader: &mockUploaderAPI{err: nil},
 			bucket:   "b1",
 			params: &storage.WriteProfileParams{
 				Service: "svc1",
 				Type:    profile.TypeCPU,
 				Labels: profile.Labels{
-					{
-						Key:   "k1",
-						Value: "v1",
-					},
+					{"k1", "v1"},
+					{"k2", "v2"},
 				},
+				CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
 			},
 			r: strings.NewReader("profile"),
 			want: []inputs{
-				{"b1", `{"meta":{"profile_id":"64","service":"svc1","type":1,"labels":[{"key":"k1","value":"v1"}],"created_at":"0001-01-01T00:00:00Z"},"path":"v0/profiles/64"}`},
-				{"b1", "profile"},
+				{
+					bucket: "b1",
+					body:   "profile",
+				},
 			},
 		},
 		{
@@ -321,28 +192,20 @@ func TestStorage_WriteProfile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Storage{
+				logger:   log.New(zaptest.NewLogger(t)),
 				uploader: tt.uploader,
-				S3Bucket: tt.bucket,
+				bucket:   tt.bucket,
 			}
 			_, err := s.WriteProfile(context.Background(), tt.params, tt.r)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Storage.WriteProfile() error = %v, wantErr %v", err, tt.wantErr)
-			}
+			require.Equal(t, tt.wantErr, err != nil, "error = %v, wantErr %v", err, tt.wantErr)
+			require.Len(t, tt.uploader.inputs, len(tt.want))
 
-			got := tt.uploader.inputs
-			if len(got) != len(tt.want) {
-				t.Fatalf("WriteProfile() = %v, want %v", got, tt.want)
-			}
-
-			for i := range got {
-				if *got[i].Bucket != tt.want[i].bucket {
-					t.Errorf("WriteProfile().[%d].Bucket = %v, want %v", i, *got[i].Bucket, tt.want[i].bucket)
-				}
-				b, _ := ioutil.ReadAll(got[i].Body)
-				if string(b) != tt.want[i].body {
-					t.Errorf("WriteProfile().[%d].Body = %v, want %v", i, string(b), tt.want[i].body)
-				}
-
+			for i, input := range tt.uploader.inputs {
+				assert.Equal(t, tt.want[i].bucket, *input.Bucket)
+				_, err := metaFromProfileKey(profefeSchema, *input.Key)
+				require.NoError(t, err)
+				b, _ := ioutil.ReadAll(input.Body)
+				assert.Equal(t, tt.want[i].body, string(b))
 			}
 		})
 	}
@@ -365,34 +228,29 @@ func (m *mockDownloaderAPI) DownloadWithContext(ctx aws.Context, wa io.WriterAt,
 func TestStorage_ListProfiles(t *testing.T) {
 	t.Run("download two profiles", func(t *testing.T) {
 		s := &Storage{
-			S3Bucket:   "b1",
+			bucket:     "b1",
+			logger:     log.New(zaptest.NewLogger(t)),
 			downloader: &mockDownloaderAPI{},
 		}
-		itr, err := s.ListProfiles(
-			context.Background(),
-			[]profile.ID{[]byte("1"), []byte("2")},
-		)
-		if err != nil {
-			t.Errorf("Storage.ListProfiles() error = %v", err)
-			return
-		}
+		ids := []profile.ID{"1", "2"}
+
+		itr, err := s.ListProfiles(context.Background(), ids)
+		require.NoError(t, err)
+
+		defer itr.Close()
+
 		count := 0
 		var profiles []io.Reader
 		for itr.Next() {
 			count++
 			pr, err := itr.Profile()
-			if err != nil {
-				t.Errorf("Storage.ListProfiles().Profile() error = %v", err)
-			}
+			require.NoError(t, err)
+
 			profiles = append(profiles, pr)
 		}
-		if count != 2 {
-			t.Errorf("Storage.ListProfiles().Next() = %d, want %d ", count, 2)
-		}
 
-		if got, want := len(profiles), 2; got != want {
-			t.Errorf("Storage.ListProfiles.Profile() = %d, want %d", got, want)
-		}
+		assert.Equal(t, len(ids), count, "must have found %d profiles", len(ids))
+		assert.Len(t, profiles, len(ids))
 	})
 }
 
@@ -418,40 +276,34 @@ func (s *mockService) ListObjectsV2PagesWithContext(ctx aws.Context, input *s3.L
 
 func Test_FindProfileIDs(t *testing.T) {
 	s := &Storage{
-		S3Bucket: "b1",
-		logger:   log.New(zaptest.NewLogger(t)),
+		bucket: "b1",
+		logger: log.New(zaptest.NewLogger(t)),
 	}
 
 	t.Run("no service returns error", func(t *testing.T) {
 		params := &storage.FindProfilesParams{}
 		_, err := s.FindProfileIDs(context.Background(), params)
-		if err == nil {
-			t.Errorf("expected error as no service specified")
-		}
+		require.Error(t, err)
 	})
-	t.Run("no created at returns error", func(t *testing.T) {
+
+	t.Run("no created-at returns error", func(t *testing.T) {
 		params := &storage.FindProfilesParams{
 			Service: "svc1",
 		}
 		_, err := s.FindProfileIDs(context.Background(), params)
-		if err == nil {
-			t.Errorf("expected error as no created at time specified")
-		}
+		require.Error(t, err)
 	})
-	t.Run("no s3 objects should return on ids", func(t *testing.T) {
+
+	t.Run("no s3 objects returns not found error", func(t *testing.T) {
 		s.svc = &mockService{}
 		params := &storage.FindProfilesParams{
 			Service:      "svc1",
 			CreatedAtMin: time.Unix(0, 0),
 		}
-		ids, err := s.FindProfileIDs(context.Background(), params)
-		if err != nil {
-			t.Errorf("unexpected error from s3")
-		}
-		if len(ids) != 0 {
-			t.Errorf("unexpected ids returned %v", ids)
-		}
+		_, err := s.FindProfileIDs(context.Background(), params)
+		require.Equal(t, storage.ErrNotFound, err)
 	})
+
 	t.Run("s3 object with incorrectly formatted key is not returned", func(t *testing.T) {
 		s.svc = &mockService{
 			page: s3.ListObjectsV2Output{
@@ -473,20 +325,18 @@ func Test_FindProfileIDs(t *testing.T) {
 				},
 			},
 		}
-		ids, err := s.FindProfileIDs(context.Background(), params)
-		if err != nil {
-			t.Errorf("unexpected error from s3")
-		}
-		if len(ids) != 0 {
-			t.Errorf("unexpected ids returned %v", ids)
-		}
+		_, err := s.FindProfileIDs(context.Background(), params)
+		require.Equal(t, err, storage.ErrNotFound)
 	})
-	t.Run("s3 object with id 64 returned", func(t *testing.T) {
+
+	t.Run("s3 object with profile found", func(t *testing.T) {
+		profileKey := "P0.svc1/1/bpc00mript33iv4net00/k1=v1,k2=v2"
+
 		s.svc = &mockService{
 			page: s3.ListObjectsV2Output{
 				Contents: []*s3.Object{
 					{
-						Key: aws.String("svc1/cpu/1257894000000000000/k1=v1,k2=v2/64"),
+						Key: aws.String(profileKey),
 					},
 				},
 				IsTruncated: aws.Bool(false),
@@ -497,24 +347,18 @@ func Test_FindProfileIDs(t *testing.T) {
 			CreatedAtMin: time.Unix(0, 0),
 		}
 		ids, err := s.FindProfileIDs(context.Background(), params)
-		if err != nil {
-			t.Errorf("unexpected error from s3")
-		}
-		if len(ids) != 1 {
-			t.Fatalf("unexpected ids returned %v", ids)
-		}
-		want, _ := profile.IDFromString("64")
-		if got := ids[0]; got.String() != want.String() {
-			t.Errorf("FindProfileIDs() %d want %d", got, want)
-		}
+		require.NoError(t, err)
+
+		require.Len(t, ids, 1)
+		assert.Equal(t, profileKey, string(ids[0]))
 	})
 
-	t.Run("s3 object after max time will not return", func(t *testing.T) {
+	t.Run("s3 object after max time not returned", func(t *testing.T) {
 		s.svc = &mockService{
 			page: s3.ListObjectsV2Output{
 				Contents: []*s3.Object{
 					{
-						Key: aws.String("svc1/cpu/1257894000000000000/k1=v1,k2=v2/64"),
+						Key: aws.String("P0.svc1/1/bpc00mript33iv4net00/k1=v1,k2=v2"),
 					},
 				},
 				IsTruncated: aws.Bool(false),
@@ -525,12 +369,8 @@ func Test_FindProfileIDs(t *testing.T) {
 			CreatedAtMin: time.Unix(0, 0),
 			CreatedAtMax: time.Unix(0, 0),
 		}
-		ids, err := s.FindProfileIDs(context.Background(), params)
-		if err != nil {
-			t.Errorf("unexpected error from s3")
-		}
-		if len(ids) != 0 {
-			t.Fatalf("unexpected ids returned %v", ids)
-		}
+
+		_, err := s.FindProfileIDs(context.Background(), params)
+		require.Equal(t, storage.ErrNotFound, err)
 	})
 }

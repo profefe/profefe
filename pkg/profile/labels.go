@@ -63,6 +63,34 @@ func (labels Labels) Equal(labels2 Labels) bool {
 	return true
 }
 
+// XXX(narqo): doesn't cover the case where Labels have multiple values of a key.
+func (labels Labels) Include(labels2 Labels) bool {
+	if len(labels2) == 0 {
+		return true
+	}
+
+	if len(labels) == 0 {
+		return false
+	}
+
+	kvset := make(map[string]string, len(labels))
+	for _, label := range labels {
+		kvset[label.Key] = label.Value
+	}
+
+	for _, label := range labels2 {
+		v, ok := kvset[label.Key]
+		if !ok {
+			return false
+		}
+		if label.Value != v {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (labels Labels) Add(labels2 Labels) Labels {
 	if labels == nil {
 		return labels2
