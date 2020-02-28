@@ -273,11 +273,16 @@ func (st *Storage) findProfiles(ctx context.Context, params *storage.FindProfile
 		return *page.IsTruncated
 	})
 
+	// TODO(narqo) parse NoCredentialProviders and similar to return meaningful errors to the user
+	if err != nil {
+		return nil, err
+	}
+
 	if len(metas) == 0 {
 		return nil, storage.ErrNotFound
 	}
 
-	return metas, err
+	return metas, nil
 }
 
 // getObject downloads a value from a key. Context can be canceled.
