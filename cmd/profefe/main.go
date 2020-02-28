@@ -13,6 +13,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dgraph-io/badger"
 	"github.com/profefe/profefe/pkg/config"
 	"github.com/profefe/profefe/pkg/log"
@@ -20,7 +23,7 @@ import (
 	"github.com/profefe/profefe/pkg/profefe"
 	"github.com/profefe/profefe/pkg/storage"
 	storageBadger "github.com/profefe/profefe/pkg/storage/badger"
-	"github.com/profefe/profefe/pkg/storage/s3"
+	storageS3 "github.com/profefe/profefe/pkg/storage/s3"
 	"github.com/profefe/profefe/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -138,8 +141,15 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*storageBadger.S
 	return st, db, nil
 }
 
-func initS3Storage(logger *log.Logger, conf config.Config) (*s3.Storage, error) {
-	return s3.NewStorage(logger, conf.S3.Region, conf.S3.Bucket)
+func initS3Storage(logger *log.Logger, conf config.Config) (*storageS3.Storage, error) {
+	sess, err := session.NewSession(&aws.Config{
+		Region:     aws.String(conf.S3.Region),
+		MaxRetries: aws.Int(conf.S3.MaxRetries),
+	})
+	if err != nil {
+		return nil, xerrors.Errorf("could not create s3 session: %w", err)
+	}
+	return storageS3.New(logger, s3.New(sess), conf.S3.Bucket), nil
 }
 
 func setupDebugRoutes(mux *http.ServeMux) {
