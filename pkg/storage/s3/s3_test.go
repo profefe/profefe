@@ -37,22 +37,22 @@ func TestMetaFromProfileKey(t *testing.T) {
 		},
 		{
 			name:    "error when key doesn't contain schema",
-			key:     "svc1/1/9bsv0s3ipt32jfck6kt0/k1=v1,k2=v2",
+			key:     "svc1/1/9bsv0s3ipt32jfck6kt0,k1=v1,k2=v2",
 			wantErr: true,
 		},
 		{
 			name:    "error when type is incorrect",
-			key:     "P0.svc1/cpu/9bsv0s3ipt32jfck6kt0/k1=v1,k2=v2",
+			key:     "P0.svc1/cpu/9bsv0s3ipt32jfck6kt0,k1=v1,k2=v2",
 			wantErr: true,
 		},
 		{
 			name:    "error when type is unknown",
-			key:     "P0.svc1/0/9bsv0s3ipt32jfck6kt0/k1=v1,k2=v2",
+			key:     "P0.svc1/0/9bsv0s3ipt32jfck6kt0,k1=v1,k2=v2",
 			wantErr: true,
 		},
 		{
 			name:    "error when digest is an invalid format",
-			key:     "P0.svc1/1/b49int/k1=v1,k2=v2",
+			key:     "P0.svc1/1/b49int,k1=v1,k2=v2",
 			wantErr: true,
 		},
 		{
@@ -62,9 +62,9 @@ func TestMetaFromProfileKey(t *testing.T) {
 		},
 		{
 			name: "valid key",
-			key:  "P0.svc1/1/9bsv0s3ipt32jfck6kt0/k1=v1,k2=v2",
+			key:  "P0.svc1/1/9bsv0s3ipt32jfck6kt0,k1=v1,k2=v2",
 			want: profile.Meta{
-				ProfileID: profile.ID("P0.svc1/1/9bsv0s3ipt32jfck6kt0/k1=v1,k2=v2"),
+				ProfileID: profile.ID("P0.svc1/1/9bsv0s3ipt32jfck6kt0,k1=v1,k2=v2"),
 				Service:   "svc1",
 				Type:      profile.TypeCPU,
 				Labels: profile.Labels{
@@ -294,7 +294,7 @@ func Test_FindProfileIDs(t *testing.T) {
 	})
 
 	t.Run("s3 object with profile found", func(t *testing.T) {
-		profileKey := "P0.svc1/1/bpc00mript33iv4net00/k1=v1,k2=v2"
+		profileKey := "P0.svc1/1/bpc00mript33iv4net00,k1=v1,k2=v2"
 
 		s.svc = &mockService{
 			page: s3.ListObjectsV2Output{
@@ -322,7 +322,7 @@ func Test_FindProfileIDs(t *testing.T) {
 			page: s3.ListObjectsV2Output{
 				Contents: []*s3.Object{
 					{
-						Key: aws.String("P0.svc1/1/bpc00mript33iv4net00/k1=v1,k2=v2"),
+						Key: aws.String("P0.svc1/1/bpc00mript33iv4net00,k1=v1,k2=v2"),
 					},
 				},
 				IsTruncated: aws.Bool(false),

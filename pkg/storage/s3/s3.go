@@ -31,7 +31,7 @@ const getObjectBufferSize = 16384
 // Storage stores and loads profiles from s3.
 //
 // The schema for the object key:
-// schemaV.service/profile_type/digest/label1=value1,label2=value2
+// schemaV.service/profile_type/digest,label1=value1,label2=value2
 //
 // Where
 // "schemaV" indicates the naming schema that was used when the profile was stored;
@@ -308,8 +308,10 @@ func createProfileKey(service string, ptype profile.ProfileType, createdAt time.
 
 	digest := xid.NewWithTime(createdAt)
 	buf.WriteString(digest.String())
-	buf.WriteByte('/')
-	buf.WriteString(labels.String())
+	if labels.Len() != 0 {
+		buf.WriteByte(',')
+		buf.WriteString(labels.String())
+	}
 
 	return buf.String()
 }
@@ -321,7 +323,7 @@ func profileKeyPrefix(service string, ptype profile.ProfileType) string {
 
 // parses the s3 key by splitting by / to create a profile.Meta.
 // The format of the key is:
-// schemaV.service/profile_type/digest/label1,label2
+// schemaV.service/profile_type/digest,label1,label2
 func metaFromProfileKey(schemaV, key string) (meta profile.Meta, err error) {
 	if !strings.HasPrefix(key, schemaV) {
 		return meta, xerrors.Errorf("invalid key format %q: schema version mismatch, want %s", key, schemaV)
@@ -331,25 +333,25 @@ func metaFromProfileKey(schemaV, key string) (meta profile.Meta, err error) {
 	pid := profile.ID(key)
 
 	key = strings.TrimPrefix(key, schemaV)
-	ks := strings.SplitN(key, "/", 4)
-	if len(ks) == 0 {
+	ks := strings.SplitN(key, "/", 3)
+	if len(ks) != 3 {
 		return meta, xerrors.Errorf("invalid key format %q", key)
 	}
 
-	var service, pt, dgst, lbls string
-	switch len(ks) {
-	case 3: // no labels are set in the path
-		service, pt, dgst = ks[0], ks[1], ks[2]
-	case 4:
-		service, pt, dgst, lbls = ks[0], ks[1], ks[2], ks[3]
-	default:
-		return profile.Meta{}, xerrors.Errorf("invalid key format %q: want at most 4 fields", key)
-	}
+	service, pt, tail := ks[0], ks[1], ks[2]
 
 	v, _ := strconv.Atoi(pt)
 	ptype := profile.ProfileType(v)
 	if ptype == profile.TypeUnknown {
 		return profile.Meta{}, xerrors.Errorf("could not parse profile type %q, key %q", pt, key)
+	}
+
+	ks = strings.SplitN(tail, ",", 2)
+	var dgst, lbls string
+	if len(ks) == 1 {
+		dgst = ks[0]
+	} else {
+		dgst, lbls = ks[0], ks[1]
 	}
 
 	digest, err := xid.FromString(dgst)
