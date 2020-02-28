@@ -178,7 +178,7 @@ func (pl *profileList) Close() error {
 }
 
 func (pl *profileList) setErr(err error) {
-	if pl.err != nil {
+	if pl.err == nil {
 		pl.err = err
 	}
 }
