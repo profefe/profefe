@@ -48,13 +48,17 @@ func (conf *BadgerConfig) RegisterFlags(f *flag.FlagSet) {
 }
 
 type S3Config struct {
-	Region     string
-	Bucket     string
-	MaxRetries int
+	EndpointURL string
+	DisableSSL  bool
+	Region      string
+	Bucket      string
+	MaxRetries  int
 }
 
 func (conf *S3Config) RegisterFlags(f *flag.FlagSet) {
-	f.StringVar(&conf.Region, "s3.region", "us-east-1", "AWS region")
+	f.StringVar(&conf.EndpointURL, "s3.endpoint-url", "", "override default URL to s3 service")
+	f.BoolVar(&conf.DisableSSL, "s3.disable-ssl", false, "disable SSL verification")
+	f.StringVar(&conf.Region, "s3.region", "us-east-1", "object storage region")
 	f.StringVar(&conf.Bucket, "s3.bucket", "", "s3 bucket profile destination")
 	f.IntVar(&conf.MaxRetries, "s3.max-retries", 3, "s3 request maximum number of retries")
 }

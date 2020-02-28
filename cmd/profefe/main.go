@@ -142,9 +142,17 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*storageBadger.S
 }
 
 func initS3Storage(logger *log.Logger, conf config.Config) (*storageS3.Storage, error) {
+	var forcePathStyle bool
+	if conf.S3.EndpointURL != "" {
+		// should one use custom object storage service (e.g. Minio), path-style addressing needs to be set
+		forcePathStyle = true
+	}
 	sess, err := session.NewSession(&aws.Config{
-		Region:     aws.String(conf.S3.Region),
-		MaxRetries: aws.Int(conf.S3.MaxRetries),
+		Endpoint:         aws.String(conf.S3.EndpointURL),
+		DisableSSL:       aws.Bool(conf.S3.DisableSSL),
+		Region:           aws.String(conf.S3.Region),
+		MaxRetries:       aws.Int(conf.S3.MaxRetries),
+		S3ForcePathStyle: aws.Bool(forcePathStyle),
 	})
 	if err != nil {
 		return nil, xerrors.Errorf("could not create s3 session: %w", err)
