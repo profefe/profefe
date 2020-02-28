@@ -92,6 +92,51 @@ func TestLabels_Add(t *testing.T) {
 	}
 }
 
+func TestLabels_Include(t *testing.T) {
+	cases := []struct {
+		name    string
+		labels1 Labels
+		labels2 Labels
+		want    bool
+	}{
+		{
+			"empty labels1 include empty labels2",
+			Labels{},
+			Labels{},
+			true,
+		},
+		{
+			"labels1 includes empty labels2",
+			Labels{{"k1", "v1"}},
+			Labels{},
+			true,
+		},
+		{
+			"labels1 includes labels2",
+			Labels{{"k1", "v1"}, {Key: "k2", Value: "v2"}},
+			Labels{{"k1", "v1"}},
+			true,
+		},
+		{
+			"labels1 does NOT include all of  labels2",
+			Labels{{"k1", "v1"}},
+			Labels{{"k1", "v1"}, {"k2", "v2"}},
+			false,
+		},
+		{
+			"labels include same key but different value",
+			Labels{{"k1", "v1"}},
+			Labels{{"k1", "v2"}},
+			false,
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.labels1.Include(tt.labels2))
+		})
+	}
+}
+
 func TestLabels_FromString(t *testing.T) {
 	cases := []struct {
 		in      string
