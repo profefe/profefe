@@ -15,10 +15,9 @@ i.e. `pb.gz`, or [Go runtime traces](https://golang.org/pkg/runtime/trace/)).
 Collector persists the data in a plugable storage.
 It also provides an API for querying and retrieving stored profiles.
 
-The only storage implemented currently uses [Badger](https://github.com/dgraph-io/badger).
-
-*Note: it's tempting to split collector into two separate applications (collector and querier).
-That might inctease service's scalability. But is the subject of future research.*
+Currently implemented storages:
+- `storage/badger`, keeps data in [Badger DB](https://github.com/dgraph-io/badger);
+- `storage/s3`, stores data in s3-compatible object storage service.
 
 ### Agent
 
