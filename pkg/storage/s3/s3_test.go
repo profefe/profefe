@@ -238,7 +238,7 @@ func (s *mockService) ListObjectsV2PagesWithContext(ctx aws.Context, input *s3.L
 	return s.err
 }
 
-func Test_FindProfileIDs(t *testing.T) {
+func TestStorage_FindProfileIDs(t *testing.T) {
 	s := &Storage{
 		bucket: "b1",
 		logger: log.New(zaptest.NewLogger(t)),
@@ -290,7 +290,7 @@ func Test_FindProfileIDs(t *testing.T) {
 			},
 		}
 		_, err := s.FindProfileIDs(context.Background(), params)
-		require.Equal(t, err, storage.ErrNotFound)
+		require.Equal(t, storage.ErrNotFound, err)
 	})
 
 	t.Run("s3 object with profile found", func(t *testing.T) {
@@ -335,6 +335,44 @@ func Test_FindProfileIDs(t *testing.T) {
 		}
 
 		_, err := s.FindProfileIDs(context.Background(), params)
+		require.Equal(t, storage.ErrNotFound, err)
+	})
+}
+
+func TestStorage_ListServices(t *testing.T) {
+	s := &Storage{
+		bucket: "b1",
+		logger: log.New(zaptest.NewLogger(t)),
+	}
+
+	t.Run("s3 objects of common prefixes", func(t *testing.T) {
+		s.svc = &mockService{
+			page: s3.ListObjectsV2Output{
+				Prefix:    aws.String("P0."),
+				Delimiter: aws.String("/"),
+				CommonPrefixes: []*s3.CommonPrefix{
+					{Prefix: aws.String("P0.svc1/")},
+					{Prefix: aws.String("P0.svc2/")},
+				},
+				IsTruncated: aws.Bool(false),
+			},
+		}
+
+		services, err := s.ListServices(context.Background())
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"svc1", "svc2"}, services)
+	})
+
+	t.Run("no s3 objects returns not found error", func(t *testing.T) {
+		s.svc = &mockService{
+			page: s3.ListObjectsV2Output{
+				Prefix:      aws.String("P0."),
+				Delimiter:   aws.String("/"),
+				IsTruncated: aws.Bool(false),
+			},
+		}
+
+		_, err := s.ListServices(context.Background())
 		require.Equal(t, storage.ErrNotFound, err)
 	})
 }

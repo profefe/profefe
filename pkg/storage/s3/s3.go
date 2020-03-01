@@ -25,8 +25,11 @@ import (
 // s3 objects' key prefix indicates the key's naming schema
 const profefeSchema = `P0.`
 
-// initial size of buffer pre-allocated for the s3 object
-const getObjectBufferSize = 16384
+const (
+	// initial size of buffer pre-allocated for the s3 object
+	getObjectBufferSize     = 16384
+	defaultListObjectsLimit = 100
+)
 
 // Storage stores and loads profiles from s3.
 //
@@ -183,8 +186,48 @@ func (pl *profileList) setErr(err error) {
 	}
 }
 
+// ListServices returns the list of distinct services for which profiles are stored in the bucket.
 func (st *Storage) ListServices(ctx context.Context) ([]string, error) {
-	panic("not implemented")
+	input := &s3.ListObjectsV2Input{
+		Bucket:    &st.bucket,
+		Prefix:    aws.String(profefeSchema),
+		Delimiter: aws.String("/"), // delimiter makes ListObjects to return only unique common prefixes
+		MaxKeys:   aws.Int64(int64(defaultListObjectsLimit)),
+	}
+
+	var services []string
+	err := st.svc.ListObjectsV2PagesWithContext(ctx, input, func(page *s3.ListObjectsV2Output, _ bool) bool {
+		if len(page.CommonPrefixes) == 0 {
+			return false
+		}
+
+		prefix := aws.StringValue(page.Prefix)
+
+		st.logger.Debugw("listServices: s3 list objects", "prefix", prefix, "common prefixes", page.CommonPrefixes)
+
+		for _, cp := range page.CommonPrefixes {
+			s := aws.StringValue(cp.Prefix)
+			if s != "" {
+				s = strings.TrimPrefix(s, prefix)
+				services = append(services, strings.TrimSuffix(s, "/"))
+			}
+		}
+
+		// XXX(narqo): I don't expect someone store that many distinct services in one instance
+		if len(services) >= defaultListObjectsLimit {
+			return false
+		}
+
+		return *page.IsTruncated
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(services) == 0 {
+		return nil, storage.ErrNotFound
+	}
+
+	return services, nil
 }
 
 // FindProfiles queries s3 for profile metas matched searched criteria.
@@ -225,7 +268,7 @@ func (st *Storage) findProfiles(ctx context.Context, params *storage.FindProfile
 
 	limit := params.Limit
 	if limit == 0 {
-		limit = 100
+		limit = defaultListObjectsLimit
 	}
 
 	prefix := profileKeyPrefix(params.Service, params.Type)
