@@ -1,5 +1,0 @@
-go:
-  comments:
-    disabled: true
-ignore:
-  - "/internal/pprof/"
