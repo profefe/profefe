@@ -13,12 +13,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dgraph-io/badger"
 	"github.com/profefe/profefe/pkg/config"
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/middleware"
 	"github.com/profefe/profefe/pkg/profefe"
+	"github.com/profefe/profefe/pkg/storage"
 	storageBadger "github.com/profefe/profefe/pkg/storage/badger"
+	storageS3 "github.com/profefe/profefe/pkg/storage/s3"
 	"github.com/profefe/profefe/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -50,15 +55,30 @@ func main() {
 }
 
 func run(logger *log.Logger, conf config.Config, stdout io.Writer) error {
-	st, closer, err := initBadgerStorage(logger, conf)
-	if err != nil {
-		return err
+	var (
+		sr storage.Reader
+		sw storage.Writer
+	)
+	if conf.Badger.Dir != "" {
+		st, closer, err := initBadgerStorage(logger, conf)
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		sr, sw = st, st
+	} else if conf.S3.Bucket != "" {
+		st, err := initS3Storage(logger, conf)
+		if err != nil {
+			return err
+		}
+		sr, sw = st, st
+	} else {
+		return fmt.Errorf("storage configuration required")
 	}
-	defer closer.Close()
 
 	mux := http.NewServeMux()
 
-	profefe.SetupRoutes(mux, logger, prometheus.DefaultRegisterer, st, st)
+	profefe.SetupRoutes(mux, logger, prometheus.DefaultRegisterer, sr, sw)
 
 	setupDebugRoutes(mux)
 
@@ -119,6 +139,25 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*storageBadger.S
 
 	st := storageBadger.New(logger, db, conf.Badger.ProfileTTL)
 	return st, db, nil
+}
+
+func initS3Storage(logger *log.Logger, conf config.Config) (*storageS3.Storage, error) {
+	var forcePathStyle bool
+	if conf.S3.EndpointURL != "" {
+		// should one use custom object storage service (e.g. Minio), path-style addressing needs to be set
+		forcePathStyle = true
+	}
+	sess, err := session.NewSession(&aws.Config{
+		Endpoint:         aws.String(conf.S3.EndpointURL),
+		DisableSSL:       aws.Bool(conf.S3.DisableSSL),
+		Region:           aws.String(conf.S3.Region),
+		MaxRetries:       aws.Int(conf.S3.MaxRetries),
+		S3ForcePathStyle: aws.Bool(forcePathStyle),
+	})
+	if err != nil {
+		return nil, xerrors.Errorf("could not create s3 session: %w", err)
+	}
+	return storageS3.New(logger, s3.New(sess), conf.S3.Bucket), nil
 }
 
 func setupDebugRoutes(mux *http.ServeMux) {

@@ -28,10 +28,12 @@ To build and start profefe collector, run:
 
 ```
 > make
-> ./BUILD/profefe -addr :10100 -log.level debug -badger.dir /tmp/profefe
+> ./BUILD/profefe -addr :10100 -log.level debug -badger.dir /tmp/profefe-data
 
 2019-06-06T00:07:58.499+0200    info    profefe/main.go:86    server is running    {"addr": ":10100"}
 ```
+
+`./BUILD/profefe -help` will print the list of available options.
 
 ---
 

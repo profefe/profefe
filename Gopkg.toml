@@ -3,7 +3,7 @@ required = [
 ]
 
 ignored = [
-  "golang.org/x/lint",
+  "golang.org/x/lint*",
 ]
 
 [prune]
@@ -41,3 +41,7 @@ ignored = [
 [[constraint]]
   name = "honnef.co/go/tools"
   version = "2020.1.2"
+
+[[constraint]]
+  name = "github.com/aws/aws-sdk-go"
+  version = "v1.26.5"
