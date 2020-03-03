@@ -13,9 +13,9 @@ ifndef VERSION
 	VERSION := git-$(GITSHA)
 endif
 
-LDFLAGS += -X $(PKG)/version.Version=$(VERSION)
-LDFLAGS += -X $(PKG)/version.Commit=$(GITSHA)
-LDFLAGS += -X $(PKG)/version.BuildTime=$(BUILDTIME)
+LDFLAGS += -X $(PKG)/version.version=$(VERSION)
+LDFLAGS += -X $(PKG)/version.commit=$(GITSHA)
+LDFLAGS += -X $(PKG)/version.buildTime=$(BUILDTIME)
 
 BINDIR := $(CURDIR)/bin
 BUILDDIR := $(CURDIR)/BUILD

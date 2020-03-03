@@ -40,7 +40,7 @@ func main() {
 	flag.Parse()
 
 	if *printVersion {
-		fmt.Println(version.String())
+		fmt.Println(version.Details())
 		os.Exit(1)
 	}
 
