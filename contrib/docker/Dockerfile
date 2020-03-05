@@ -1,8 +1,7 @@
 FROM golang:1.14.0-alpine3.11 as builder
 
-RUN apk add --update --no-cache make
+RUN apk add --update --no-cache build-base
 
-env GO111MODULE=off
 ARG VERSION
 ARG GITSHA
 
