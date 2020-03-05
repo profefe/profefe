@@ -13,6 +13,8 @@ ifndef VERSION
 	VERSION := git-$(GITSHA)
 endif
 
+GOFLAGS += -trimpath
+
 LDFLAGS += -X $(PKG)/version.version=$(VERSION)
 LDFLAGS += -X $(PKG)/version.commit=$(GITSHA)
 LDFLAGS += -X $(PKG)/version.buildTime=$(BUILDTIME)
