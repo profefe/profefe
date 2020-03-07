@@ -25,11 +25,11 @@ type FindProfilesFunc func(ctx context.Context, params *FindProfilesParams) ([]p
 
 type FindProfileIDsFunc func(ctx context.Context, params *FindProfilesParams) ([]profile.ID, error)
 
-type ListProfilesfunc func(ctx context.Context, pid []profile.ID) (ProfileList, error)
+type ListProfilesFunc func(ctx context.Context, pid []profile.ID) (ProfileList, error)
 
 type StubReader struct {
 	ListServicesFunc
-	ListProfilesfunc
+	ListProfilesFunc
 	FindProfilesFunc
 	FindProfileIDsFunc
 }
@@ -49,5 +49,5 @@ func (sr *StubReader) FindProfileIDs(ctx context.Context, params *FindProfilesPa
 }
 
 func (sr *StubReader) ListProfiles(ctx context.Context, pid []profile.ID) (ProfileList, error) {
-	return sr.ListProfilesfunc(ctx, pid)
+	return sr.ListProfilesFunc(ctx, pid)
 }

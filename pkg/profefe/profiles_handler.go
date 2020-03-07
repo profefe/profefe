@@ -3,6 +3,7 @@ package profefe
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 
@@ -28,29 +29,25 @@ func NewProfilesHandler(logger *log.Logger, collector *Collector, querier *Queri
 
 func (h *ProfilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
-		handler func(http.ResponseWriter, *http.Request) error
 		urlPath = path.Clean(r.URL.Path)
+		err     error
 	)
 
-	if urlPath == apiProfilesMergePath {
-		handler = h.HandleMergeProfile
-	} else if urlPath == apiProfilesPath {
+	if urlPath == apiProfilesPath {
 		switch r.Method {
 		case http.MethodPost:
-			handler = h.HandleCreateProfile
+			err = h.HandleCreateProfile(w, r)
 		case http.MethodGet:
-			handler = h.HandleFindProfiles
+			err = h.HandleFindProfiles(w, r)
 		}
-	} else if len(urlPath) > len(apiProfilesPath) {
-		handler = h.HandleGetProfile
-	}
-
-	var err error
-	if handler != nil {
-		err = handler(w, r)
+	} else if urlPath == apiProfilesMergePath {
+		err = h.HandleMergeProfiles(w, r)
+	} else if strings.HasPrefix(urlPath, apiProfilesPath) {
+		err = h.HandleGetProfile(w, r)
 	} else {
 		err = ErrNotFound
 	}
+
 	HandleErrorHTTP(h.logger, err, w, r)
 }
 
@@ -71,22 +68,33 @@ func (h *ProfilesHandler) HandleCreateProfile(w http.ResponseWriter, r *http.Req
 }
 
 func (h *ProfilesHandler) HandleGetProfile(w http.ResponseWriter, r *http.Request) error {
-	pid := r.URL.Path[len(apiProfilesPath):] // id part of the path
-	pid = strings.Trim(pid, "/")
-	if pid == "" {
+	rawPids := r.URL.Path[len(apiProfilesPath):] // id part of the path
+	rawPids = strings.Trim(rawPids, "/")
+	if rawPids == "" {
 		return StatusError(http.StatusBadRequest, "no profile id", nil)
 	}
 
-	w.Header().Set("Content-Type", "application/octet-stream")
+	rawPids, err := url.PathUnescape(rawPids)
+	if err != nil {
+		return StatusError(http.StatusBadRequest, err.Error(), nil)
+	}
 
-	err := h.querier.GetProfileTo(r.Context(), w, profile.ID(pid))
+	pids, err := profile.SplitIDs(rawPids)
+	if err != nil {
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, rawPids))
+
+	err = h.querier.GetProfilesTo(r.Context(), w, pids)
 	if err == storage.ErrNotFound {
 		return ErrNotFound
 	} else if err == storage.ErrEmpty {
 		return ErrEmpty
 	} else if err != nil {
-		err = xerrors.Errorf("could not get profile by id %q: %w", pid, err)
-		return StatusError(http.StatusInternalServerError, fmt.Sprintf("failed to get profile by id %q", pid), err)
+		err = xerrors.Errorf("could not get profile by id %q: %w", rawPids, err)
+		return StatusError(http.StatusInternalServerError, fmt.Sprintf("failed to get profile by id %q", rawPids), err)
 	}
 	return nil
 }
@@ -113,7 +121,7 @@ func (h *ProfilesHandler) HandleFindProfiles(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
-func (h *ProfilesHandler) HandleMergeProfile(w http.ResponseWriter, r *http.Request) error {
+func (h *ProfilesHandler) HandleMergeProfiles(w http.ResponseWriter, r *http.Request) error {
 	params := &storage.FindProfilesParams{}
 	if err := parseFindProfileParams(params, r); err != nil {
 		return err
@@ -122,6 +130,7 @@ func (h *ProfilesHandler) HandleMergeProfile(w http.ResponseWriter, r *http.Requ
 	if params.Type == profile.TypeTrace {
 		return StatusError(http.StatusMethodNotAllowed, "tracing profiles are not mergeable", nil)
 	}
+
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, params.Type))
