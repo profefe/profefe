@@ -3,6 +3,7 @@ package profefe
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -42,16 +43,17 @@ func metricsHandler(registry prometheus.Registerer, next http.Handler) http.Hand
 
 		next.ServeHTTP(respw, r)
 
+		apiPath := fixAPIPathLabel(r.URL.Path)
 		labels := []string{
 			r.Method,
-			r.URL.Path,
+			apiPath,
 			strconv.Itoa(respw.statusCode),
 		}
 		reqTotal.WithLabelValues(labels...).Inc()
 		reqDuration.WithLabelValues(labels...).Observe(time.Since(start).Seconds())
 
-		reqSize.WithLabelValues(r.Method, r.URL.Path).Observe(float64(calcReqSize(r)))
-		respSize.WithLabelValues(r.Method, r.URL.Path).Observe(float64(respw.written))
+		reqSize.WithLabelValues(r.Method, apiPath).Observe(float64(calcReqSize(r)))
+		respSize.WithLabelValues(r.Method, apiPath).Observe(float64(respw.written))
 	})
 }
 
@@ -100,4 +102,13 @@ func calcReqSize(r *http.Request) int {
 		s += int(r.ContentLength)
 	}
 	return s
+}
+
+func fixAPIPathLabel(p string) string {
+	p = strings.TrimSuffix(p, "/")
+	// fix ID-based API path making it suitable to use in metrics' labels
+	if strings.HasPrefix(p, apiProfilesPath) && p != apiProfilesMergePath {
+		p = apiProfilesPath + "/__pid__"
+	}
+	return p
 }
