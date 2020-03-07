@@ -23,51 +23,27 @@ func NewQuerier(logger *log.Logger, sr storage.Reader) *Querier {
 	}
 }
 
-func (q *Querier) GetProfileTo(ctx context.Context, dst io.Writer, pid profile.ID) error {
-	list, err := q.sr.ListProfiles(ctx, []profile.ID{pid})
-	if err != nil {
-		return err
-	}
-	defer list.Close()
-
-	if !list.Next() {
-		return storage.ErrNotFound
-	}
-	pr, err := list.Profile()
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(dst, pr)
-	return err
-}
-
-func (q *Querier) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]Profile, error) {
-	metas, err := q.sr.FindProfiles(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-
-	profModels := make([]Profile, 0, len(metas))
-	for _, meta := range metas {
-		profModels = append(profModels, ProfileFromProfileMeta(meta))
-	}
-	return profModels, nil
-}
-
-func (q *Querier) FindMergeProfileTo(ctx context.Context, dst io.Writer, params *storage.FindProfilesParams) error {
-	pids, err := q.sr.FindProfileIDs(ctx, params)
-	if err != nil {
-		return err
-	}
-
-	// TODO(narqo): limit maximum number of profiles to merge; as an example,
-	//  Stackdriver merges up to 250 random profiles if query returns more than that
+func (q *Querier) GetProfilesTo(ctx context.Context, dst io.Writer, pids []profile.ID) error {
 	list, err := q.sr.ListProfiles(ctx, pids)
 	if err != nil {
 		return err
 	}
 	defer list.Close()
 
+	if len(pids) == 1 {
+		if !list.Next() {
+			return storage.ErrNotFound
+		}
+		pr, err := list.Profile()
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(dst, pr)
+		return err
+	}
+
+	// TODO(narqo): limit maximum number of profiles to merge; as an example,
+	//  Stackdriver merges up to 250 random profiles if query returns more than that
 	pps := make([]*pprofProfile.Profile, 0, len(pids))
 	for list.Next() {
 		// exit fast if context canceled
@@ -93,6 +69,28 @@ func (q *Querier) FindMergeProfileTo(ctx context.Context, dst io.Writer, params 
 		return xerrors.Errorf("could not merge %d profiles: %w", len(pps), err)
 	}
 	return pp.Write(dst)
+}
+
+func (q *Querier) FindProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]Profile, error) {
+	metas, err := q.sr.FindProfiles(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	profModels := make([]Profile, 0, len(metas))
+	for _, meta := range metas {
+		profModels = append(profModels, ProfileFromProfileMeta(meta))
+	}
+	return profModels, nil
+}
+
+func (q *Querier) FindMergeProfileTo(ctx context.Context, dst io.Writer, params *storage.FindProfilesParams) error {
+	pids, err := q.sr.FindProfileIDs(ctx, params)
+	if err != nil {
+		return err
+	}
+
+	return q.GetProfilesTo(ctx, dst, pids)
 }
 
 func (q *Querier) ListServices(ctx context.Context) ([]string, error) {

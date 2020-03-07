@@ -203,6 +203,19 @@ GET /api/0/profiles/<id>
 
 - `id` - id of stored profile, returned with the request for meta information above
 
+#### Merge a set of individual profiles into a single profile
+
+```
+GET /api/0/profiles/<id1>+<id2>+...
+
+< 200 OK
+< pprof.pb.gz
+```
+
+- `id1`, `id2` - ids of stored profiles
+
+*Note, merging is possible only for profiles of the same type.*
+
 ### Get services for which profiling data is stored
 
 ```
