@@ -107,13 +107,11 @@ github.com/rs/xid
 ## explicit
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# go.uber.org/atomic v1.5.0
+# go.uber.org/atomic v1.6.0
 go.uber.org/atomic
-# go.uber.org/multierr v1.3.0
+# go.uber.org/multierr v1.5.0
 go.uber.org/multierr
-# go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee
-go.uber.org/tools/update-license
-# go.uber.org/zap v1.14.0
+# go.uber.org/zap v1.14.1
 ## explicit
 go.uber.org/zap
 go.uber.org/zap/buffer
@@ -123,9 +121,6 @@ go.uber.org/zap/internal/exit
 go.uber.org/zap/internal/ztest
 go.uber.org/zap/zapcore
 go.uber.org/zap/zaptest
-# golang.org/x/lint v0.0.0-20190930215403-16217165b5de
-golang.org/x/lint
-golang.org/x/lint/golint
 # golang.org/x/net v0.0.0-20200202094626-16171245cfb2
 golang.org/x/net/internal/timeseries
 golang.org/x/net/trace

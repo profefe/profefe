@@ -57,7 +57,7 @@ docker-image:
 	GITSHA=$(GITSHA) VERSION=$(VERSION) \
 		./scripts/ci_build_image.sh $(DOCKER_IMAGE) $(DOCKER_IMAGE_TAG)
 
-HAS_staticcheck := $(shell command -v $(BINDIR)/staticcheck;)
+HAS_staticcheck := $(shell command -v $(STATICCHECK);)
 
 .PHONY: bootstrap
 bootstrap:
