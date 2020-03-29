@@ -249,6 +249,26 @@ GET /api/0/version
 }
 ```
 
+## FAQ
+
+### Does continuous profiling affect the performance of the production?
+
+Profiling always comes with some costs. Go collects sampling-based profiling data and for the most of the applications
+the real overhead is small enough (refer to "[Can I profile my production services](https://golang.org/doc/diagnostics.html#profiling)"
+from Go's Diagnostics documentation).
+
+To reduce the costs, users can adjust the frequency of profiles collection, e.g. collect 10 seconds of CPU profiles every 5 minutes.
+
+[profefe-agent](https://godoc.org/github.com/profefe/profefe/agent) tries to reduce the overhead further by adding a small jiggling in-between the profiles collections. This distributes the total profiling overhead, making sure that not all instances of the application's cluster are being profiled at the same time.
+
+### Can I use profefe with non-Go projects?
+
+profefe collects [pprof-formatted](https://github.com/google/pprof/blob/master/README.md) profiling data. The format is used by Go profiler,
+but thrid-party profilers for other programming languages support of the format. For example, [`google/pprof-nodejs`](https://github.com/google/pprof-nodejs) for Node.js,
+[`tikv/pprof-rs`](https://github.com/tikv/pprof-rs) for Rust, [`arnaud-lb/php-memory-profiler`](https://github.com/arnaud-lb/php-memory-profiler) for PHP, etc.
+
+Integrating those is the subject of building a transport layer between the profiler and profefe.
+
 ## Further reading
 
 While the topic of continuous profiling in the production is a bit unrepresented in the public internet, some
