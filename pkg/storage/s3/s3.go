@@ -333,7 +333,7 @@ func (st *Storage) findProfiles(ctx context.Context, params *storage.FindProfile
 func (st *Storage) getObject(ctx context.Context, w io.WriterAt, key string) error {
 	input := &s3.GetObjectInput{
 		Bucket: aws.String(st.bucket),
-		Key:    aws.String(key),
+		Key:    aws.String("/profiles/" + key),
 	}
 	n, err := st.downloader.DownloadWithContext(ctx, w, input)
 	if err != nil {
