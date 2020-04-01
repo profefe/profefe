@@ -192,7 +192,6 @@ func (st *Storage) ListServices(ctx context.Context) ([]string, error) {
 		Bucket:    &st.bucket,
 		Prefix:    aws.String(profefeSchema),
 		Delimiter: aws.String("/"), // delimiter makes ListObjects to return only unique common prefixes
-		MaxKeys:   aws.Int64(int64(defaultListObjectsLimit)),
 	}
 
 	var services []string
@@ -211,11 +210,6 @@ func (st *Storage) ListServices(ctx context.Context) ([]string, error) {
 				s = strings.TrimPrefix(s, prefix)
 				services = append(services, strings.TrimSuffix(s, "/"))
 			}
-		}
-
-		// XXX(narqo): I don't expect someone store that many distinct services in one instance
-		if len(services) >= defaultListObjectsLimit {
-			return false
 		}
 
 		return *page.IsTruncated
