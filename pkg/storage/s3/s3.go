@@ -293,6 +293,10 @@ func (st *Storage) findProfiles(ctx context.Context, params *storage.FindProfile
 				continue
 			}
 
+			if meta.CreatedAt.Before(params.CreatedAtMin) {
+				continue
+			}
+
 			if meta.CreatedAt.After(createdAtMax) {
 				return false
 			}
