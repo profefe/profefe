@@ -84,12 +84,16 @@ func (st *Storage) WriteProfile(ctx context.Context, params *storage.WriteProfil
 	}
 
 	id := newProfileID()
+	createdAt := params.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
 	meta := profile.Meta{
 		ProfileID: encodeProfileID(id),
 		Service:   params.Service,
 		Type:      params.Type,
 		Labels:    params.Labels,
-		CreatedAt: params.CreatedAt,
+		CreatedAt: createdAt,
 	}
 	if err := st.writeProfileData(ctx, meta, id, data); err != nil {
 		return profile.Meta{}, xerrors.Errorf("could not write profile data, params %v: %w", params, err)
@@ -103,11 +107,7 @@ func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, id, 
 		expiresAt = uint64(time.Now().Add(st.ttl).Unix())
 	}
 
-	createdAtTime := meta.CreatedAt
-	if createdAtTime.IsZero() {
-		createdAtTime = time.Now().UTC()
-	}
-	createdAt := createdAtTime.UnixNano()
+	createdAt := meta.CreatedAt.UnixNano()
 
 	entries := make([]*badger.Entry, 0, 1+1+2+len(meta.Labels)) // 1 for profile entry, 1 for meta entry, 2 for general indexes
 
