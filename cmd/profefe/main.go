@@ -55,30 +55,30 @@ func main() {
 }
 
 func run(logger *log.Logger, conf config.Config, stdout io.Writer) error {
-	var (
-		sr storage.Reader
-		sw storage.Writer
-	)
+	var st storage.Storage
 	if conf.Badger.Dir != "" {
-		st, closer, err := initBadgerStorage(logger, conf)
+		var (
+			closer io.Closer
+			err    error
+		)
+		st, closer, err = initBadgerStorage(logger, conf)
 		if err != nil {
 			return err
 		}
 		defer closer.Close()
-		sr, sw = st, st
 	} else if conf.S3.Bucket != "" {
-		st, err := initS3Storage(logger, conf)
+		var err error
+		st, err = initS3Storage(logger, conf)
 		if err != nil {
 			return err
 		}
-		sr, sw = st, st
 	} else {
 		return fmt.Errorf("storage configuration required")
 	}
 
 	mux := http.NewServeMux()
 
-	profefe.SetupRoutes(mux, logger, prometheus.DefaultRegisterer, sr, sw)
+	profefe.SetupRoutes(mux, logger, prometheus.DefaultRegisterer, st)
 
 	setupDebugRoutes(mux)
 
