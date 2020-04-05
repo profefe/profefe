@@ -65,8 +65,7 @@ type Storage struct {
 	cache *cache
 }
 
-var _ storage.Reader = (*Storage)(nil)
-var _ storage.Writer = (*Storage)(nil)
+var _ storage.Storage = (*Storage)(nil)
 
 func New(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 	return &Storage{

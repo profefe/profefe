@@ -47,8 +47,7 @@ type Storage struct {
 	bucket string
 }
 
-var _ storage.Writer = (*Storage)(nil)
-var _ storage.Reader = (*Storage)(nil)
+var _ storage.Storage = (*Storage)(nil)
 
 func New(logger *log.Logger, svc s3iface.S3API, s3Bucket string) *Storage {
 	return &Storage{

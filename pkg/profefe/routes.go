@@ -19,11 +19,10 @@ func SetupRoutes(
 	mux *http.ServeMux,
 	logger *log.Logger,
 	registry prometheus.Registerer,
-	sr storage.Reader,
-	sw storage.Writer,
+	st storage.Storage,
 ) {
-	querier := NewQuerier(logger, sr)
-	collector := NewCollector(logger, sw)
+	querier := NewQuerier(logger, st)
+	collector := NewCollector(logger, st)
 
 	apiv0Mux := http.NewServeMux()
 	apiv0Mux.HandleFunc(apiVersionPath, VersionHandler)
