@@ -337,6 +337,34 @@ func TestStorage_FindProfileIDs(t *testing.T) {
 		_, err := s.FindProfileIDs(context.Background(), params)
 		require.Equal(t, storage.ErrNotFound, err)
 	})
+
+	t.Run("s3 object before min time not returned", func(t *testing.T) {
+		profileKey := "P0.svc1/1/bpc00mript33iv4net00,k1=v1,k2=v2"
+
+		s.svc = &mockService{
+			page: s3.ListObjectsV2Output{
+				Contents: []*s3.Object{
+					{
+						Key: aws.String("P0.svc1/1/9bsv0s3ipt32jfck6kt0,k1=v1,k2=v2"), // old profile (created_at=2009-11-10 23:00:00 Z)
+					},
+					{
+						Key: aws.String(profileKey),
+					},
+				},
+				IsTruncated: aws.Bool(false),
+			},
+		}
+		params := &storage.FindProfilesParams{
+			Service:      "svc1",
+			CreatedAtMin: time.Date(2020, 1, 0, 0, 0, 0, 0, time.UTC),
+		}
+
+		ids, err := s.FindProfileIDs(context.Background(), params)
+		require.NoError(t, err)
+
+		require.Len(t, ids, 1)
+		assert.Equal(t, profileKey, string(ids[0]))
+	})
 }
 
 func TestStorage_ListServices(t *testing.T) {

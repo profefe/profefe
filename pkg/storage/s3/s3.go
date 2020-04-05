@@ -3,7 +3,6 @@ package s3
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -95,7 +94,7 @@ func (st *Storage) WriteProfile(ctx context.Context, props *storage.WriteProfile
 		CreatedAt: createdAt,
 	}
 
-	st.logger.Debugw("writeProfile: s3 upload", "pid", meta.ProfileID, "key", key, "resp", resp)
+	st.logger.Debugw("writeProfile: s3 upload", "pid", meta.ProfileID, "key", key, "resp", resp, "meta", meta)
 
 	return meta, nil
 }
@@ -265,12 +264,17 @@ func (st *Storage) findProfiles(ctx context.Context, params *storage.FindProfile
 		limit = defaultListObjectsLimit
 	}
 
-	prefix := profileKeyPrefix(params.Service, params.Type)
+	prefix := profileKeyPrefix(params.Service)
+	if params.Type != profile.TypeUnknown {
+		prefix += strconv.Itoa(int(params.Type)) + "/"
+	}
 	input := &s3.ListObjectsV2Input{
 		Bucket:  &st.bucket,
 		Prefix:  aws.String(prefix),
 		MaxKeys: aws.Int64(int64(limit)),
 	}
+
+	st.logger.Debugw("findProfiles: s3 list objects pages", "input", input)
 
 	var metas []profile.Meta
 	err := st.svc.ListObjectsV2PagesWithContext(ctx, input, func(page *s3.ListObjectsV2Output, _ bool) bool {
@@ -345,7 +349,9 @@ func (st *Storage) getObject(ctx context.Context, w io.WriterAt, key string) err
 
 func createProfileKey(service string, ptype profile.ProfileType, createdAt time.Time, labels profile.Labels) string {
 	var buf bytes.Buffer
-	buf.WriteString(profileKeyPrefix(service, ptype))
+	buf.WriteString(profileKeyPrefix(service))
+	buf.WriteString(strconv.Itoa(int(ptype)))
+	buf.WriteByte('/')
 
 	digest := xid.NewWithTime(createdAt)
 	buf.WriteString(digest.String())
@@ -357,9 +363,9 @@ func createProfileKey(service string, ptype profile.ProfileType, createdAt time.
 	return buf.String()
 }
 
-func profileKeyPrefix(service string, ptype profile.ProfileType) string {
+func profileKeyPrefix(service string) string {
 	service = strings.ReplaceAll(service, "/", "_")
-	return fmt.Sprintf("%s%s/%d/", profefeSchema, service, ptype)
+	return profefeSchema + service + "/"
 }
 
 // parses the s3 key by splitting by / to create a profile.Meta.
