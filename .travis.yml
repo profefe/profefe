@@ -7,7 +7,12 @@ go:
 jobs:
   include:
     - stage: test
-      script: make test
+      services: docker
+      env:
+        - MINIO_ENDPOINT_URL=http://127.0.0.1:9000
+      install:
+        - docker container run -d -e MINIO_ACCESS_KEY=minio -e MINIO_SECRET_KEY=minioadmin123 -p 9000:9000 minio/minio server /tmp/s3data
+      script: make test TESTFLAGS=-v
 
     - stage: code check
       if: type = pull_request
