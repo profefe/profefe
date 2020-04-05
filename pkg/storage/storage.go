@@ -14,6 +14,11 @@ var (
 	ErrEmpty    = xerrors.New("empty results")
 )
 
+type Storage interface {
+	Writer
+	Reader
+}
+
 type Writer interface {
 	WriteProfile(ctx context.Context, params *WriteProfileParams, r io.Reader) (profile.Meta, error)
 }
