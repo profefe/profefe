@@ -8,16 +8,12 @@
 *profefe* continuously collects profiling data from a running Go application and provides an API for querying
 the profiling samples base on metadata associated with the application.
 
----
-
-**The project is still in its early state. Feedback and contribution are very welcome.**
-
----
-
 ## Why Continuous Profiling?
 
-"[Continuous Profiling and Go](https://medium.com/@tvii/continuous-profiling-and-go-6c0ab4d2504b)" describes
-the motivation behind the project.
+The blog-post "[Continuous Profiling and Go](https://medium.com/@tvii/continuous-profiling-and-go-6c0ab4d2504b)" describes
+the motivation behind the project:
+
+> With the increase in momentum around the term “observability” over the last few years, there is a common misconception amongst the developers, that observability is exclusively about _metrics_, _logs_ and _tracing_ (a.k.a. “three pillars of observability”) [..] With metrics and tracing, we can see the system on a macro-level. Logs only cover the known parts of the system. Performance profiling is yet another signal that uncovers the micro-level of a system and continuous profiling allows observing how the components of the application or the infrastructure it runs in, influence the overall system.
 
 ## How does it work?
 
@@ -282,6 +278,8 @@ research or commercial projects are already exist
 - [Opsian - Continuous Profiling for JVM](https://opsian.com) (provides on-premises plan for enterprise customers)
 - [Liveprof - Continuous Profiling for PHP](https://habr.com/ru/company/badoo/blog/436364/) (RUS)
 - [FlameScope](https://github.com/Netflix/flamescope)
+
+*The project is still in its early state. Feedback and contribution are very welcome.*
 
 ## License
 
