@@ -3,6 +3,7 @@ package profefe
 import (
 	"context"
 	"io"
+	"sort"
 
 	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 	"github.com/profefe/profefe/pkg/log"
@@ -81,6 +82,11 @@ func (q *Querier) FindProfiles(ctx context.Context, params *storage.FindProfiles
 	for _, meta := range metas {
 		profModels = append(profModels, ProfileFromProfileMeta(meta))
 	}
+
+	sort.Slice(profModels, func(i, j int) bool {
+		return profModels[i].CreatedAt.Before(profModels[j].CreatedAt)
+	})
+
 	return profModels, nil
 }
 
@@ -94,5 +100,12 @@ func (q *Querier) FindMergeProfileTo(ctx context.Context, dst io.Writer, params 
 }
 
 func (q *Querier) ListServices(ctx context.Context) ([]string, error) {
-	return q.sr.ListServices(ctx)
+	services, err := q.sr.ListServices(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Strings(services)
+
+	return services, nil
 }
