@@ -356,7 +356,7 @@ func createProfileKey(service string, ptype profile.ProfileType, createdAt time.
 	buf.WriteString(digest.String())
 	if labels.Len() != 0 {
 		buf.WriteByte(',')
-		buf.WriteString(labels.String())
+		labels.EncodeTo(&buf)
 	}
 
 	return buf.String()
