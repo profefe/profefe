@@ -131,7 +131,6 @@ func (h *ProfilesHandler) HandleMergeProfiles(w http.ResponseWriter, r *http.Req
 		return StatusError(http.StatusMethodNotAllowed, "tracing profiles are not mergeable", nil)
 	}
 
-
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, params.Type))
 
