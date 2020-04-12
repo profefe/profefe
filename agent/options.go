@@ -8,6 +8,12 @@ import (
 
 type Option func(a *Agent)
 
+func WithTickInterval(tick time.Duration) Option {
+	return func(a *Agent) {
+		a.tick = tick
+	}
+}
+
 func WithCPUProfile(duration time.Duration) Option {
 	return func(a *Agent) {
 		a.CPUProfile = true

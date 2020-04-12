@@ -9,21 +9,21 @@ import (
 func TestDo(t *testing.T) {
 	errTest := errors.New("test error")
 
-	t.Run("Do", func(t *testing.T) {
-		err := Do(time.Millisecond, 5*time.Millisecond, func() error {
+	t.Run("DoRetry", func(t *testing.T) {
+		err := DoRetry(time.Millisecond, 5*time.Millisecond, func() error {
 			return nil
 		})
 		if err != nil {
-			t.Errorf("Do: unexpected %v", err)
+			t.Errorf("DoRetry: unexpected %v", err)
 		}
 	})
 
-	t.Run("Do with failed attempts", func(t *testing.T) {
+	t.Run("DoRetry with failed attempts", func(t *testing.T) {
 		var (
 			attempts    int32
 			maxAttempts int32 = 2
 		)
-		err := Do(time.Millisecond, 5*time.Millisecond, func() error {
+		err := DoRetry(time.Millisecond, 5*time.Millisecond, func() error {
 			attempts += 1
 			if attempts == maxAttempts {
 				return nil
@@ -31,19 +31,19 @@ func TestDo(t *testing.T) {
 			return errTest
 		})
 		if attempts != maxAttempts {
-			t.Errorf("Do: got %d attempts, want %d", attempts, maxAttempts)
+			t.Errorf("DoRetry: got %d attempts, want %d", attempts, maxAttempts)
 		}
 		if err != nil {
-			t.Errorf("Do: unexpected %v", err)
+			t.Errorf("DoRetry: unexpected %v", err)
 		}
 	})
 
-	t.Run("Do with cancel", func(t *testing.T) {
+	t.Run("DoRetry with cancel", func(t *testing.T) {
 		var (
 			attempts    int32
 			maxAttempts int32 = 2
 		)
-		err := Do(time.Millisecond, 5*time.Millisecond, func() error {
+		err := DoRetry(time.Millisecond, 5*time.Millisecond, func() error {
 			attempts += 1
 			if attempts == maxAttempts {
 				return Cancel(errTest)
@@ -51,10 +51,10 @@ func TestDo(t *testing.T) {
 			return errors.New("unable to do")
 		})
 		if attempts != maxAttempts {
-			t.Errorf("Do: got %d attempts, want %d", attempts, maxAttempts)
+			t.Errorf("DoRetry: got %d attempts, want %d", attempts, maxAttempts)
 		}
 		if err == nil || err.Error() != errTest.Error() {
-			t.Errorf("Do: got error %v, want %v", err, errTest)
+			t.Errorf("DoRetry: got error %v, want %v", err, errTest)
 		}
 	})
 }
