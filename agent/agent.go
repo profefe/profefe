@@ -18,13 +18,14 @@ import (
 )
 
 const (
+	defaultProfileType = profile.TypeCPU
+
 	defaultDuration     = 10 * time.Second
 	defaultTickInterval = time.Minute
 
-	defaultProfileType = profile.TypeCPU
-
-	backoffMinDelay = time.Minute
-	backoffMaxDelay = 30 * time.Minute
+	backoffMinDelay    = 5 * time.Second
+	backoffMaxDelay    = 2 * time.Minute
+	backoffMaxAttempts = 10
 )
 
 func init() {
@@ -145,16 +146,16 @@ func (a *Agent) sendProfile(ctx context.Context, ptype profile.ProfileType, buf 
 	q.Set("type", ptype.String())
 
 	surl := a.collectorAddr + "/api/0/profiles?" + q.Encode()
-	a.logf("send profile: %s", surl)
 	req, err := http.NewRequest(http.MethodPost, surl, buf)
 	if err != nil {
 		return err
 	}
 	req = req.WithContext(ctx)
 
-	return Do(
+	return DoRetryAttempts(
 		backoffMinDelay,
 		backoffMaxDelay,
+		backoffMaxAttempts,
 		func() error { return a.doRequest(req, nil) },
 	)
 }
@@ -213,9 +214,9 @@ func (a *Agent) collectAndSend(ctx context.Context) {
 			return
 		case <-timer.C:
 			if err := a.collectProfile(ctx, ptype, &buf); err != nil {
-				a.logf("failed to collect profiles: %v", err)
+				a.logf("[FAIL] unable to collect profiles: %v", err)
 			} else if err := a.sendProfile(ctx, ptype, &buf); err != nil {
-				a.logf("failed to send profiles: %v", err)
+				a.logf("[FAIL] unable to send profiles: %v", err)
 			}
 
 			buf.Reset()

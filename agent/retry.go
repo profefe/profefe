@@ -4,11 +4,11 @@ import (
 	"time"
 )
 
-func Do(minDelay, maxDelay time.Duration, fn func() error) error {
-	return DoAttempts(minDelay, maxDelay, 0, fn)
+func DoRetry(minDelay, maxDelay time.Duration, fn func() error) error {
+	return DoRetryAttempts(minDelay, maxDelay, 0, fn)
 }
 
-func DoAttempts(minDelay, maxDelay time.Duration, attempts int, fn func() error) error {
+func DoRetryAttempts(minDelay, maxDelay time.Duration, attempts int, fn func() error) error {
 	r := newRetry(minDelay, maxDelay, attempts)
 	return r.Do(fn)
 }
