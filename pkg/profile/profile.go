@@ -44,9 +44,10 @@ func SplitIDs(s string) ([]ID, error) {
 }
 
 type Meta struct {
-	ProfileID ID          `json:"profile_id"`
-	Service   string      `json:"service"`
-	Type      ProfileType `json:"type"`
-	Labels    Labels      `json:"labels,omitempty"`
-	CreatedAt time.Time   `json:"created_at,omitempty"`
+	ProfileID  ID          `json:"profile_id"`
+	ExternalID ID          `json:"external_id,omitempty"`
+	Service    string      `json:"service"`
+	Type       ProfileType `json:"type"`
+	Labels     Labels      `json:"labels,omitempty"`
+	CreatedAt  time.Time   `json:"created_at,omitempty"`
 }

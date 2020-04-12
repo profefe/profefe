@@ -24,10 +24,11 @@ type Writer interface {
 }
 
 type WriteProfileParams struct {
-	Service   string
-	Type      profile.ProfileType
-	Labels    profile.Labels
-	CreatedAt time.Time
+	ExternalID profile.ID
+	Service    string
+	Type       profile.ProfileType
+	Labels     profile.Labels
+	CreatedAt  time.Time
 }
 
 func (params *WriteProfileParams) Validate() error {
