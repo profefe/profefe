@@ -62,21 +62,21 @@ func New(logger *log.Logger, svc s3iface.S3API, s3Bucket string) *Storage {
 
 // WriteProfile uploads the profile to s3.
 // Context can be canceled and this is safe for multiple goroutines.
-func (st *Storage) WriteProfile(ctx context.Context, props *storage.WriteProfileParams, r io.Reader) (profile.Meta, error) {
-	createdAt := props.CreatedAt
+func (st *Storage) WriteProfile(ctx context.Context, params *storage.WriteProfileParams, r io.Reader) (profile.Meta, error) {
+	createdAt := params.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
 	}
 
-	key := createProfileKey(props.Service, props.Type, createdAt, props.Labels)
+	key := createProfileKey(params.Service, params.Type, createdAt, params.Labels)
 
 	resp, err := st.uploader.UploadWithContext(ctx, &s3manager.UploadInput{
 		Bucket: aws.String(st.bucket),
 		Key:    aws.String(key),
 		Metadata: map[string]*string{
-			"service":    aws.String(props.Service),
-			"type":       aws.String(props.Type.String()),
-			"labels":     aws.String(props.Labels.String()),
+			"service":    aws.String(params.Service),
+			"type":       aws.String(params.Type.String()),
+			"labels":     aws.String(params.Labels.String()),
 			"created_at": aws.String(createdAt.Format(time.RFC3339)),
 		},
 		Body: r,
@@ -87,9 +87,9 @@ func (st *Storage) WriteProfile(ctx context.Context, props *storage.WriteProfile
 
 	meta := profile.Meta{
 		ProfileID: profile.ID(key),
-		Service:   props.Service,
-		Type:      props.Type,
-		Labels:    props.Labels,
+		Service:   params.Service,
+		Type:      params.Type,
+		Labels:    params.Labels,
 		CreatedAt: createdAt,
 	}
 
@@ -356,14 +356,14 @@ func createProfileKey(service string, ptype profile.ProfileType, createdAt time.
 	buf.WriteString(digest.String())
 	if labels.Len() != 0 {
 		buf.WriteByte(',')
-		buf.WriteString(labels.String())
+		labels.EncodeTo(&buf)
 	}
 
 	return buf.String()
 }
 
 func profileKeyPrefix(service string) string {
-	service = strings.ReplaceAll(service, "/", "_")
+	service = strings.ReplaceAll(service, "/", "__")
 	return profefeSchema + service + "/"
 }
 
