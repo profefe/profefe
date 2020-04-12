@@ -1,6 +1,8 @@
 package profile
 
 import (
+	"bytes"
+	"io"
 	"net/url"
 	"sort"
 	"strings"
@@ -156,16 +158,25 @@ func split2(s string, ch byte) (s1, s2 string) {
 	return s, ""
 }
 
-func (labels Labels) String() string {
-	var buf strings.Builder
+type LabelsEncoder interface {
+	io.ByteWriter
+	io.StringWriter
+}
+
+func (labels Labels) EncodeTo(w LabelsEncoder) {
 	for i, label := range labels {
 		if i != 0 {
-			buf.WriteByte(',')
+			w.WriteByte(',')
 		}
-		buf.WriteString(label.Key)
-		buf.WriteByte('=')
-		buf.WriteString(label.Value)
+		w.WriteString(label.Key)
+		w.WriteByte('=')
+		w.WriteString(label.Value)
 	}
+}
+
+func (labels Labels) String() string {
+	var buf bytes.Buffer
+	labels.EncodeTo(&buf)
 	return buf.String()
 }
 
