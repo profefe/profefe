@@ -28,7 +28,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
-	"golang.org/x/xerrors"
 )
 
 func main() {
@@ -49,12 +48,15 @@ func main() {
 		panic(err)
 	}
 
-	if err := run(logger, conf, os.Stdout); err != nil {
+	if err := run(context.Background(), logger, conf, os.Stdout); err != nil {
 		logger.Error(err)
 	}
 }
 
-func run(logger *log.Logger, conf config.Config, stdout io.Writer) error {
+func run(ctx context.Context, logger *log.Logger, conf config.Config, stdout io.Writer) error {
+	sigs := make(chan os.Signal, 2)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+
 	var st storage.Storage
 	if conf.Badger.Dir != "" {
 		var (
@@ -97,15 +99,16 @@ func run(logger *log.Logger, conf config.Config, stdout io.Writer) error {
 		errc <- server.ListenAndServe()
 	}()
 
-	sigs := make(chan os.Signal, 2)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	if err := setupProfefeAgent(ctx, logger, conf); err != nil {
+		return err
+	}
 
 	select {
 	case <-sigs:
 		logger.Info("exiting")
 	case err := <-errc:
 		if err != http.ErrServerClosed {
-			return xerrors.Errorf("terminated: %w", err)
+			return fmt.Errorf("terminated: %w", err)
 		}
 	}
 
@@ -116,10 +119,12 @@ func run(logger *log.Logger, conf config.Config, stdout io.Writer) error {
 }
 
 func initBadgerStorage(logger *log.Logger, conf config.Config) (*storageBadger.Storage, io.Closer, error) {
+	logger = logger.With(zap.String("storage", "badger"))
+
 	opt := badger.DefaultOptions(conf.Badger.Dir)
 	db, err := badger.Open(opt)
 	if err != nil {
-		return nil, nil, xerrors.Errorf("could not open db: %w", err)
+		return nil, nil, fmt.Errorf("could not open db: %w", err)
 	}
 
 	// run values garbage collection, see https://github.com/dgraph-io/badger#garbage-collection
@@ -131,7 +136,7 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*storageBadger.S
 				// badger returns ErrNoRewrite as an indicator that everything went ok
 				continue
 			} else if err != badger.ErrNoRewrite {
-				logger.Errorw("badger failed to run value log garbage collection", zap.Error(err))
+				logger.Errorw("failed to run value log garbage collection", zap.Error(err))
 			}
 			time.Sleep(conf.Badger.GCInterval)
 		}
@@ -142,6 +147,8 @@ func initBadgerStorage(logger *log.Logger, conf config.Config) (*storageBadger.S
 }
 
 func initS3Storage(logger *log.Logger, conf config.Config) (*storageS3.Storage, error) {
+	logger = logger.With(zap.String("storage", "s3"))
+
 	var forcePathStyle bool
 	if conf.S3.EndpointURL != "" {
 		// should one use custom object storage service (e.g. Minio), path-style addressing needs to be set
@@ -155,7 +162,7 @@ func initS3Storage(logger *log.Logger, conf config.Config) (*storageS3.Storage, 
 		S3ForcePathStyle: aws.Bool(forcePathStyle),
 	})
 	if err != nil {
-		return nil, xerrors.Errorf("could not create s3 session: %w", err)
+		return nil, fmt.Errorf("could not create s3 session: %w", err)
 	}
 	return storageS3.New(logger, s3.New(sess), conf.S3.Bucket), nil
 }
@@ -176,4 +183,9 @@ func setupDebugRoutes(mux *http.ServeMux) {
 
 	// prometheus handlers
 	mux.Handle("/debug/metrics", promhttp.Handler())
+}
+
+func setupProfefeAgent(ctx context.Context, logger *log.Logger, conf config.Config) error {
+	logger = logger.With(zap.String("component", "profefe-agent"))
+	return conf.AgentConfig.Start(ctx, logger)
 }

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"time"
 
+	"github.com/profefe/profefe/pkg/agentutil"
 	"github.com/profefe/profefe/pkg/log"
 )
 
@@ -20,6 +21,7 @@ type Config struct {
 	Addr        string
 	ExitTimeout time.Duration
 	Logger      log.Config
+	AgentConfig agentutil.Config
 	Badger      BadgerConfig
 	S3          S3Config
 }
@@ -29,6 +31,8 @@ func (conf *Config) RegisterFlags(f *flag.FlagSet) {
 	f.DurationVar(&conf.ExitTimeout, "exit-timeout", defaultExitTimeout, "server shutdown timeout")
 
 	conf.Logger.RegisterFlags(f)
+	conf.AgentConfig.RegisterFlags(f)
+
 	conf.Badger.RegisterFlags(f)
 	conf.S3.RegisterFlags(f)
 }
