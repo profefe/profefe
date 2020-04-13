@@ -175,6 +175,9 @@ func (labels Labels) EncodeTo(w LabelsEncoder) {
 }
 
 func (labels Labels) String() string {
+	if labels == nil {
+		return ""
+	}
 	var buf bytes.Buffer
 	labels.EncodeTo(&buf)
 	return buf.String()
