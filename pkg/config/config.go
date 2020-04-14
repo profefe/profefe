@@ -11,10 +11,6 @@ import (
 const (
 	defaultAddr        = ":10100"
 	defaultExitTimeout = 5 * time.Second
-
-	defaultRetentionPeriod = 5 * 24 * time.Hour
-	defaultGCInternal      = 5 * time.Minute
-	defaultGCDiscardRatio  = 0.7
 )
 
 type Config struct {
@@ -22,7 +18,11 @@ type Config struct {
 	ExitTimeout time.Duration
 	Logger      log.Config
 	AgentConfig agentutil.Config
+
+	StorageType string
 	Badger      BadgerConfig
+	ClickHouse  ClickHouseConfig
+	Kafka       KafkaConfig
 	S3          S3Config
 }
 
@@ -33,36 +33,5 @@ func (conf *Config) RegisterFlags(f *flag.FlagSet) {
 	conf.Logger.RegisterFlags(f)
 	conf.AgentConfig.RegisterFlags(f)
 
-	conf.Badger.RegisterFlags(f)
-	conf.S3.RegisterFlags(f)
-}
-
-type BadgerConfig struct {
-	Dir            string
-	ProfileTTL     time.Duration
-	GCInterval     time.Duration
-	GCDiscardRatio float64
-}
-
-func (conf *BadgerConfig) RegisterFlags(f *flag.FlagSet) {
-	f.StringVar(&conf.Dir, "badger.dir", "", "badger data dir")
-	f.DurationVar(&conf.ProfileTTL, "badger.profile-ttl", defaultRetentionPeriod, "badger profile data ttl")
-	f.DurationVar(&conf.GCInterval, "badger.gc-interval", defaultGCInternal, "interval in which the badger garbage collector is run")
-	f.Float64Var(&conf.GCDiscardRatio, "badger.gc-discard-ratio", defaultGCDiscardRatio, "a badger file is rewritten if this ratio of the file can be discarded")
-}
-
-type S3Config struct {
-	EndpointURL string
-	DisableSSL  bool
-	Region      string
-	Bucket      string
-	MaxRetries  int
-}
-
-func (conf *S3Config) RegisterFlags(f *flag.FlagSet) {
-	f.StringVar(&conf.EndpointURL, "s3.endpoint-url", "", "override default URL to s3 service")
-	f.BoolVar(&conf.DisableSSL, "s3.disable-ssl", false, "disable SSL verification")
-	f.StringVar(&conf.Region, "s3.region", "us-east-1", "object storage region")
-	f.StringVar(&conf.Bucket, "s3.bucket", "", "s3 bucket profile destination")
-	f.IntVar(&conf.MaxRetries, "s3.max-retries", 3, "s3 request maximum number of retries")
+	conf.registerStorageFlags(f)
 }

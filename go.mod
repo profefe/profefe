@@ -3,6 +3,8 @@ module github.com/profefe/profefe
 go 1.14
 
 require (
+	github.com/ClickHouse/clickhouse-go v1.4.0
+	github.com/Shopify/sarama v1.26.1
 	github.com/aws/aws-sdk-go v1.29.9
 	github.com/cespare/xxhash/v2 v2.1.1
 	github.com/dgraph-io/badger v1.6.0
@@ -14,6 +16,6 @@ require (
 	github.com/stretchr/testify v1.5.1
 	go.uber.org/zap v1.14.1
 	golang.org/x/tools v0.0.0-20200220224806-8a925fa4c0df // indirect
-	golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898
+	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
 	honnef.co/go/tools v0.0.1-2020.1.2
 )
