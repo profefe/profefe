@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	ErrNotFound = xerrors.New("not found")
-	ErrEmpty    = xerrors.New("empty results")
+	ErrNotFound       = xerrors.New("not found")
+	ErrEmpty          = xerrors.New("empty results")
+	ErrNotImplemented = xerrors.New("method not implemented")
 )
 
 type Storage interface {
