@@ -2,28 +2,39 @@ package config
 
 import (
 	"flag"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/profefe/profefe/pkg/agentutil"
 	"github.com/profefe/profefe/pkg/log"
+	storageBadger "github.com/profefe/profefe/pkg/storage/badger"
+	storageCH "github.com/profefe/profefe/pkg/storage/clickhouse"
+	storageS3 "github.com/profefe/profefe/pkg/storage/s3"
 )
 
 const (
 	defaultAddr        = ":10100"
 	defaultExitTimeout = 5 * time.Second
 
-	defaultRetentionPeriod = 5 * 24 * time.Hour
-	defaultGCInternal      = 5 * time.Minute
-	defaultGCDiscardRatio  = 0.7
+	defaultStorageType = "auto"
+	StorageTypeBadger  = "badger"
+	StorageTypeS3      = "s3"
+	StorageTypeCH      = "clickhouse"
 )
+
+var storageTypes = []string{StorageTypeBadger, StorageTypeCH, StorageTypeS3}
 
 type Config struct {
 	Addr        string
 	ExitTimeout time.Duration
 	Logger      log.Config
 	AgentConfig agentutil.Config
-	Badger      BadgerConfig
-	S3          S3Config
+
+	storageType string
+	Badger      storageBadger.Config
+	ClickHouse  storageCH.Config
+	S3          storageS3.Config
 }
 
 func (conf *Config) RegisterFlags(f *flag.FlagSet) {
@@ -33,36 +44,23 @@ func (conf *Config) RegisterFlags(f *flag.FlagSet) {
 	conf.Logger.RegisterFlags(f)
 	conf.AgentConfig.RegisterFlags(f)
 
+	f.StringVar(&conf.storageType, "storage-type", defaultStorageType, fmt.Sprintf("storage type: %s", strings.Join(storageTypes, ", ")))
+
 	conf.Badger.RegisterFlags(f)
+	conf.ClickHouse.RegisterFlags(f)
 	conf.S3.RegisterFlags(f)
 }
 
-type BadgerConfig struct {
-	Dir            string
-	ProfileTTL     time.Duration
-	GCInterval     time.Duration
-	GCDiscardRatio float64
-}
+func (conf *Config) StorageType() ([]string, error) {
+	if conf.storageType != "" && conf.storageType != defaultStorageType {
+		return strings.Split(conf.storageType, ","), nil
+	}
 
-func (conf *BadgerConfig) RegisterFlags(f *flag.FlagSet) {
-	f.StringVar(&conf.Dir, "badger.dir", "", "badger data dir")
-	f.DurationVar(&conf.ProfileTTL, "badger.profile-ttl", defaultRetentionPeriod, "badger profile data ttl")
-	f.DurationVar(&conf.GCInterval, "badger.gc-interval", defaultGCInternal, "interval in which the badger garbage collector is run")
-	f.Float64Var(&conf.GCDiscardRatio, "badger.gc-discard-ratio", defaultGCDiscardRatio, "a badger file is rewritten if this ratio of the file can be discarded")
-}
-
-type S3Config struct {
-	EndpointURL string
-	DisableSSL  bool
-	Region      string
-	Bucket      string
-	MaxRetries  int
-}
-
-func (conf *S3Config) RegisterFlags(f *flag.FlagSet) {
-	f.StringVar(&conf.EndpointURL, "s3.endpoint-url", "", "override default URL to s3 service")
-	f.BoolVar(&conf.DisableSSL, "s3.disable-ssl", false, "disable SSL verification")
-	f.StringVar(&conf.Region, "s3.region", "us-east-1", "object storage region")
-	f.StringVar(&conf.Bucket, "s3.bucket", "", "s3 bucket profile destination")
-	f.IntVar(&conf.MaxRetries, "s3.max-retries", 3, "s3 request maximum number of retries")
+	// mimic previous behaviour, where storage type was determined by storage-related flags
+	if conf.Badger.Dir != "" {
+		return []string{StorageTypeBadger}, nil
+	} else if conf.S3.Bucket != "" {
+		return []string{StorageTypeS3}, nil
+	}
+	return nil, fmt.Errorf("storage configuration required")
 }

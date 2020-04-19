@@ -16,6 +16,7 @@ import (
 	storageS3 "github.com/profefe/profefe/pkg/storage/s3"
 	"github.com/profefe/profefe/pkg/storage/storagetest"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
 )
 
@@ -42,8 +43,8 @@ func TestStorage(t *testing.T) {
 	s3Bucket := fmt.Sprintf("profefe-test.%d", time.Now().Unix())
 	setupS3Bucket(t, svc, s3Bucket)
 
-	testLogger := zaptest.NewLogger(t)
-	st := storageS3.New(log.New(testLogger), svc, s3Bucket)
+	testLogger := zaptest.NewLogger(t, zaptest.Level(zapcore.FatalLevel))
+	st := storageS3.NewStorage(log.New(testLogger), svc, s3Bucket)
 
 	storagetest.RunTestSuite(t, st)
 }
