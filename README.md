@@ -13,7 +13,11 @@ the profiling samples base on metadata associated with the application.
 The blog-post "[Continuous Profiling and Go](https://medium.com/@tvii/continuous-profiling-and-go-6c0ab4d2504b)" describes
 the motivation behind the project:
 
-> With the increase in momentum around the term “observability” over the last few years, there is a common misconception amongst the developers, that observability is exclusively about _metrics_, _logs_ and _tracing_ (a.k.a. “three pillars of observability”) [..] With metrics and tracing, we can see the system on a macro-level. Logs only cover the known parts of the system. Performance profiling is yet another signal that uncovers the micro-level of a system and continuous profiling allows observing how the components of the application or the infrastructure it runs in, influence the overall system.
+> With the increase in momentum around the term “observability” over the last few years, there is a common misconception
+> amongst the developers, that observability is exclusively about _metrics_, _logs_ and _tracing_ (a.k.a. “three pillars of observability”)
+> [..] With metrics and tracing, we can see the system on a macro-level. Logs only cover the known parts of the system.
+> Performance profiling is yet another signal that uncovers the micro-level of a system and continuous profiling allows
+> observing how the components of the application or the infrastructure it runs in, influence the overall system.
 
 ## How does it work?
 
@@ -25,7 +29,7 @@ To build and start profefe collector, run:
 
 ```
 > make
-> ./BUILD/profefe -addr :10100 -log.level debug -badger.dir /tmp/profefe-data
+> ./BUILD/profefe -addr=locahost:10100 -storage-type=badger -badger.dir=/tmp/profefe-data
 
 2019-06-06T00:07:58.499+0200    info    profefe/main.go:86    server is running    {"addr": ":10100"}
 ```
@@ -129,7 +133,7 @@ Go's [runtime traces](https://golang.org/pkg/runtime/trace/) are a special case 
 and queried with profefe.
 
 Currently, profefe doesn't support extracting the timestamp of when the trace was created. Client may provide
-this information via `created_at` parameter, see below:
+this information via `created_at` parameter, see below.
 
 ```
 POST /api/0/profiles?service=<service>&type=trace&created_at=<created_at>&labels=<key=value,key=value>
@@ -256,7 +260,9 @@ from Go's Diagnostics documentation).
 
 To reduce the costs, users can adjust the frequency of profiles collection, e.g. collect 10 seconds of CPU profiles every 5 minutes.
 
-[profefe-agent](https://godoc.org/github.com/profefe/profefe/agent) tries to reduce the overhead further by adding a small jiggling in-between the profiles collections. This distributes the total profiling overhead, making sure that not all instances of the application's cluster are being profiled at the same time.
+[profefe-agent](https://godoc.org/github.com/profefe/profefe/agent) tries to reduce the overhead further by adding a small
+jiggling in-between the profiles collections. This distributes the total profiling overhead, making sure that not all instances
+of the application's cluster are being profiled at the same time.
 
 ### Can I use profefe with non-Go projects?
 
