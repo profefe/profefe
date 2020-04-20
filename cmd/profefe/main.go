@@ -155,6 +155,12 @@ func initProfefe(
 				assembleStorage(st, st, nil)
 			}
 			return err
+		case config.StorageTypeCH:
+			st, closer, err := conf.ClickHouse.CreateStorage(logger)
+			if err == nil {
+				assembleStorage(st, st, closer)
+			}
+			return err
 		default:
 			return fmt.Errorf("unknown storage type %q, config %v", stype, conf)
 		}
