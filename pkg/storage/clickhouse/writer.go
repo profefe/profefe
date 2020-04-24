@@ -25,7 +25,7 @@ const (
 			labels.key,
 			labels.value
 		)
-		VALUES (?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	sqlInsertPprofSamples = `
 		INSERT INTO pprof_samples (
