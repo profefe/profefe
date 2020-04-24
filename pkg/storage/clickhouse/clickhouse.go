@@ -40,7 +40,7 @@ func (conf *Config) CreateStorage(logger *log.Logger) (*Storage, io.Closer, erro
 	profilesWriter := NewProfilesWriter(logger, db)
 	samplesWriter := NewSamplesWriter(logger, db)
 
-	if conf.SamplesWriterPool > 1 {
+	if conf.SamplesWriterPool > 0 {
 		writer := withPool(conf.SamplesWriterPool, logger, samplesWriter)
 		closers = append(closers, writer)
 		samplesWriter = writer
