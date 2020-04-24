@@ -164,8 +164,8 @@ func (sw *samplesWriter) insertPprofSamples(ctx context.Context, tx *sql.Tx, pk 
 	args := make([]interface{}, 8) // n is for number of inserted values, see query
 	args[0] = pk
 
-	samplesDgstr := samplesDigestPool.Get().(*samplesDigest)
-	defer samplesDigestPool.Put(samplesDgstr)
+	fingerprinter := samplesFingerprinterPool.Get().(*samplesFingerprinter)
+	defer samplesFingerprinterPool.Put(fingerprinter)
 
 	// locations
 	var (
@@ -195,7 +195,7 @@ func (sw *samplesWriter) insertPprofSamples(ctx context.Context, tx *sql.Tx, pk 
 			lines = make([]uint16, 0, nlocs)
 		}
 
-		args[1] = samplesDgstr.Digest(sample)
+		args[1] = fingerprinter.Fingerprint(sample)
 
 		funcs, files, lines := collectLocations(sample, locs, lines)
 		args[2] = clickhouse.Array(funcs)

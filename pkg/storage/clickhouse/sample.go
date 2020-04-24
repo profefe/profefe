@@ -20,36 +20,37 @@ func isEmptySample(s *pprofProfile.Sample) bool {
 }
 
 // calculates a hash for a single profile sample
-type samplesDigest struct {
+type samplesFingerprinter struct {
 	hash *xxhash.Digest
 	buf  []byte
 }
 
-var samplesDigestPool = sync.Pool{
+var samplesFingerprinterPool = sync.Pool{
 	New: func() interface{} {
-		return &samplesDigest{
+		return &samplesFingerprinter{
 			hash: xxhash.New(),
 			buf:  make([]byte, 0, 65536), // 64KB
 		}
 	},
 }
 
-func (dgst *samplesDigest) Digest(sample *pprofProfile.Sample) uint64 {
-	dgst.hash.Reset()
+func (sfp *samplesFingerprinter) Fingerprint(sample *pprofProfile.Sample) uint64 {
+	defer sfp.hash.Reset()
 
 	// locations
 	for _, loc := range sample.Location {
-		dgst.buf = strconv.AppendUint(dgst.buf, loc.Address, 16)
+		sfp.buf = strconv.AppendUint(sfp.buf, loc.Address, 16)
 		for _, line := range loc.Line {
-			dgst.buf = append(dgst.buf, '|')
-			dgst.buf = append(dgst.buf, line.Function.Filename...)
-			dgst.buf = append(dgst.buf, ':')
-			dgst.buf = strconv.AppendInt(dgst.buf, line.Line, 10)
-			dgst.buf = append(dgst.buf, line.Function.Name...)
+			sfp.buf = append(sfp.buf, '|')
+			sfp.buf = append(sfp.buf, line.Function.Filename...)
+			sfp.buf = append(sfp.buf, ':')
+			sfp.buf = strconv.AppendInt(sfp.buf, line.Line, 10)
+			sfp.buf = append(sfp.buf, line.Function.Name...)
 		}
 	}
-	dgst.hash.Write(dgst.buf)
-	dgst.buf = dgst.buf[:0]
+
+	sfp.hash.Write(sfp.buf)
+	sfp.buf = sfp.buf[:0]
 
 	// XXX(narqo) generally a sample has way more locations than labels,
 	// thus don't bother reusing labels' buffers
@@ -63,7 +64,7 @@ func (dgst *samplesDigest) Digest(sample *pprofProfile.Sample) uint64 {
 		}
 		sort.Strings(labels)
 		for _, label := range labels {
-			dgst.hash.WriteString(label)
+			sfp.hash.WriteString(label)
 		}
 	}
 
@@ -75,9 +76,9 @@ func (dgst *samplesDigest) Digest(sample *pprofProfile.Sample) uint64 {
 		}
 		sort.Strings(labels)
 		for _, label := range labels {
-			dgst.hash.WriteString(label)
+			sfp.hash.WriteString(label)
 		}
 	}
 
-	return dgst.hash.Sum64()
+	return sfp.hash.Sum64()
 }
