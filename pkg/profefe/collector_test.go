@@ -3,6 +3,7 @@ package profefe
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/profefe/profefe/pkg/log"
+	"github.com/profefe/profefe/pkg/pprofutil"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
 	"github.com/stretchr/testify/assert"
@@ -36,7 +38,6 @@ func TestCollector_WriteProfile(t *testing.T) {
 			pprofData,
 		},
 		{
-
 			&storage.WriteProfileParams{
 				Service: "service1",
 				Type:    profile.TypeTrace,
@@ -88,4 +89,7 @@ func TestCollector_WriteProfile_MalformedPprofData(t *testing.T) {
 	}
 	_, err := collector.WriteProfile(context.Background(), params, strings.NewReader("not a pprof"))
 	require.Error(t, err)
+
+	var perr *pprofutil.ProfileParserError
+	require.True(t, errors.As(err, &perr))
 }

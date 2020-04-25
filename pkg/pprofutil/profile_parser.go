@@ -2,11 +2,24 @@ package pprofutil
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 
 	pprofProfile "github.com/profefe/profefe/internal/pprof/profile"
 )
+
+type ProfileParserError struct {
+	err error
+}
+
+func (e *ProfileParserError) Unwrap() error {
+	return e.err
+}
+
+func (e *ProfileParserError) Error() string {
+	return e.err.Error()
+}
 
 type ProfileParser struct {
 	r    *bytes.Reader
@@ -33,7 +46,13 @@ func (pr *ProfileParser) ParseProfile() (prof *pprofProfile.Profile, err error) 
 	if pr.prof == nil {
 		pr.prof, err = pprofProfile.Parse(pr.r)
 	}
-	return pr.prof, err
+	if err != nil {
+		return nil, &ProfileParserError{err}
+	}
+	if len(pr.prof.Sample) == 0 {
+		return nil, &ProfileParserError{fmt.Errorf("profile is empty: no samples")}
+	}
+	return pr.prof, nil
 }
 
 func ParseProfileFrom(r io.Reader) (*pprofProfile.Profile, error) {

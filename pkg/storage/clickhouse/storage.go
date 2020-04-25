@@ -44,11 +44,6 @@ func (st *Storage) WriteProfile(ctx context.Context, params *storage.WriteProfil
 		return profile.Meta{}, fmt.Errorf("could not parse profile: %w", err)
 	}
 
-	// TODO(narqo) figure out how to notify agent about this error, so it doesn't retry
-	//if len(pp.Sample) == 0 {
-	//	return profile.Meta{}, fmt.Errorf("profile is empty")
-	//}
-
 	createdAt := params.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = time.Unix(0, pp.TimeNanos)
