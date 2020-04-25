@@ -3,6 +3,7 @@ package clickhouse
 import (
 	"database/sql"
 	"flag"
+	"fmt"
 	"io"
 
 	_ "github.com/ClickHouse/clickhouse-go"
@@ -10,29 +11,24 @@ import (
 )
 
 type Config struct {
-	DSN               string
-	DropDatabase      bool
-	SamplesWriterPool int
+	DSN string
+
+	SamplesWriterPoolSize int
 }
 
 func (conf *Config) RegisterFlags(f *flag.FlagSet) {
 	f.StringVar(&conf.DSN, "clickhouse.dsn", "", "clickhouse dsn")
-	f.BoolVar(&conf.DropDatabase, "clickhouse.dropdb", false, "drop database on start")
-	f.IntVar(&conf.SamplesWriterPool, "clickhouse.samples-writer.pool-size", 0, "samples writer workers pool size (zero means don't use pool)")
+	f.IntVar(&conf.SamplesWriterPoolSize, "clickhouse.samples-writer.pool-size", 0, "samples writer workers pool size (zero means don't use pool)")
 }
 
 func (conf *Config) CreateStorage(logger *log.Logger) (*Storage, io.Closer, error) {
-	if err := SetupDB(logger, conf.DSN, conf.DropDatabase); err != nil {
-		return nil, nil, err
-	}
-
 	db, err := sql.Open("clickhouse", conf.DSN)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if err := SetupTables(db); err != nil {
-		return nil, nil, err
+	if err := db.Ping(); err != nil {
+		return nil, nil, fmt.Errorf("failed to ping db: %w", err)
 	}
 
 	closers := multiCloser{db}
@@ -40,8 +36,8 @@ func (conf *Config) CreateStorage(logger *log.Logger) (*Storage, io.Closer, erro
 	profilesWriter := NewProfilesWriter(logger, db)
 	samplesWriter := NewSamplesWriter(logger, db)
 
-	if conf.SamplesWriterPool > 0 {
-		writer := withPool(conf.SamplesWriterPool, logger, samplesWriter)
+	if conf.SamplesWriterPoolSize > 0 {
+		writer := withPool(conf.SamplesWriterPoolSize, logger, samplesWriter)
 		closers = append(closers, writer)
 		samplesWriter = writer
 	}

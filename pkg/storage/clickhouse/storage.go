@@ -84,7 +84,7 @@ func (st *Storage) writeProfile(
 	params *storage.WriteProfileParams,
 	pp *pprofProfile.Profile,
 ) error {
-	if err := st.samplesWriter.WriteSamples(ctx, pk, pp.Sample); err != nil {
+	if err := st.samplesWriter.WriteSamples(ctx, pk, pp.Sample, pp.SampleType); err != nil {
 		return err
 	}
 	if err := st.profilesWriter.WriteProfile(ctx, pk, ptype, createdAt, params); err != nil {

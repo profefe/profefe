@@ -3,6 +3,7 @@ package clickhouse
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -30,15 +31,17 @@ const (
 	sqlInsertPprofSamples = `
 		INSERT INTO pprof_samples (
 			profile_key,
-			digest,
+			fingerprint,
 			locations.func_name,
 			locations.file_name,
 			locations.lineno,
 			values,
+			values_type,
+			values_unit,
 			labels.key,
 			labels.value
 		) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 )
 
 type ProfilesWriter interface {
@@ -46,7 +49,7 @@ type ProfilesWriter interface {
 }
 
 type SamplesWriter interface {
-	WriteSamples(ctx context.Context, pk ProfileKey, samples []*pprofProfile.Sample) error
+	WriteSamples(ctx context.Context, pk ProfileKey, samples []*pprofProfile.Sample, sampleTypes []*pprofProfile.ValueType) error
 }
 
 type beginTxer interface {
@@ -135,8 +138,6 @@ func (pw *profilesWriter) insertPprofProfiles(
 	return stmt.Close()
 }
 
-var errPoolClosed = fmt.Errorf("pool is closed")
-
 type samplesWriter struct {
 	db     *sql.DB
 	logger *log.Logger
@@ -149,30 +150,35 @@ func NewSamplesWriter(logger *log.Logger, db *sql.DB) SamplesWriter {
 	}
 }
 
-func (sw *samplesWriter) WriteSamples(ctx context.Context, pk ProfileKey, samples []*pprofProfile.Sample) error {
+func (sw *samplesWriter) WriteSamples(ctx context.Context, pk ProfileKey, samples []*pprofProfile.Sample, sampleTypes []*pprofProfile.ValueType) error {
 	return withinTx(ctx, sw.db, func(tx *sql.Tx) error {
-		return sw.insertPprofSamples(ctx, tx, pk, samples)
+		return sw.insertPprofSamples(ctx, tx, pk, samples, sampleTypes)
 	})
 }
 
-func (sw *samplesWriter) insertPprofSamples(ctx context.Context, tx *sql.Tx, pk ProfileKey, samples []*pprofProfile.Sample) error {
+func (sw *samplesWriter) insertPprofSamples(ctx context.Context, tx *sql.Tx, pk ProfileKey, samples []*pprofProfile.Sample, sampleTypes []*pprofProfile.ValueType) error {
 	stmt, err := tx.PrepareContext(ctx, sqlInsertPprofSamples)
 	if err != nil {
 		return err
 	}
 
-	args := make([]interface{}, 8) // n is for number of inserted values, see query
+	args := make([]interface{}, 10) // size of the slice is from number of inserted values in the query
 	args[0] = pk
 
 	fingerprinter := samplesFingerprinterPool.Get().(*samplesFingerprinter)
 	defer samplesFingerprinterPool.Put(fingerprinter)
 
-	// locations
-	var (
-		locs  []string
-		lines []uint16
+	valueTypes := make([]string, len(sampleTypes))
+	valueUnits := make([]string, len(sampleTypes))
+	for i := 0; i < len(sampleTypes); i++ {
+		valueTypes[i] = sampleTypes[i].Type
+		valueUnits[i] = sampleTypes[i].Unit
+	}
 
-		labelKeys, labelVals []string
+	// reusable slice buffers
+	var (
+		lines                                    []uint16
+		locs, funcs, files, labelKeys, labelVals []string
 	)
 	for n, sample := range samples {
 		// exit quickly on cancelled context
@@ -197,15 +203,18 @@ func (sw *samplesWriter) insertPprofSamples(ctx context.Context, tx *sql.Tx, pk 
 
 		args[1] = fingerprinter.Fingerprint(sample)
 
-		funcs, files, lines := collectLocations(sample, locs, lines)
+		funcs, files, lines = collectLocations(sample, locs, lines)
 		args[2] = clickhouse.Array(funcs)
 		args[3] = clickhouse.Array(files)
 		args[4] = clickhouse.Array(lines)
+
 		args[5] = clickhouse.Array(sample.Value)
+		args[6] = clickhouse.Array(valueTypes)
+		args[7] = clickhouse.Array(valueUnits)
 
 		labelKeys, labelVals = collectLabels(sample, labelKeys, labelVals)
-		args[6] = clickhouse.Array(labelKeys)
-		args[7] = clickhouse.Array(labelVals)
+		args[8] = clickhouse.Array(labelKeys)
+		args[9] = clickhouse.Array(labelVals)
 
 		sw.logger.Debugw("insertPprofSamples: insert sample", log.ByteString("pk", pk[:]), log.MultiLine("query", sqlInsertPprofSamples), "args", args)
 
@@ -249,6 +258,8 @@ func collectLabels(sample *pprofProfile.Sample, keys []string, svals []string) (
 	return keys, svals
 }
 
+var errPoolClosed = errors.New("pool is closed")
+
 type pooledSamplesWriter struct {
 	baseCtx       context.Context
 	cancelBaseCtx context.CancelFunc
@@ -289,7 +300,7 @@ func (p *pooledSamplesWriter) spawnWorkers() {
 	}
 }
 
-func (p *pooledSamplesWriter) WriteSamples(ctx context.Context, pk ProfileKey, samples []*pprofProfile.Sample) error {
+func (p *pooledSamplesWriter) WriteSamples(ctx context.Context, pk ProfileKey, samples []*pprofProfile.Sample, sampleTypes []*pprofProfile.ValueType) error {
 	select {
 	case <-p.closing:
 		return errPoolClosed
@@ -298,7 +309,7 @@ func (p *pooledSamplesWriter) WriteSamples(ctx context.Context, pk ProfileKey, s
 
 	job := func() {
 		// job's context mustn't be bound to incoming context
-		err := p.sw.WriteSamples(p.baseCtx, pk, samples)
+		err := p.sw.WriteSamples(p.baseCtx, pk, samples, sampleTypes)
 		if err != nil {
 			p.logger.Errorw("pooledSamplesWriter failed to write samples", log.ByteString("pk", pk[:]), "samples_total", len(samples), zap.Error(err))
 		}
@@ -314,7 +325,7 @@ func (p *pooledSamplesWriter) WriteSamples(ctx context.Context, pk ProfileKey, s
 	}
 }
 
-// XXX(narqo) fix data race on close
+// XXX(narqo) fix data race in pooledSamplesWriter.Close
 func (p *pooledSamplesWriter) Close() error {
 	close(p.closing)
 

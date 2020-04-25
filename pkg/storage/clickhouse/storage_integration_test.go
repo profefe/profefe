@@ -20,10 +20,10 @@ func TestStorage(t *testing.T) {
 		t.SkipNow()
 	}
 
-	logger := log.New(zaptest.NewLogger(t, zaptest.Level(zapcore.FatalLevel)))
-
-	db := setupDB(t, logger, chDSN)
+	db := setupDB(t, chDSN)
 	defer db.Close()
+
+	logger := log.New(zaptest.NewLogger(t, zaptest.Level(zapcore.FatalLevel)))
 
 	profilesWriter := storageCH.NewProfilesWriter(logger, db)
 	samplesWriter := storageCH.NewSamplesWriter(logger, db)
@@ -40,15 +40,17 @@ func TestStorage(t *testing.T) {
 	})
 }
 
-func setupDB(t *testing.T, logger *log.Logger, dsn string) *sql.DB {
-	err := storageCH.SetupDB(logger, dsn, true)
-	require.NoError(t, err)
-
+func setupDB(t *testing.T, dsn string) *sql.DB {
 	db, err := sql.Open("clickhouse", dsn)
 	require.NoError(t, err)
 
 	require.NoError(t, db.Ping())
-	require.NoError(t, storageCH.SetupTables(db))
+
+	_, err = db.Exec(`TRUNCATE TABLE pprof_profiles`)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`TRUNCATE TABLE pprof_samples`)
+	require.NoError(t, err)
 
 	return db
 }
