@@ -9,9 +9,10 @@ jobs:
     - stage: test
       services: docker
       env:
-        - MINIO_ENDPOINT_URL=http://127.0.0.1:9000
+        - MINIO_ENDPOINT_URL=http://127.0.0.1:19000
+        - CLICKHOUSE_DSN='tcp://127.0.0.1:29000'
       install:
-        - docker container run -d -e MINIO_ACCESS_KEY=minio -e MINIO_SECRET_KEY=minioadmin123 -p 9000:9000 minio/minio server /tmp/s3data
+        - docker-compose up -V -d minio clickhouse
       script: make test TESTFLAGS=-v
 
     - stage: code check
