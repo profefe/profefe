@@ -17,7 +17,8 @@ It also provides an API for querying and retrieving stored profiles.
 
 Currently implemented storages:
 - `storage/badger`, keeps data in [Badger DB](https://github.com/dgraph-io/badger);
-- `storage/s3`, stores data in s3-compatible object storage service.
+- `storage/s3`, stores data in s3-compatible object storage service;
+- `storage/clickhouse` (_experimental_), stores parsed profiling data in [ClickHouse DB](https://clickhouse.tech/).
 
 ### Agent
 
