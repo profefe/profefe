@@ -10,6 +10,7 @@ import (
 	storageCH "github.com/profefe/profefe/pkg/storage/clickhouse"
 	"github.com/profefe/profefe/pkg/storage/storagetest"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
 )
@@ -31,13 +32,36 @@ func TestStorage(t *testing.T) {
 	st, err := storageCH.NewStorage(logger, db, profilesWriter, samplesWriter)
 	require.NoError(t, err)
 
-	// only subset of the test suite is supported
-	t.Run("TestFindProfileIDs", func(t *testing.T) {
-		storagetest.TestFindProfileIDs(t, st)
+	t.Run("Reader", func(t *testing.T) {
+		ts := &ReaderTestSuite{
+			DB: db,
+
+			ReaderTestSuite: &storagetest.ReaderTestSuite{
+				Reader: st,
+				Writer: st,
+			},
+		}
+		suite.Run(t, ts)
 	})
-	t.Run("TestListServices", func(t *testing.T) {
-		storagetest.TestListServices(t, st)
-	})
+}
+
+type ReaderTestSuite struct {
+	*storagetest.ReaderTestSuite
+
+	DB *sql.DB
+}
+
+func (ts *ReaderTestSuite) SetupTest() {
+	_, err := ts.DB.Exec(`TRUNCATE TABLE pprof_profiles`)
+	ts.Require().NoError(err)
+
+	_, err = ts.DB.Exec(`TRUNCATE TABLE pprof_samples`)
+	ts.Require().NoError(err)
+}
+
+// not supported by storage
+func (ts *ReaderTestSuite) TestListProfiles() {
+	ts.T().SkipNow()
 }
 
 func setupDB(t *testing.T, dsn string) *sql.DB {
@@ -45,12 +69,6 @@ func setupDB(t *testing.T, dsn string) *sql.DB {
 	require.NoError(t, err)
 
 	require.NoError(t, db.Ping())
-
-	_, err = db.Exec(`TRUNCATE TABLE pprof_profiles`)
-	require.NoError(t, err)
-
-	_, err = db.Exec(`TRUNCATE TABLE pprof_samples`)
-	require.NoError(t, err)
 
 	return db
 }
