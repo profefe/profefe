@@ -26,27 +26,33 @@ func NewCollector(logger *log.Logger, sw storage.Writer) *Collector {
 }
 
 func (c *Collector) WriteProfile(ctx context.Context, params *storage.WriteProfileParams, r io.Reader) (Profile, error) {
-	if params.Type != profile.TypeTrace && params.CreatedAt.IsZero() {
-		data, err := ioutil.ReadAll(r)
-		if err != nil {
-			return Profile{}, err
-		}
-
-		parser := pprofutil.NewProfileParser(data)
-
-		pp, err := parser.ParseProfile()
-		if err != nil {
-			return Profile{}, fmt.Errorf("could not parse pprof profile: %w", err)
-		}
-		if pp.TimeNanos > 0 {
-			params.CreatedAt = time.Unix(0, pp.TimeNanos).UTC()
-		}
-
-		// move reader's reading position to start to allow storage writers to read the data
-		parser.Seek(0, io.SeekStart)
-		r = parser
+	// don't parse or even read trace profiles, pass them directly to an underlying storage.Writer
+	if params.Type == profile.TypeTrace {
+		return c.writeProfile(ctx, params, r)
 	}
 
+	data, err := ioutil.ReadAll(r)
+	if err != nil {
+		return Profile{}, err
+	}
+
+	parser := pprofutil.NewProfileParser(data)
+
+	pp, err := parser.ParseProfile()
+	if err != nil {
+		return Profile{}, fmt.Errorf("could not parse pprof profile: %w", err)
+	}
+	if pp.TimeNanos > 0 {
+		params.CreatedAt = time.Unix(0, pp.TimeNanos).UTC()
+	}
+
+	// move reader's reading position to start to allow storage writers to read the data
+	parser.Seek(0, io.SeekStart)
+
+	return c.writeProfile(ctx, params, parser)
+}
+
+func (c *Collector) writeProfile(ctx context.Context, params *storage.WriteProfileParams, r io.Reader) (Profile, error) {
 	if params.CreatedAt.IsZero() {
 		params.CreatedAt = time.Now().UTC()
 	}

@@ -1,6 +1,7 @@
 package profefe
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/profefe/profefe/pkg/log"
+	"github.com/profefe/profefe/pkg/pprofutil"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
 	"golang.org/x/xerrors"
@@ -59,6 +61,10 @@ func (h *ProfilesHandler) HandleCreateProfile(w http.ResponseWriter, r *http.Req
 
 	profModel, err := h.collector.WriteProfile(r.Context(), params, r.Body)
 	if err != nil {
+		var perr *pprofutil.ProfileParserError
+		if errors.As(err, &perr) {
+			return StatusError(http.StatusBadRequest, fmt.Sprintf("malformed profile (%s)", err), perr)
+		}
 		return StatusError(http.StatusInternalServerError, "failed to collect profile", err)
 	}
 
