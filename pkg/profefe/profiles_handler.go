@@ -90,8 +90,8 @@ func (h *ProfilesHandler) HandleGetProfile(w http.ResponseWriter, r *http.Reques
 	err = h.querier.GetProfilesTo(r.Context(), w, pids)
 	if err == storage.ErrNotFound {
 		return ErrNotFound
-	} else if err == storage.ErrEmpty {
-		return ErrEmpty
+	} else if err == storage.ErrNoResults {
+		return ErrNoResults
 	} else if err != nil {
 		err = xerrors.Errorf("could not get profile by id %q: %w", rawPids, err)
 		return StatusError(http.StatusInternalServerError, fmt.Sprintf("failed to get profile by id %q", rawPids), err)
@@ -110,8 +110,8 @@ func (h *ProfilesHandler) HandleFindProfiles(w http.ResponseWriter, r *http.Requ
 	profModels, err := h.querier.FindProfiles(r.Context(), params)
 	if err == storage.ErrNotFound {
 		return ErrNotFound
-	} else if err == storage.ErrEmpty {
-		return ErrEmpty
+	} else if err == storage.ErrNoResults {
+		return ErrNoResults
 	} else if err != nil {
 		return err
 	}
@@ -137,8 +137,8 @@ func (h *ProfilesHandler) HandleMergeProfiles(w http.ResponseWriter, r *http.Req
 	err := h.querier.FindMergeProfileTo(r.Context(), w, params)
 	if err == storage.ErrNotFound {
 		return ErrNotFound
-	} else if err == storage.ErrEmpty {
-		return ErrEmpty
+	} else if err == storage.ErrNoResults {
+		return ErrNoResults
 	}
 	return err
 }

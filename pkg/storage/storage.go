@@ -2,17 +2,18 @@ package storage
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"time"
 
 	"github.com/profefe/profefe/pkg/profile"
-	"golang.org/x/xerrors"
 )
 
 var (
-	ErrNotFound       = xerrors.New("not found")
-	ErrEmpty          = xerrors.New("empty results")
-	ErrNotImplemented = xerrors.New("method not implemented")
+	ErrNotFound       = errors.New("not found")
+	ErrNoResults      = errors.New("no results")
+	ErrNotImplemented = errors.New("method not implemented")
 )
 
 type Storage interface {
@@ -34,13 +35,13 @@ type WriteProfileParams struct {
 
 func (params *WriteProfileParams) Validate() error {
 	if params == nil {
-		return xerrors.New("empty params")
+		return errors.New("empty params")
 	}
 	if params.Service == "" {
-		return xerrors.New("empty service")
+		return errors.New("empty service")
 	}
 	if params.Type == profile.TypeUnknown {
-		return xerrors.Errorf("unknown profile type %s", params.Type)
+		return fmt.Errorf("unknown profile type %s", params.Type)
 	}
 	return nil
 }
@@ -63,19 +64,19 @@ type FindProfilesParams struct {
 
 func (params *FindProfilesParams) Validate() error {
 	if params == nil {
-		return xerrors.New("empty params")
+		return errors.New("empty params")
 	}
 	if params.Service == "" {
-		return xerrors.New("service empty")
+		return errors.New("empty service")
 	}
 	if params.Type == profile.TypeUnknown {
-		return xerrors.Errorf("unknown profile type %s", params.Type)
+		return fmt.Errorf("unknown profile type %s", params.Type)
 	}
 	if params.CreatedAtMin.IsZero() || params.CreatedAtMax.IsZero() {
-		return xerrors.Errorf("profile created time zero: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
+		return fmt.Errorf("created_at is zero: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
 	}
 	if params.CreatedAtMin.After(params.CreatedAtMax) {
-		return xerrors.Errorf("profile created time min after max: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
+		return fmt.Errorf("created_at min after max: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
 	}
 	return nil
 }

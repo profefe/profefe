@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	ErrEmpty    = StatusError(http.StatusNoContent, "empty results", nil)
-	ErrNotFound = StatusError(http.StatusNotFound, "nothing found", nil)
+	ErrNoResults = StatusError(http.StatusNoContent, "no results", nil)
+	ErrNotFound  = StatusError(http.StatusNotFound, "nothing found", nil)
 )
 
 type jsonResponse struct {
