@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	ErrNotFound = xerrors.New("not found")
-	ErrEmpty    = xerrors.New("empty results")
+	ErrNotFound       = xerrors.New("not found")
+	ErrEmpty          = xerrors.New("empty results")
+	ErrNotImplemented = xerrors.New("method not implemented")
 )
 
 type Storage interface {
@@ -24,10 +25,11 @@ type Writer interface {
 }
 
 type WriteProfileParams struct {
-	Service   string
-	Type      profile.ProfileType
-	Labels    profile.Labels
-	CreatedAt time.Time
+	ExternalID profile.ID
+	Service    string
+	Type       profile.ProfileType
+	Labels     profile.Labels
+	CreatedAt  time.Time
 }
 
 func (params *WriteProfileParams) Validate() error {

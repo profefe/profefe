@@ -11,19 +11,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/dgraph-io/badger"
 	"github.com/profefe/profefe/pkg/config"
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/middleware"
 	"github.com/profefe/profefe/pkg/profefe"
 	"github.com/profefe/profefe/pkg/storage"
-	storageBadger "github.com/profefe/profefe/pkg/storage/badger"
-	storageS3 "github.com/profefe/profefe/pkg/storage/s3"
 	"github.com/profefe/profefe/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -57,30 +50,18 @@ func run(ctx context.Context, logger *log.Logger, conf config.Config, stdout io.
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
-	var st storage.Storage
-	if conf.Badger.Dir != "" {
-		var (
-			closer io.Closer
-			err    error
-		)
-		st, closer, err = initBadgerStorage(logger, conf)
-		if err != nil {
-			return err
-		}
-		defer closer.Close()
-	} else if conf.S3.Bucket != "" {
-		var err error
-		st, err = initS3Storage(logger, conf)
-		if err != nil {
-			return err
-		}
-	} else {
-		return fmt.Errorf("storage configuration required")
+	ctx, cancelTopMostCtx := context.WithCancel(ctx)
+	defer cancelTopMostCtx()
+
+	collector, querier, closer, err := initProfefe(logger, conf)
+	if err != nil {
+		return err
 	}
+	defer closer()
 
 	mux := http.NewServeMux()
 
-	profefe.SetupRoutes(mux, logger, prometheus.DefaultRegisterer, st)
+	profefe.SetupRoutes(mux, logger, prometheus.DefaultRegisterer, collector, querier)
 
 	setupDebugRoutes(mux)
 
@@ -106,65 +87,106 @@ func run(ctx context.Context, logger *log.Logger, conf config.Config, stdout io.
 	select {
 	case <-sigs:
 		logger.Info("exiting")
+	case <-ctx.Done():
+		logger.Info("exiting", zap.Error(ctx.Err()))
 	case err := <-errc:
 		if err != http.ErrServerClosed {
 			return fmt.Errorf("terminated: %w", err)
 		}
 	}
 
+	cancelTopMostCtx()
+
+	// create new context because top-most is already canceled
 	ctx, cancel := context.WithTimeout(context.Background(), conf.ExitTimeout)
 	defer cancel()
 
 	return server.Shutdown(ctx)
 }
 
-func initBadgerStorage(logger *log.Logger, conf config.Config) (*storageBadger.Storage, io.Closer, error) {
-	logger = logger.With(zap.String("storage", "badger"))
-
-	opt := badger.DefaultOptions(conf.Badger.Dir)
-	db, err := badger.Open(opt)
+func initProfefe(
+	logger *log.Logger,
+	conf config.Config,
+) (
+	collector *profefe.Collector,
+	querier *profefe.Querier,
+	closer func(),
+	err error,
+) {
+	stypes, err := conf.StorageType()
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not open db: %w", err)
+		return nil, nil, nil, err
 	}
 
-	// run values garbage collection, see https://github.com/dgraph-io/badger#garbage-collection
-	go func() {
-		for {
-			err := db.RunValueLogGC(conf.Badger.GCDiscardRatio)
-			if err == nil {
-				// nil error is not the expected behaviour, because
-				// badger returns ErrNoRewrite as an indicator that everything went ok
-				continue
-			} else if err != badger.ErrNoRewrite {
-				logger.Errorw("failed to run value log garbage collection", zap.Error(err))
-			}
-			time.Sleep(conf.Badger.GCInterval)
+	if len(stypes) > 1 {
+		logger.Infof("WARNING: several storage types specified: %s. Only first one %q is used for querying", stypes, stypes[0])
+	}
+
+	var (
+		writers []storage.Writer
+		reader  storage.Reader
+		closers []io.Closer
+	)
+
+	assembleStorage := func(sw storage.Writer, sr storage.Reader, closer io.Closer) {
+		writers = append(writers, sw)
+		// only the first reader is used
+		if reader == nil {
+			reader = sr
 		}
-	}()
-
-	st := storageBadger.New(logger, db, conf.Badger.ProfileTTL)
-	return st, db, nil
-}
-
-func initS3Storage(logger *log.Logger, conf config.Config) (*storageS3.Storage, error) {
-	logger = logger.With(zap.String("storage", "s3"))
-
-	var forcePathStyle bool
-	if conf.S3.EndpointURL != "" {
-		// should one use custom object storage service (e.g. Minio), path-style addressing needs to be set
-		forcePathStyle = true
+		if closer != nil {
+			closers = append(closers, closer)
+		}
 	}
-	sess, err := session.NewSession(&aws.Config{
-		Endpoint:         aws.String(conf.S3.EndpointURL),
-		DisableSSL:       aws.Bool(conf.S3.DisableSSL),
-		Region:           aws.String(conf.S3.Region),
-		MaxRetries:       aws.Int(conf.S3.MaxRetries),
-		S3ForcePathStyle: aws.Bool(forcePathStyle),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("could not create s3 session: %w", err)
+
+	initStorage := func(stype string) error {
+		logger := logger.With(zap.String("storage", stype))
+
+		switch stype {
+		case config.StorageTypeBadger:
+			st, closer, err := conf.Badger.CreateStorage(logger)
+			if err == nil {
+				assembleStorage(st, st, closer)
+			}
+			return err
+		case config.StorageTypeS3:
+			st, err := conf.S3.CreateStorage(logger)
+			if err == nil {
+				assembleStorage(st, st, nil)
+			}
+			return err
+		case config.StorageTypeCH:
+			st, closer, err := conf.ClickHouse.CreateStorage(logger)
+			if err == nil {
+				assembleStorage(st, st, closer)
+			}
+			return err
+		default:
+			return fmt.Errorf("unknown storage type %q, config %v", stype, conf)
+		}
 	}
-	return storageS3.New(logger, s3.New(sess), conf.S3.Bucket), nil
+
+	for _, stype := range stypes {
+		if err := initStorage(stype); err != nil {
+			return nil, nil, nil, fmt.Errorf("could not init storage %q: %w", stype, err)
+		}
+	}
+
+	closer = func() {
+		for _, closer := range closers {
+			if err := closer.Close(); err != nil {
+				logger.Error(err)
+			}
+		}
+	}
+
+	var writer storage.Writer
+	if len(writers) == 1 {
+		writer = writers[0]
+	} else {
+		writer = storage.NewMultiWriter(writers...)
+	}
+	return profefe.NewCollector(logger, writer), profefe.NewQuerier(logger, reader), closer, nil
 }
 
 func setupDebugRoutes(mux *http.ServeMux) {

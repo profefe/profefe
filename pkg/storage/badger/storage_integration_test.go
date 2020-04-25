@@ -10,6 +10,7 @@ import (
 	storageBadger "github.com/profefe/profefe/pkg/storage/badger"
 	"github.com/profefe/profefe/pkg/storage/storagetest"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
 )
 
@@ -26,8 +27,8 @@ func TestStorage(t *testing.T) {
 		os.RemoveAll(dbPath)
 	})
 
-	testLogger := zaptest.NewLogger(t)
-	st := storageBadger.New(log.New(testLogger), db, 0)
+	testLogger := zaptest.NewLogger(t, zaptest.Level(zapcore.FatalLevel))
+	st := storageBadger.NewStorage(log.New(testLogger), db, 0)
 
 	storagetest.RunTestSuite(t, st)
 }

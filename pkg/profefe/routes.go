@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/profefe/profefe/pkg/log"
-	"github.com/profefe/profefe/pkg/storage"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -19,11 +18,9 @@ func SetupRoutes(
 	mux *http.ServeMux,
 	logger *log.Logger,
 	registry prometheus.Registerer,
-	st storage.Storage,
+	collector *Collector,
+	querier *Querier,
 ) {
-	querier := NewQuerier(logger, st)
-	collector := NewCollector(logger, st)
-
 	apiv0Mux := http.NewServeMux()
 	apiv0Mux.HandleFunc(apiVersionPath, VersionHandler)
 	apiv0Mux.Handle(apiServicesPath, NewServicesHandler(logger, querier))

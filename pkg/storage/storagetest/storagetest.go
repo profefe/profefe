@@ -18,10 +18,11 @@ import (
 
 func RunTestSuite(t *testing.T, st storage.Storage) {
 	cases := map[string]func(t *testing.T, st storage.Storage){
-		"WriteProfile":   testWriteFindProfile,
-		"FindProfileIDs": testFindProfileIDs,
-		"ListProfiles":   testListProfiles,
-		"ListServices":   testListServices,
+		"WriteProfileAndFind": TestWriteProfileAndFind,
+
+		"FindProfileIDs": TestFindProfileIDs,
+		"ListProfiles":   TestListProfiles,
+		"ListServices":   TestListServices,
 	}
 
 	for name, testFunc := range cases {
@@ -31,7 +32,7 @@ func RunTestSuite(t *testing.T, st storage.Storage) {
 	}
 }
 
-func testWriteFindProfile(t *testing.T, st storage.Storage) {
+func TestWriteProfileAndFind(t *testing.T, st storage.Storage) {
 	service := genServiceName()
 	createdAt := time.Now()
 	wparams := &storage.WriteProfileParams{
@@ -40,7 +41,7 @@ func testWriteFindProfile(t *testing.T, st storage.Storage) {
 		Labels:    profile.Labels{{"key1", "val1"}},
 		CreatedAt: createdAt,
 	}
-	meta, data := testWriteProfile(t, st, wparams, "../../../testdata/collector_cpu_1.prof")
+	meta, data := TestWriteProfile(t, st, wparams, "../../../testdata/collector_cpu_1.prof")
 
 	wantPP, err := pprofProfile.ParseData(data)
 	require.NoError(t, err)
@@ -64,7 +65,7 @@ func testWriteFindProfile(t *testing.T, st storage.Storage) {
 	require.False(t, list.Next())
 }
 
-func testWriteProfile(t *testing.T, sw storage.Writer, params *storage.WriteProfileParams, fileName string) (profile.Meta, []byte) {
+func TestWriteProfile(t *testing.T, sw storage.Writer, params *storage.WriteProfileParams, fileName string) (profile.Meta, []byte) {
 	data, err := ioutil.ReadFile(fileName)
 	require.NoError(t, err)
 
@@ -78,7 +79,7 @@ func testWriteProfile(t *testing.T, sw storage.Writer, params *storage.WriteProf
 	return meta, data
 }
 
-func testFindProfileIDs(t *testing.T, st storage.Storage) {
+func TestFindProfileIDs(t *testing.T, st storage.Storage) {
 	service1 := genServiceName()
 	service2 := genServiceName()
 
@@ -89,25 +90,25 @@ func testFindProfileIDs(t *testing.T, st storage.Storage) {
 			Type:    profile.TypeCPU,
 			Labels:  profile.Labels{{"key1", "val1"}},
 		}
-		testWriteProfile(t, st, params, fileName)
+		TestWriteProfile(t, st, params, fileName)
 	}
 
 	// a profile of different service
-	testWriteProfile(t, st, &storage.WriteProfileParams{
+	TestWriteProfile(t, st, &storage.WriteProfileParams{
 		Service: service2,
 		Type:    profile.TypeCPU,
 		Labels:  profile.Labels{{"key1", "val1"}},
 	}, "../../../testdata/collector_cpu_3.prof")
 
 	// a profile of different type
-	testWriteProfile(t, st, &storage.WriteProfileParams{
+	TestWriteProfile(t, st, &storage.WriteProfileParams{
 		Service: service1,
 		Type:    profile.TypeHeap,
 		Labels:  profile.Labels{{"key1", "val1"}, {"key2", "val2"}},
 	}, "../../../testdata/collector_heap_1.prof")
 
 	// a profile of different labels
-	testWriteProfile(t, st, &storage.WriteProfileParams{
+	TestWriteProfile(t, st, &storage.WriteProfileParams{
 		Service: service1,
 		Type:    profile.TypeHeap,
 		Labels:  profile.Labels{{"key3", "val3"}},
@@ -176,25 +177,25 @@ func testFindProfileIDs(t *testing.T, st storage.Storage) {
 		createdAt := time.Now().UTC().Truncate(time.Second)
 
 		// store 4 new profiles created at t-1h, t, t+1m, t+1h
-		testWriteProfile(t, st, &storage.WriteProfileParams{
+		TestWriteProfile(t, st, &storage.WriteProfileParams{
 			Service:   service,
 			Type:      profile.TypeCPU,
 			CreatedAt: createdAt.Add(-time.Hour),
 		}, "../../../testdata/collector_cpu_1.prof")
 
-		testWriteProfile(t, st, &storage.WriteProfileParams{
+		TestWriteProfile(t, st, &storage.WriteProfileParams{
 			Service:   service,
 			Type:      profile.TypeCPU,
 			CreatedAt: createdAt,
 		}, "../../../testdata/collector_cpu_1.prof")
 
-		testWriteProfile(t, st, &storage.WriteProfileParams{
+		TestWriteProfile(t, st, &storage.WriteProfileParams{
 			Service:   service,
 			Type:      profile.TypeCPU,
-			CreatedAt: createdAt.Add(time.Minute),
+			CreatedAt: createdAt.Add(time.Minute).Add(-1 * time.Second),
 		}, "../../../testdata/collector_cpu_1.prof")
 
-		testWriteProfile(t, st, &storage.WriteProfileParams{
+		TestWriteProfile(t, st, &storage.WriteProfileParams{
 			Service:   service,
 			Type:      profile.TypeCPU,
 			CreatedAt: createdAt.Add(time.Hour),
@@ -241,7 +242,7 @@ func testFindProfileIDs(t *testing.T, st storage.Storage) {
 	})
 }
 
-func testListProfiles(t *testing.T, st storage.Storage) {
+func TestListProfiles(t *testing.T, st storage.Storage) {
 	service1 := genServiceName()
 
 	var (
@@ -256,7 +257,7 @@ func testListProfiles(t *testing.T, st storage.Storage) {
 			Type:    profile.TypeCPU,
 			Labels:  profile.Labels{{"key1", "val1"}},
 		}
-		meta, data := testWriteProfile(t, st, params, fileName)
+		meta, data := TestWriteProfile(t, st, params, fileName)
 		pids = append(pids, meta.ProfileID)
 
 		pp, err := pprofProfile.ParseData(data)
@@ -307,7 +308,7 @@ func testListProfiles(t *testing.T, st storage.Storage) {
 	})
 }
 
-func testListServices(t *testing.T, st storage.Storage) {
+func TestListServices(t *testing.T, st storage.Storage) {
 	service1 := genServiceName()
 	service2 := genServiceName()
 
@@ -318,11 +319,11 @@ func testListServices(t *testing.T, st storage.Storage) {
 			Type:    profile.TypeCPU,
 			Labels:  profile.Labels{{"key1", "val1"}},
 		}
-		testWriteProfile(t, st, params, fileName)
+		TestWriteProfile(t, st, params, fileName)
 	}
 
 	// a profile of different service
-	testWriteProfile(t, st, &storage.WriteProfileParams{
+	TestWriteProfile(t, st, &storage.WriteProfileParams{
 		Service: service2,
 		Type:    profile.TypeCPU,
 		Labels:  profile.Labels{{"key1", "val1"}},

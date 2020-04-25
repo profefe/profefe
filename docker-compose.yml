@@ -1,0 +1,36 @@
+version: '3'
+services:
+  profefe:
+    build:
+      context: .
+      dockerfile: contrib/docker/Dockerfile
+      args:
+        VERSION: dev
+    image: profefe/profefe:latest
+    command:
+      - /profefe
+      - -addr=:10100
+      - -storage-type=${PROFEFE_STORAGE_TYPE:-badger}
+    depends_on:
+      - minio
+      - clickhouse
+    ports:
+      - 10100:10100
+
+  minio:
+    image: minio/minio:latest
+    command: server /data
+    ports:
+      - 19000:9000
+    environment:
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minioadmin123
+
+  clickhouse:
+    image: yandex/clickhouse-server
+    ports:
+      - 127.0.0.1:28123:8123
+      - 127.0.0.1:29000:9000
+      - 127.0.0.1:29009:9009
+    volumes:
+      - ./pkg/storage/clickhouse/schema/profefe.sql:/docker-entrypoint-initdb.d/init.sql:ro
