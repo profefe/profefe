@@ -1,4 +1,4 @@
-CREATE TABLE pprof_profiles (
+CREATE TABLE IF NOT EXISTS pprof_profiles (
     profile_key FixedString(12),
     profile_type Enum8(
         'cpu' = 1,
@@ -21,7 +21,7 @@ ENGINE=MergeTree()
 PARTITION BY (toYYYYMM(created_at), service_name)
 ORDER BY (service_name, profile_type, created_at);
 
-CREATE TABLE pprof_samples (
+CREATE TABLE IF NOT EXISTS pprof_samples (
     profile_key FixedString(12),
     fingerprint UInt64,
     locations Nested (
@@ -37,7 +37,7 @@ CREATE TABLE pprof_samples (
         value String
     )
 )
-ENGINE=MergeTree()
+ENGINE=ReplacingMergeTree()
 ORDER BY (profile_key, fingerprint);
 
 -- CREATE TABLE pprof_samples_buffer AS pprof_samples
