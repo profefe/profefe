@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS pprof_samples (
         file_name LowCardinality(String),
         lineno UInt16
     ),
-    values Array(UInt64),
+    values Array(Int64),
     values_type Array(LowCardinality(String)),
     values_unit Array(LowCardinality(String)),
     labels Nested (
