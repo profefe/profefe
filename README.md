@@ -34,7 +34,9 @@ To build and start profefe collector, run:
 2019-06-06T00:07:58.499+0200    info    profefe/main.go:86    server is running    {"addr": ":10100"}
 ```
 
-`./BUILD/profefe -help` will print the list of available options.
+The command above uses embeded [BadgerDB](https://github.com/dgraph-io/badger) as collector's storage. Other storage types available.
+
+Run `./BUILD/profefe -help` to print the list of all options.
 
 ---
 
@@ -48,7 +50,7 @@ The documentation about running profefe in docker can be found in [contrib/docke
 
 ---
 
-The project includes a fork of [Google Stackdriver Profiler's example application][5], modified to use *profefe agent*,
+profefe includes a fork of [Google Stackdriver Profiler's example application][5], modified to use *profefe agent*,
 that sends profiling data to profefe collector.
 
 Run the following command in a separate terminal window, to start the example:
@@ -57,7 +59,7 @@ Run the following command in a separate terminal window, to start the example:
 > go run ./examples/hotapp/main.go
 ```
 
-After a brief period, the application will start sending CPU profiles to running profefe collector
+After a brief period, the example app will start sending CPU profiles to the running profefe collector
 
 ```
 send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&labels=version=1.0.0&type=cpu
@@ -65,7 +67,7 @@ send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&label
 send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&labels=version=1.0.0&type=cpu
 ```
 
-To query stored profiling data, make an HTTP call to profefe collector API ([_see documentation for collector's HTTP API_](#http-api)):
+With profiling data persisted, we can query the profiles from the collector using its HTTP API (_see [documentation for collector's HTTP API](#http-api) below_). Let's request all profiling data associated with the given meta-information (service and time period), as a single *merged* profile:
 
 ```
 > go tool pprof 'http://localhost:10100/api/0/profiles/merge?service=hotapp-service&type=cpu&from=2019-05-30T11:49:00&to=2019-05-30T12:49:00&labels=version=1.0.0'
@@ -91,10 +93,7 @@ Showing top 10 nodes out of 12
          0     0% 99.15%     1020ms  2.35%  runtime.mstart
 ```
 
-Note, above we requested all profiling data associated with the given meta-information (service and time period),
-as a single *merged* profile.
-
-profefe includes an experimental tool, that allows importing existing pprof data into the collector.
+profefe includes a tool, that allows importing existing pprof data into the collector.
 While the profefe collector is running:
 
 ```
@@ -254,28 +253,28 @@ GET /api/0/version
 
 ### Does continuous profiling affect the performance of the production?
 
-Profiling always comes with some costs. Go collects sampling-based profiling data and for the most of the applications
+Profiling always comes with some costs. Go collects sampling-based profiling data and for the most applications
 the real overhead is small enough (refer to "[Can I profile my production services](https://golang.org/doc/diagnostics.html#profiling)"
 from Go's Diagnostics documentation).
 
-To reduce the costs, users can adjust the frequency of profiles collection, e.g. collect 10 seconds of CPU profiles every 5 minutes.
+To reduce the costs, users can adjust the frequency of collection rounds, e.g. collect 10 seconds of CPU profiles every 5 minutes.
 
 [profefe-agent](https://godoc.org/github.com/profefe/profefe/agent) tries to reduce the overhead further by adding a small
-jiggling in-between the profiles collections. This distributes the total profiling overhead, making sure that not all instances
-of the application's cluster are being profiled at the same time.
+jiggling in-between the profiles collection rounds. This distributes the total profiling overhead, making sure that not all instances
+of application's cluster are being profiled at the same time.
 
 ### Can I use profefe with non-Go projects?
 
 profefe collects [pprof-formatted](https://github.com/google/pprof/blob/master/README.md) profiling data. The format is used by Go profiler,
-but thrid-party profilers for other programming languages support of the format. For example, [`google/pprof-nodejs`](https://github.com/google/pprof-nodejs) for Node.js,
+but thrid-party profilers for other programming languages support of the format too. For example, [`google/pprof-nodejs`](https://github.com/google/pprof-nodejs) for Node.js,
 [`tikv/pprof-rs`](https://github.com/tikv/pprof-rs) for Rust, [`arnaud-lb/php-memory-profiler`](https://github.com/arnaud-lb/php-memory-profiler) for PHP, etc.
 
 Integrating those is the subject of building a transport layer between the profiler and profefe.
 
 ## Further reading
 
-While the topic of continuous profiling in the production is a bit unrepresented in the public internet, some
-research or commercial projects are already exist
+While the topic of continuous profiling in the production is quite unrepresented in the public internet, some
+research and commercial projects already exist:
 
 - [Stackdriver profiler](https://cloud.google.com/profiler/)
 - [Google-Wide Profiling: A Continuous Profiling Infrastructure for Data Centers](https://ai.google/research/pubs/pub36575) (paper)
@@ -285,7 +284,7 @@ research or commercial projects are already exist
 - [Liveprof - Continuous Profiling for PHP](https://habr.com/ru/company/badoo/blog/436364/) (RUS)
 - [FlameScope](https://github.com/Netflix/flamescope)
 
-*The project is still in its early state. Feedback and contribution are very welcome.*
+*profefe is still in its early state. Feedback and contribution are very welcome.*
 
 ## License
 
