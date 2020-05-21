@@ -25,7 +25,7 @@ See [Design Docs](DESIGN.md) documentation.
 
 ## Quickstart
 
-To build and start profefe collector, run:
+To build and start *profefe collector*, run:
 
 ```
 > make
@@ -34,21 +34,9 @@ To build and start profefe collector, run:
 2019-06-06T00:07:58.499+0200    info    profefe/main.go:86    server is running    {"addr": ":10100"}
 ```
 
-The command above uses embeded [BadgerDB](https://github.com/dgraph-io/badger) as collector's storage. Other storage types available.
+The command above starts *profefe collector* backed by embeded [BadgerDB](https://github.com/dgraph-io/badger) as a storage for profiles. profefe supports other storage types: S3 and [ClickHouse](https://clickhouse.tech/).
 
-Run `./BUILD/profefe -help` to print the list of all options.
-
----
-
-You can build a docker image with the collector, by running the command:
-
-```
-> make docker-image
-```
-
-The documentation about running profefe in docker can be found in [contrib/docker/README.md](./contrib/docker/README.md).
-
----
+Run `./BUILD/profefe -help` to show the list of all available options.
 
 profefe includes a fork of [Google Stackdriver Profiler's example application][5], modified to use *profefe agent*,
 that sends profiling data to profefe collector.
@@ -67,7 +55,7 @@ send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&label
 send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&labels=version=1.0.0&type=cpu
 ```
 
-With profiling data persisted, we can query the profiles from the collector using its HTTP API (_see [documentation for collector's HTTP API](#http-api) below_). Let's request all profiling data associated with the given meta-information (service and time period), as a single *merged* profile:
+With profiling data persisted, we can query the profiles from the collector using its HTTP API (_refer to [documentation for collector's HTTP API](#http-api) below_). Let's request all profiling data associated with the given meta-information (service and time period), as a single *merged* profile:
 
 ```
 > go tool pprof 'http://localhost:10100/api/0/profiles/merge?service=hotapp-service&type=cpu&from=2019-05-30T11:49:00&to=2019-05-30T12:49:00&labels=version=1.0.0'
@@ -101,6 +89,16 @@ While the profefe collector is running:
 
 uploading service1-cpu-backend1-20190313-0948Z.prof...OK
 ```
+
+### Using Docker
+
+You can build a docker image with profefe collector, by running the command:
+
+```
+> make docker-image
+```
+
+The documentation about running profefe in docker is in [contrib/docker/README.md](./contrib/docker/README.md).
 
 ## HTTP API
 
