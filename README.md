@@ -82,7 +82,7 @@ Showing top 10 nodes out of 12
 ```
 
 profefe includes a tool, that allows importing existing pprof data into the collector.
-While the profefe collector is running:
+While *profefe collector* is still running, run the following:
 
 ```
 > ./scripts/pprof_import.sh --service service1 --label region=europe-west3 --label host=backend1 --type cpu -- path/to/cpu.prof
@@ -124,6 +124,14 @@ body pprof.pb.gz
 - `type` — profile type ("cpu", "heap", "block", "mutex", "goroutine", "threadcreate", or "other")
 - `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
 
+*Example*
+
+```
+> curl -XPOST \
+  "http://<profefe>/api/0/profiles?service=api-backend&type=cpu&labels=region=europe-west3,dc=fra" \
+  --data-binary "@$HOME/pprof/api-backend-cpu.prof"
+```
+
 #### Save runtime execution traces (experimental)
 
 Go's [runtime traces](https://golang.org/pkg/runtime/trace/) are a special case of profiling data, that can be stored
@@ -153,6 +161,15 @@ body trace.out
 - `created_at` — trace profile creation time, e.g. "2006-01-02T15:04:05" (defaults to server's current time)
 - `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
 
+
+*Example*
+
+```
+> curl -XPOST \
+  "http://<profefe>/api/0/profiles?service=api-backend&type=trace&created_at=2019-05-01T18:45:00&labels=region=europe-west3,dc=fra" \
+  --data-binary "@$HOME/pprof/api-backend-trace.out"
+```
+
 ### Query saved meta information
 
 ```
@@ -176,6 +193,12 @@ GET /api/0/profiles?service=<service>&type=<type>&from=<created_from>&to=<create
 - `type` — profile type ("cpu", "heap", "block", "mutex", "goroutine", "threadcreate", "trace", "other")
 - `created_from`, `created_to` — a time window between which profiling data was collected, e.g. "from=2006-01-02T15:04:05"
 - `labels` — a set of key-value pairs
+
+*Example*
+
+```
+> curl "http://<profefe>/api/0/profiles?service=api-backend&type=cpu&from=2019-05-01T17:00:00&to=2019-05-25T00:00:00"
+```
 
 ### Query saved profiling data returning it as a single merged profile
 
