@@ -124,10 +124,10 @@ body pprof.pb.gz
 - `type` — profile type ("cpu", "heap", "block", "mutex", "goroutine", "threadcreate", or "other")
 - `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
 
-*Example*
+**Example**
 
 ```
-> curl -XPOST \
+curl -XPOST \
   "http://<profefe>/api/0/profiles?service=api-backend&type=cpu&labels=region=europe-west3,dc=fra" \
   --data-binary "@$HOME/pprof/api-backend-cpu.prof"
 ```
@@ -162,10 +162,10 @@ body trace.out
 - `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
 
 
-*Example*
+**Example**
 
 ```
-> curl -XPOST \
+curl -XPOST \
   "http://<profefe>/api/0/profiles?service=api-backend&type=trace&created_at=2019-05-01T18:45:00&labels=region=europe-west3,dc=fra" \
   --data-binary "@$HOME/pprof/api-backend-trace.out"
 ```
@@ -194,10 +194,10 @@ GET /api/0/profiles?service=<service>&type=<type>&from=<created_from>&to=<create
 - `created_from`, `created_to` — a time window between which profiling data was collected, e.g. "from=2006-01-02T15:04:05"
 - `labels` — a set of key-value pairs
 
-*Example*
+**Example**
 
 ```
-> curl "http://<profefe>/api/0/profiles?service=api-backend&type=cpu&from=2019-05-01T17:00:00&to=2019-05-25T00:00:00"
+curl "http://<profefe>/api/0/profiles?service=api-backend&type=cpu&from=2019-05-01T17:00:00&to=2019-05-25T00:00:00"
 ```
 
 ### Query saved profiling data returning it as a single merged profile
