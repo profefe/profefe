@@ -3,6 +3,7 @@ package s3
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -18,7 +19,6 @@ import (
 	"github.com/profefe/profefe/pkg/storage"
 	"github.com/rs/xid"
 	"go.uber.org/zap"
-	"golang.org/x/xerrors"
 )
 
 // s3 objects' key prefix indicates the key's naming schema
@@ -100,7 +100,7 @@ func (st *Storage) WriteProfile(ctx context.Context, params *storage.WriteProfil
 
 func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage.ProfileList, error) {
 	if len(pids) == 0 {
-		return nil, xerrors.New("empty profile ids")
+		return nil, fmt.Errorf("empty profile ids")
 	}
 
 	pl := &profileList{
@@ -174,7 +174,7 @@ func (pl *profileList) Close() error {
 	// clear the pointer to the buffered data
 	pl.buf = nil
 	// prevent any use of this list's Profile or Next fn
-	pl.err = xerrors.Errorf("profile list closed")
+	pl.err = fmt.Errorf("profile list closed")
 	return nil
 }
 
@@ -243,11 +243,11 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 
 func (st *Storage) findProfiles(ctx context.Context, params *storage.FindProfilesParams) ([]profile.Meta, error) {
 	if params.Service == "" {
-		return nil, xerrors.Errorf("empty service")
+		return nil, fmt.Errorf("empty service")
 	}
 
 	if params.CreatedAtMin.IsZero() {
-		return nil, xerrors.Errorf("empty created_at min")
+		return nil, fmt.Errorf("empty created_at min")
 	}
 
 	createdAtMax := params.CreatedAtMax
@@ -372,7 +372,7 @@ func profileKeyPrefix(service string) string {
 // schemaV.service/profile_type/digest,label1,label2
 func metaFromProfileKey(schemaV, key string) (meta profile.Meta, err error) {
 	if !strings.HasPrefix(key, schemaV) {
-		return meta, xerrors.Errorf("invalid key format %q: schema version mismatch, want %s", key, schemaV)
+		return meta, fmt.Errorf("invalid key format %q: schema version mismatch, want %s", key, schemaV)
 	}
 
 	// create profile ID from the original object's key
@@ -381,7 +381,7 @@ func metaFromProfileKey(schemaV, key string) (meta profile.Meta, err error) {
 	key = strings.TrimPrefix(key, schemaV)
 	ks := strings.SplitN(key, "/", 3)
 	if len(ks) != 3 {
-		return meta, xerrors.Errorf("invalid key format %q", key)
+		return meta, fmt.Errorf("invalid key format %q", key)
 	}
 
 	service, pt, tail := ks[0], ks[1], ks[2]
@@ -389,7 +389,7 @@ func metaFromProfileKey(schemaV, key string) (meta profile.Meta, err error) {
 	v, _ := strconv.Atoi(pt)
 	ptype := profile.ProfileType(v)
 	if ptype == profile.TypeUnknown {
-		return profile.Meta{}, xerrors.Errorf("could not parse profile type %q, key %q", pt, key)
+		return profile.Meta{}, fmt.Errorf("could not parse profile type %q, key %q", pt, key)
 	}
 
 	ks = strings.SplitN(tail, ",", 2)
@@ -402,12 +402,12 @@ func metaFromProfileKey(schemaV, key string) (meta profile.Meta, err error) {
 
 	digest, err := xid.FromString(dgst)
 	if err != nil {
-		return meta, xerrors.Errorf("could not parse digest, key %q: %w", key, err)
+		return meta, fmt.Errorf("could not parse digest, key %q: %w", key, err)
 	}
 
 	var labels profile.Labels
 	if err := labels.FromString(lbls); err != nil {
-		return meta, xerrors.Errorf("could not parse labels, key %q: %w", key, err)
+		return meta, fmt.Errorf("could not parse labels, key %q: %w", key, err)
 	}
 
 	meta = profile.Meta{

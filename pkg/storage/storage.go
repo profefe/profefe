@@ -35,13 +35,13 @@ type WriteProfileParams struct {
 
 func (params *WriteProfileParams) Validate() error {
 	if params == nil {
-		return errors.New("empty params")
+		return errors.New("nil params")
 	}
 	if params.Service == "" {
 		return errors.New("empty service")
 	}
 	if params.Type == profile.TypeUnknown {
-		return fmt.Errorf("unknown profile type %s", params.Type)
+		return errors.New("unknown profile type")
 	}
 	return nil
 }
@@ -64,19 +64,19 @@ type FindProfilesParams struct {
 
 func (params *FindProfilesParams) Validate() error {
 	if params == nil {
-		return errors.New("empty params")
+		return errors.New("nil params")
 	}
 	if params.Service == "" {
 		return errors.New("empty service")
 	}
 	if params.Type == profile.TypeUnknown {
-		return fmt.Errorf("unknown profile type %s", params.Type)
+		return errors.New("unknown profile type")
 	}
 	if params.CreatedAtMin.IsZero() || params.CreatedAtMax.IsZero() {
-		return fmt.Errorf("created_at is zero: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
+		return fmt.Errorf("zero timestamp: CreatedAtMin %v, CreatedAtMax %v", params.CreatedAtMin, params.CreatedAtMax)
 	}
 	if params.CreatedAtMin.After(params.CreatedAtMax) {
-		return fmt.Errorf("created_at min after max: min %v, max %v", params.CreatedAtMin, params.CreatedAtMax)
+		return fmt.Errorf("CreatedAtMin after CreatedAtMax: %v, %v", params.CreatedAtMin, params.CreatedAtMax)
 	}
 	return nil
 }

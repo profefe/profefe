@@ -1,6 +1,7 @@
 package profefe
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -9,53 +10,33 @@ import (
 
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
-	"golang.org/x/xerrors"
 )
-
-func getProfileType(q url.Values) (ptype profile.ProfileType, err error) {
-	if v := q.Get("type"); v != "" {
-		if err := ptype.FromString(v); err != nil {
-			return ptype, err
-		}
-		if ptype == profile.TypeUnknown {
-			err = fmt.Errorf("bad profile type %v", ptype)
-		}
-	}
-	return ptype, err
-}
-
-func getLabels(q url.Values) (labels profile.Labels, err error) {
-	err = labels.FromString(q.Get("labels"))
-	return labels, err
-}
 
 const timeFormat = "2006-01-02T15:04:05"
 
 func parseTime(v string) (time.Time, error) {
 	tm, err := time.Parse(timeFormat, v)
 	if err != nil || tm.IsZero() {
-		return time.Time{}, xerrors.Errorf("time in unsupported format %q", v)
+		return time.Time{}, fmt.Errorf("time in unsupported format %q", v)
 	}
 	return tm, nil
 }
 
 func parseProfileParams(q url.Values) (service string, ptype profile.ProfileType, labels profile.Labels, err error) {
 	if v := q.Get("service"); v == "" {
-		return "", profile.TypeUnknown, nil, fmt.Errorf("missing service")
+		return "", profile.TypeUnknown, nil, fmt.Errorf("missing \"service\"")
 	} else {
 		service = v
 	}
 
-	if pt, err := getProfileType(q); err != nil {
-		return "", profile.TypeUnknown, nil, fmt.Errorf("bad profile type %q: %s", q.Get("type"), err)
-	} else {
-		ptype = pt
+	if v := q.Get("type"); v == "" {
+		return "", profile.TypeUnknown, nil, fmt.Errorf("missing \"type\"")
+	} else if err := ptype.FromString(v); err != nil {
+		return "", profile.TypeUnknown, nil, fmt.Errorf("bad \"type\" %q: %s", q.Get("type"), err)
 	}
 
-	if lbs, err := getLabels(q); err != nil {
-		return "", profile.TypeUnknown, nil, fmt.Errorf("bad labels %q: %s", q.Get("labels"), err)
-	} else {
-		labels = lbs
+	if err := labels.FromString(q.Get("labels")); err != nil {
+		return "", profile.TypeUnknown, nil, fmt.Errorf("bad \"labels\" %q: %s", q.Get("labels"), err)
 	}
 
 	return service, ptype, labels, nil
@@ -63,7 +44,7 @@ func parseProfileParams(q url.Values) (service string, ptype profile.ProfileType
 
 func parseWriteProfileParams(in *storage.WriteProfileParams, r *http.Request) error {
 	if in == nil {
-		return xerrors.New("parseWriteProfileParams: nil request receiver")
+		return fmt.Errorf("parseWriteProfileParams: nil request receiver")
 	}
 
 	q := r.URL.Query()
@@ -82,7 +63,7 @@ func parseWriteProfileParams(in *storage.WriteProfileParams, r *http.Request) er
 	if v := q.Get("created_at"); v != "" {
 		tm, err := parseTime(v)
 		if err != nil {
-			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: %s", err), nil)
+			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad \"created_at\" %q: %s", v, err), nil)
 		}
 		in.CreatedAt = tm
 	}
@@ -96,7 +77,7 @@ func parseWriteProfileParams(in *storage.WriteProfileParams, r *http.Request) er
 
 func parseFindProfileParams(in *storage.FindProfilesParams, r *http.Request) (err error) {
 	if in == nil {
-		return xerrors.New("parseFindProfileParams: nil request receiver")
+		return errors.New("parseFindProfileParams: nil request receiver")
 	}
 
 	q := r.URL.Query()
@@ -118,6 +99,8 @@ func parseFindProfileParams(in *storage.FindProfilesParams, r *http.Request) (er
 			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad \"from\" timestamp %q: %s", v, err), nil)
 		}
 		in.CreatedAtMin = tm
+	} else {
+		return StatusError(http.StatusBadRequest, "bad request: missing \"from\"", nil)
 	}
 
 	if v := q.Get("to"); v != "" {
@@ -126,12 +109,14 @@ func parseFindProfileParams(in *storage.FindProfilesParams, r *http.Request) (er
 			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad \"to\" timestamp %q: %s", v, err), nil)
 		}
 		in.CreatedAtMax = tm
+	} else {
+		return StatusError(http.StatusBadRequest, "bad request: missing \"to\"", nil)
 	}
 
 	if v := q.Get("limit"); v != "" {
 		l, err := strconv.Atoi(v)
 		if err != nil {
-			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad limit %q: %s", v, err), nil)
+			return StatusError(http.StatusBadRequest, fmt.Sprintf("bad request: bad \"limit\" %q: %s", v, err), nil)
 		}
 		in.Limit = l
 	}

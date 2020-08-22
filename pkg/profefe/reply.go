@@ -2,13 +2,13 @@ package profefe
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
 
 	"github.com/profefe/profefe/pkg/log"
 	"go.uber.org/zap"
-	"golang.org/x/xerrors"
 )
 
 var (
@@ -39,12 +39,12 @@ func ReplyError(w http.ResponseWriter, err error) {
 		errMsg     string
 	)
 
-	if xerrors.As(err, &statusErr) {
-		statusCode = statusErr.code
+	if errors.As(err, &statusErr) {
+		statusCode = statusErr.Code()
 		errMsg = statusErr.Error()
 	} else {
 		statusCode = http.StatusInternalServerError
-		errMsg = "internal error"
+		errMsg = "internal server error"
 	}
 
 	w.WriteHeader(statusCode)
@@ -72,7 +72,7 @@ func HandleErrorHTTP(logger *log.Logger, err error, w http.ResponseWriter, r *ht
 
 	ReplyError(w, err)
 
-	if origErr := xerrors.Unwrap(err); origErr != nil {
+	if origErr := errors.Unwrap(err); origErr != nil {
 		err = origErr
 	}
 	if err != nil {
@@ -92,6 +92,10 @@ func StatusError(code int, msg string, cause error) *statusError {
 		message: msg,
 		cause:   cause,
 	}
+}
+
+func (s statusError) Code() int {
+	return s.code
 }
 
 func (s statusError) Error() string {

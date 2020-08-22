@@ -12,7 +12,6 @@ import (
 	"github.com/profefe/profefe/pkg/pprofutil"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
-	"golang.org/x/xerrors"
 )
 
 type ProfilesHandler struct {
@@ -99,7 +98,7 @@ func (h *ProfilesHandler) HandleGetProfile(w http.ResponseWriter, r *http.Reques
 	} else if err == storage.ErrNoResults {
 		return ErrNoResults
 	} else if err != nil {
-		err = xerrors.Errorf("could not get profile by id %q: %w", rawPids, err)
+		err = fmt.Errorf("could not get profile by id %q: %w", rawPids, err)
 		return StatusError(http.StatusInternalServerError, fmt.Sprintf("failed to get profile by id %q", rawPids), err)
 	}
 	return nil

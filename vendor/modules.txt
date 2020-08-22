@@ -168,10 +168,6 @@ golang.org/x/tools/go/packages
 golang.org/x/tools/go/types/objectpath
 golang.org/x/tools/go/types/typeutil
 golang.org/x/tools/internal/packagesinternal
-# golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
-## explicit
-golang.org/x/xerrors
-golang.org/x/xerrors/internal
 # gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15
 ## explicit
 # gopkg.in/yaml.v2 v2.2.8

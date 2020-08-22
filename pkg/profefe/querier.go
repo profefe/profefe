@@ -2,6 +2,7 @@ package profefe
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sort"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/profefe/profefe/pkg/log"
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
-	"golang.org/x/xerrors"
 )
 
 type Querier struct {
@@ -67,7 +67,7 @@ func (q *Querier) GetProfilesTo(ctx context.Context, dst io.Writer, pids []profi
 
 	pp, err := pprofProfile.Merge(pps)
 	if err != nil {
-		return xerrors.Errorf("could not merge %d profiles: %w", len(pps), err)
+		return fmt.Errorf("could not merge %d profiles: %w", len(pps), err)
 	}
 	return pp.Write(dst)
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/base32"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"time"
@@ -16,7 +17,6 @@ import (
 	"github.com/profefe/profefe/pkg/profile"
 	"github.com/profefe/profefe/pkg/storage"
 	"github.com/rs/xid"
-	"golang.org/x/xerrors"
 )
 
 const (
@@ -52,7 +52,7 @@ func encodeProfileID(rpid []byte) profile.ID {
 func decodeProfileID(pid profile.ID) ([]byte, error) {
 	rpid, err := encoding.DecodeString(string(pid))
 	if err != nil {
-		return nil, xerrors.Errorf("could not decode profile id %q: %w", pid, err)
+		return nil, fmt.Errorf("could not decode profile id %q: %w", pid, err)
 	}
 	return rpid, nil
 }
@@ -79,7 +79,7 @@ func NewStorage(logger *log.Logger, db *badger.DB, ttl time.Duration) *Storage {
 func (st *Storage) WriteProfile(ctx context.Context, params *storage.WriteProfileParams, r io.Reader) (profile.Meta, error) {
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
-		return profile.Meta{}, xerrors.Errorf("could not read data, params %v: %w", params, err)
+		return profile.Meta{}, fmt.Errorf("could not read data, params %v: %w", params, err)
 	}
 
 	id := newProfileID()
@@ -95,7 +95,7 @@ func (st *Storage) WriteProfile(ctx context.Context, params *storage.WriteProfil
 		CreatedAt: createdAt,
 	}
 	if err := st.writeProfileData(ctx, meta, id, data); err != nil {
-		return profile.Meta{}, xerrors.Errorf("could not write profile data, params %v: %w", params, err)
+		return profile.Meta{}, fmt.Errorf("could not write profile data, params %v: %w", params, err)
 	}
 	return meta, nil
 }
@@ -114,7 +114,7 @@ func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, id, 
 
 	mk, mv, err := createMetaKV(id, meta)
 	if err != nil {
-		return xerrors.Errorf("could not encode meta %v: %w", meta, err)
+		return fmt.Errorf("could not encode meta %v: %w", meta, err)
 	}
 	entries = append(entries, st.newBadgerEntry(mk, mv))
 
@@ -147,7 +147,7 @@ func (st *Storage) writeProfileData(ctx context.Context, meta profile.Meta, id, 
 		for i := range entries {
 			st.logger.Debugw("writeProfile: set entry", "pid", meta.ProfileID, log.ByteString("key", entries[i].Key), "expires_at", entries[i].ExpiresAt)
 			if err := txn.SetEntry(entries[i]); err != nil {
-				return xerrors.Errorf("could not write entry: %w", err)
+				return fmt.Errorf("could not write entry: %w", err)
 			}
 		}
 		return nil
@@ -220,7 +220,7 @@ func (st *Storage) ListServices(ctx context.Context) ([]string, error) {
 
 func (st *Storage) ListProfiles(ctx context.Context, pids []profile.ID) (storage.ProfileList, error) {
 	if len(pids) == 0 {
-		return nil, xerrors.New("empty profile ids")
+		return nil, fmt.Errorf("empty profile ids")
 	}
 
 	prefixes := make([][]byte, 0, len(pids))
@@ -382,11 +382,11 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 
 func (st *Storage) findRawProfileIDs(ctx context.Context, params *storage.FindProfilesParams) ([][]byte, error) {
 	if params.Service == "" {
-		return nil, xerrors.New("empty service")
+		return nil, fmt.Errorf("empty service")
 	}
 
 	if params.CreatedAtMin.IsZero() {
-		return nil, xerrors.New("empty created_at")
+		return nil, fmt.Errorf("empty created_at")
 	}
 
 	createdAtMax := params.CreatedAtMax
