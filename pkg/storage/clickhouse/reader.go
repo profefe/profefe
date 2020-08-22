@@ -12,12 +12,7 @@ import (
 )
 
 const (
-	sqlSelectProfiles = `
-		SELECT %s
-		FROM pprof_profiles
-		WHERE service_name = ?
-		%s
-		ORDER BY created_at;`
+	sqlSelectProfiles = `SELECT %s FROM pprof_profiles WHERE service_name = ? %s;`
 
 	sqlSelectServiceNames = `
 		SELECT DISTINCT service_name
@@ -107,11 +102,6 @@ func (st *Storage) FindProfileIDs(ctx context.Context, params *storage.FindProfi
 			return nil, err
 		}
 		pids = append(pids, profile.ID(pk.String()))
-
-		// XXX(narqo): limit must be the part of SQL query
-		if params.Limit > 0 && len(pids) >= params.Limit {
-			break
-		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -203,14 +193,19 @@ func buildSQLSelectProfiles(columns []string, params *storage.FindProfilesParams
 		whereClause = append(whereClause, fmt.Sprintf("hasAll(arrayZip(labels.key, labels.value), [%s])", strings.Join(labels, ",")))
 	}
 
-	var querySuffix string
+	conds := make([]string, 0, 3)
 	if len(whereClause) > 0 {
-		querySuffix = "AND " + strings.Join(whereClause, " AND ")
+		conds = append(conds, "AND "+strings.Join(whereClause, " AND "))
 	}
+	conds = append(conds, "ORDER BY created_at")
+	if params.Limit > 0 {
+		conds = append(conds, fmt.Sprintf("LIMIT %d", params.Limit))
+	}
+
 	query := fmt.Sprintf(
 		sqlSelectProfiles,
 		strings.Join(columns, ","),
-		querySuffix,
+		strings.Join(conds, " "),
 	)
 
 	return query, args, nil
