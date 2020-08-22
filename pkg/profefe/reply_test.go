@@ -75,12 +75,12 @@ func TestReplyError(t *testing.T) {
 		{
 			xerrors.Errorf("unexpected error: %w", testRawErr),
 			http.StatusInternalServerError,
-			"internal error",
+			"internal server error",
 		},
 		{
 			fmt.Errorf("unexpted error: %v", testRawErr),
 			http.StatusInternalServerError,
-			"internal error",
+			"internal server error",
 		},
 		{
 			ErrNoResults,
@@ -95,7 +95,7 @@ func TestReplyError(t *testing.T) {
 		{
 			nil,
 			http.StatusInternalServerError,
-			"internal error",
+			"internal server error",
 		},
 	}
 
