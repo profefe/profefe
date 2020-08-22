@@ -1,12 +1,12 @@
-# profefe - Collect profiling data for long-term analysis
+# profefe - Continuous profiling
 
 [![Build Status](https://travis-ci.org/profefe/profefe.svg?branch=master)](https://travis-ci.org/profefe/profefe)
 [![Go Report Card](https://goreportcard.com/badge/github.com/profefe/profefe)](https://goreportcard.com/report/github.com/profefe/profefe)
 [![Docker Pulls](https://img.shields.io/docker/pulls/profefe/profefe.svg)][hub.docker]
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/profefe/profefe/master/LICENSE)
 
-*profefe* continuously collects profiling data from a running Go application and provides an API for querying
-the profiling samples base on metadata associated with the application.
+*profefe* continuously collects profiling data from a fleet of running Go applications and provides an API for querying
+profiling samples for postmortem analysis.
 
 ## Why Continuous Profiling?
 
