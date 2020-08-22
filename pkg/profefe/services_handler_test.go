@@ -3,6 +3,7 @@ package profefe
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
-	"golang.org/x/xerrors"
 )
 
 func TestServicesHandler_success(t *testing.T) {
@@ -65,7 +65,7 @@ func TestServicesHandler_nothingFound(t *testing.T) {
 func TestServicesHandler_storageFailure(t *testing.T) {
 	sr := &storage.StubReader{
 		ListServicesFunc: func(ctx context.Context) ([]string, error) {
-			return nil, xerrors.New("unexpected storage error")
+			return nil, errors.New("unexpected storage error")
 		},
 	}
 

@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/xerrors"
 )
 
 func TestReplyJSON(t *testing.T) {
@@ -33,7 +32,7 @@ func TestReplyJSON(t *testing.T) {
 type malformedJSON string
 
 func (t malformedJSON) MarshalJSON() ([]byte, error) {
-	return nil, xerrors.New(`unexpected """, '"', and {}`)
+	return nil, errors.New(`unexpected """, '"', and {}`)
 }
 
 func TestReplyJSON_FailMarshalResponse(t *testing.T) {
@@ -68,12 +67,12 @@ func TestReplyError(t *testing.T) {
 			"bad request",
 		},
 		{
-			xerrors.Errorf("unexpected error: %w", StatusError(http.StatusBadRequest, "bad request", nil)),
+			fmt.Errorf("unexpected error: %w", StatusError(http.StatusBadRequest, "bad request", nil)),
 			http.StatusBadRequest,
 			"bad request",
 		},
 		{
-			xerrors.Errorf("unexpected error: %w", testRawErr),
+			fmt.Errorf("unexpected error: %w", testRawErr),
 			http.StatusInternalServerError,
 			"internal server error",
 		},
