@@ -5,7 +5,7 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/profefe/profefe.svg)][hub.docker]
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/profefe/profefe/master/LICENSE)
 
-**profefe** — a continuous profiling system. It collects profiling data from a fleet of running applications and provides API for querying
+profefe, a continuous profiling system, collects profiling data from a fleet of running applications and provides API for querying
 profiling samples for postmortem performance analysis.
 
 ## Why Continuous Profiling?
