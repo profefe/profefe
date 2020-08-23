@@ -69,9 +69,6 @@ func (params *FindProfilesParams) Validate() error {
 	if params.Service == "" {
 		return errors.New("empty service")
 	}
-	if params.Type == profile.TypeUnknown {
-		return errors.New("unknown profile type")
-	}
 	if params.CreatedAtMin.IsZero() || params.CreatedAtMax.IsZero() {
 		return fmt.Errorf("zero timestamp: CreatedAtMin %v, CreatedAtMax %v", params.CreatedAtMin, params.CreatedAtMax)
 	}

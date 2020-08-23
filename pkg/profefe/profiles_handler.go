@@ -132,8 +132,9 @@ func (h *ProfilesHandler) HandleMergeProfiles(w http.ResponseWriter, r *http.Req
 		return err
 	}
 
-	if params.Type == profile.TypeTrace {
-		return StatusError(http.StatusMethodNotAllowed, "tracing profiles are not mergeable", nil)
+	switch params.Type {
+	case profile.TypeUnknown, profile.TypeTrace:
+		return StatusError(http.StatusMethodNotAllowed, fmt.Sprintf("can't merge profiles of %v type", params.Type), nil)
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
