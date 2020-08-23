@@ -21,7 +21,7 @@ func JoinIDs(ids ...ID) (string, error) {
 		}
 		sid := string(id)
 		if strings.ContainsRune(sid, '+') {
-			return "", fmt.Errorf("could not join %v: found recerved char in %q", ids, id)
+			return "", fmt.Errorf("could not join %v: reserved char in %q", ids, id)
 		}
 		buf.WriteString(sid)
 	}
@@ -36,7 +36,7 @@ func SplitIDs(s string) ([]ID, error) {
 	ids := make([]ID, len(ss))
 	for i, sid := range ss {
 		if sid == "" {
-			return nil, fmt.Errorf("could not split %q: found empty id at %d", s, i)
+			return nil, fmt.Errorf("could not split %q: empty id at %d", s, i)
 		}
 		ids[i] = ID(sid)
 	}
