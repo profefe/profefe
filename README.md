@@ -170,7 +170,7 @@ curl -XPOST \
   --data-binary "@$HOME/pprof/api-backend-trace.out"
 ```
 
-### Query saved meta information
+### Query meta information about stored profiles
 
 ```
 GET /api/0/profiles?service=<service>&type=<type>&from=<created_from>&to=<created_to>&labels=<key=value,key=value>
@@ -190,9 +190,9 @@ GET /api/0/profiles?service=<service>&type=<type>&from=<created_from>&to=<create
 ```
 
 - `service` — service name
-- `type` — profile type ("cpu", "heap", "block", "mutex", "goroutine", "threadcreate", "trace", "other")
-- `created_from`, `created_to` — a time window between which profiling data was collected, e.g. "from=2006-01-02T15:04:05"
-- `labels` — a set of key-value pairs
+- `from`, `to` — a time frame in which profiling data was collected, e.g. "from=2006-01-02T15:04:05"
+- `type` — profile type ("cpu", "heap", "block", "mutex", "goroutine", "threadcreate", "trace", "other") (Optional)
+- `labels` — a set of key-value pairs, e.g. "region=europe-west3,dc=fra,ip=1.2.3.4,version=1.0" (Optional)
 
 **Example**
 
@@ -211,9 +211,9 @@ GET /api/0/profiles/merge?service=<service>&type=<type>&from=<created_from>&to=<
 
 Request parameters are the same as for querying meta information.
 
-*Note, merging runtime traces is not supported.*
+*Note, "type" parameter is required; merging runtime traces is not supported.*
 
-### Return individual profiling data
+### Return individual profile as pprof-formatted data
 
 ```
 GET /api/0/profiles/<id>
@@ -235,7 +235,7 @@ GET /api/0/profiles/<id1>+<id2>+...
 
 - `id1`, `id2` - ids of stored profiles
 
-*Note, merging is possible only for profiles of the same type.*
+*Note, merging is possible only for profiles of the same type; merging runtime traces is not supported.*
 
 ### Get services for which profiling data is stored
 
