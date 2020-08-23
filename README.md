@@ -1,23 +1,23 @@
-# profefe - Continuous profiling
+# profefe
 
 [![Build Status](https://travis-ci.org/profefe/profefe.svg?branch=master)](https://travis-ci.org/profefe/profefe)
 [![Go Report Card](https://goreportcard.com/badge/github.com/profefe/profefe)](https://goreportcard.com/report/github.com/profefe/profefe)
 [![Docker Pulls](https://img.shields.io/docker/pulls/profefe/profefe.svg)][hub.docker]
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/profefe/profefe/master/LICENSE)
 
-*profefe* continuously collects profiling data from a fleet of running Go applications and provides an API for querying
-profiling samples for postmortem analysis.
+**profefe** — a continuous profiling system. It collects profiling data from a fleet of running applications and provides API for querying
+profiling samples for postmortem performance analysis.
 
 ## Why Continuous Profiling?
 
-The blog-post "[Continuous Profiling and Go](https://medium.com/@tvii/continuous-profiling-and-go-6c0ab4d2504b)" describes
-the motivation behind the project:
+"[Continuous Profiling and Go](https://medium.com/@tvii/continuous-profiling-and-go-6c0ab4d2504b)" describes
+the motivation behind profefe:
 
 > With the increase in momentum around the term “observability” over the last few years, there is a common misconception
 > amongst the developers, that observability is exclusively about _metrics_, _logs_ and _tracing_ (a.k.a. “three pillars of observability”)
 > [..] With metrics and tracing, we can see the system on a macro-level. Logs only cover the known parts of the system.
-> Performance profiling is yet another signal that uncovers the micro-level of a system and continuous profiling allows
-> observing how the components of the application or the infrastructure it runs in, influence the overall system.
+> Performance profiling is another signal that uncovers the micro-level of a system; continuous profiling allows
+> observing how the components of the application and the infrastructure it runs in, influence the overall system.
 
 ## How does it work?
 
@@ -34,20 +34,21 @@ To build and start *profefe collector*, run:
 2019-06-06T00:07:58.499+0200    info    profefe/main.go:86    server is running    {"addr": ":10100"}
 ```
 
-The command above starts *profefe collector* backed by embeded [BadgerDB](https://github.com/dgraph-io/badger) as a storage for profiles. profefe supports other storage types: S3 and [ClickHouse](https://clickhouse.tech/).
+The command above starts *profefe collector* backed by [BadgerDB](https://github.com/dgraph-io/badger) as a storage for profiles. profefe supports other storage types: S3 and [ClickHouse](https://clickhouse.tech/).
 
 Run `./BUILD/profefe -help` to show the list of all available options.
 
-profefe includes a fork of [Google Stackdriver Profiler's example application][5], modified to use *profefe agent*,
-that sends profiling data to profefe collector.
+### Example application
 
-Run the following command in a separate terminal window, to start the example:
+profefe ships with a fork of [Google Stackdriver Profiler's example application][5], modified to use *profefe agent*, that sends profiling data to profefe collector.
+
+To start the example application run the following command in a separate terminal window:
 
 ```
 > go run ./examples/hotapp/main.go
 ```
 
-After a brief period, the example app will start sending CPU profiles to the running profefe collector
+After a brief period, the application will start sending CPU profiles to profefe collector. 
 
 ```
 send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&labels=version=1.0.0&type=cpu
@@ -55,7 +56,7 @@ send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&label
 send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&labels=version=1.0.0&type=cpu
 ```
 
-With profiling data persisted, we can query the profiles from the collector using its HTTP API (_refer to [documentation for collector's HTTP API](#http-api) below_). Let's request all profiling data associated with the given meta-information (service and time period), as a single *merged* profile:
+With profiling data persisted, query the profiles from the collector using its HTTP API (_refer to [documentation for collector's HTTP API](#http-api) below_). As an example, request all profiling data associated with the given meta-information (service name and a time frame), as a single *merged* profile:
 
 ```
 > go tool pprof 'http://localhost:10100/api/0/profiles/merge?service=hotapp-service&type=cpu&from=2019-05-30T11:49:00&to=2019-05-30T12:49:00&labels=version=1.0.0'
@@ -63,7 +64,7 @@ With profiling data persisted, we can query the profiles from the collector usin
 Fetching profile over HTTP from http://localhost:10100/api/0/profiles...
 Saved profile in /Users/varankinv/pprof/pprof.samples.cpu.001.pb.gz
 Type: cpu
-Entering interactive mode (type "help" for commands, "o" for options)
+
 (pprof) top
 Showing nodes accounting for 43080ms, 99.15% of 43450ms total
 Dropped 53 nodes (cum <= 217.25ms)
@@ -81,8 +82,7 @@ Showing top 10 nodes out of 12
          0     0% 99.15%     1020ms  2.35%  runtime.mstart
 ```
 
-profefe includes a tool, that allows importing existing pprof data into the collector.
-While *profefe collector* is still running, run the following:
+profefe includes a tool, that allows importing existing pprof data into the collector. While *profefe collector* is still running, run the following:
 
 ```
 > ./scripts/pprof_import.sh --service service1 --label region=europe-west3 --label host=backend1 --type cpu -- path/to/cpu.prof
@@ -102,7 +102,7 @@ The documentation about running profefe in docker is in [contrib/docker/README.m
 
 ## HTTP API
 
-### Save pprof-formatted profile
+### Store pprof-formatted profile
 
 ```
 POST /api/0/profiles?service=<service>&type=[cpu|heap|...]&labels=<key=value,key=value>
@@ -132,7 +132,7 @@ curl -XPOST \
   --data-binary "@$HOME/pprof/api-backend-cpu.prof"
 ```
 
-#### Save runtime execution traces (experimental)
+#### Store runtime execution traces (experimental)
 
 Go's [runtime traces](https://golang.org/pkg/runtime/trace/) are a special case of profiling data, that can be stored
 and queried with profefe.
