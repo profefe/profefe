@@ -197,7 +197,7 @@ func buildSQLSelectProfiles(columns []string, params *storage.FindProfilesParams
 	if len(whereClause) > 0 {
 		conds = append(conds, "AND "+strings.Join(whereClause, " AND "))
 	}
-	conds = append(conds, "ORDER BY created_at")
+	conds = append(conds, "ORDER BY created_at, profile_type")
 	if params.Limit > 0 {
 		conds = append(conds, fmt.Sprintf("LIMIT %d", params.Limit))
 	}

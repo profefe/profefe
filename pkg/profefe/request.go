@@ -29,9 +29,7 @@ func parseProfileParams(q url.Values) (service string, ptype profile.ProfileType
 		service = v
 	}
 
-	if v := q.Get("type"); v == "" {
-		return "", profile.TypeUnknown, nil, fmt.Errorf("missing \"type\"")
-	} else if err := ptype.FromString(v); err != nil {
+	if err := ptype.FromString(q.Get("type")); err != nil {
 		return "", profile.TypeUnknown, nil, fmt.Errorf("bad \"type\" %q: %s", q.Get("type"), err)
 	}
 
