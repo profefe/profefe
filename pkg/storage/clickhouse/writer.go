@@ -65,7 +65,8 @@ func withinTx(ctx context.Context, txer beginTxer, f func(tx *sql.Tx) error) (er
 		if err == nil {
 			err = tx.Commit()
 		} else {
-			tx.Rollback()
+			// does clickhouse have rollbacks?
+			_ = tx.Rollback()
 		}
 	}()
 
@@ -119,7 +120,10 @@ func (pw *profilesWriter) insertPprofProfiles(
 		i++
 	}
 
-	args := []interface{}{
+	//pw.logger.Debugw("insertPprofProfiles: insert profile", log.ByteString("pk", pk[:]), log.MultiLine("query", sqlInsertPprofProfiles), "args", args)
+
+	_, err = stmt.ExecContext(
+		ctx,
 		pk,
 		ptype,
 		params.ExternalID,
@@ -127,11 +131,8 @@ func (pw *profilesWriter) insertPprofProfiles(
 		clickhouse.DateTime(createdAt),
 		clickhouse.Array(labels[:ln]),
 		clickhouse.Array(labels[ln:]),
-	}
-
-	pw.logger.Debugw("insertPprofProfiles: insert profile", log.ByteString("pk", pk[:]), log.MultiLine("query", sqlInsertPprofProfiles), "args", args)
-
-	if _, err := stmt.ExecContext(ctx, args...); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("could not insert profile: %w", err)
 	}
 
@@ -161,9 +162,6 @@ func (sw *samplesWriter) insertPprofSamples(ctx context.Context, tx *sql.Tx, pk 
 	if err != nil {
 		return err
 	}
-
-	args := make([]interface{}, 10) // size of the slice is from number of inserted values in the query
-	args[0] = pk
 
 	fingerprinter := samplesFingerprinterPool.Get().(*samplesFingerprinter)
 	defer samplesFingerprinterPool.Put(fingerprinter)
@@ -201,24 +199,25 @@ func (sw *samplesWriter) insertPprofSamples(ctx context.Context, tx *sql.Tx, pk 
 			lines = make([]uint16, 0, nlocs)
 		}
 
-		args[1] = fingerprinter.Fingerprint(sample)
-
 		funcs, files, lines = collectLocations(sample, locs, lines)
-		args[2] = clickhouse.Array(funcs)
-		args[3] = clickhouse.Array(files)
-		args[4] = clickhouse.Array(lines)
-
-		args[5] = clickhouse.Array(sample.Value)
-		args[6] = clickhouse.Array(valueTypes)
-		args[7] = clickhouse.Array(valueUnits)
-
 		labelKeys, labelVals = collectLabels(sample, labelKeys, labelVals)
-		args[8] = clickhouse.Array(labelKeys)
-		args[9] = clickhouse.Array(labelVals)
 
-		sw.logger.Debugw("insertPprofSamples: insert sample", log.ByteString("pk", pk[:]), log.MultiLine("query", sqlInsertPprofSamples), "args", args)
+		//sw.logger.Debugw("insertPprofSamples: insert sample", log.ByteString("pk", pk[:]), log.MultiLine("query", sqlInsertPprofSamples), "args", args)
 
-		if _, err := stmt.ExecContext(ctx, args...); err != nil {
+		_, err := stmt.ExecContext(
+			ctx,
+			pk,
+			fingerprinter.Fingerprint(sample),
+			clickhouse.Array(funcs),
+			clickhouse.Array(files),
+			clickhouse.Array(lines),
+			clickhouse.Array(sample.Value),
+			clickhouse.Array(valueTypes),
+			clickhouse.Array(valueUnits),
+			clickhouse.Array(labelKeys),
+			clickhouse.Array(labelVals),
+		)
+		if err != nil {
 			return fmt.Errorf("could not insert sample %d: %w", n, err)
 		}
 	}

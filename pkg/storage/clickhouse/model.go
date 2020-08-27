@@ -41,37 +41,37 @@ func (pk ProfileKey) String() string {
 	return base64.RawURLEncoding.EncodeToString(pk[:])
 }
 
-type ProfileType uint8
+type ProfileType int8
 
 // Profile types supported by ClickHouse writer.
 // Must match with values defined in `pprof_profiles.profile_type` SQL enum.
 const (
-	TypeCPU          ProfileType = 1
-	TypeHeap         ProfileType = 2
-	TypeBlock        ProfileType = 3
-	TypeMutex        ProfileType = 4
-	TypeGoroutine    ProfileType = 5
-	TypeThreadcreate ProfileType = 6
+	ProfileTypeCPU          ProfileType = 1
+	ProfileTypeHeap         ProfileType = 2
+	ProfileTypeBlock        ProfileType = 3
+	ProfileTypeMutex        ProfileType = 4
+	ProfileTypeGoroutine    ProfileType = 5
+	ProfileTypeThreadcreate ProfileType = 6
 
-	TypeOther ProfileType = 100
+	ProfileTypeOther ProfileType = 100
 )
 
 func ProfileTypeToDBModel(ptype profile.ProfileType) (ProfileType, error) {
 	switch ptype {
 	case profile.TypeCPU:
-		return TypeCPU, nil
+		return ProfileTypeCPU, nil
 	case profile.TypeHeap:
-		return TypeHeap, nil
+		return ProfileTypeHeap, nil
 	case profile.TypeBlock:
-		return TypeBlock, nil
+		return ProfileTypeBlock, nil
 	case profile.TypeMutex:
-		return TypeMutex, nil
+		return ProfileTypeMutex, nil
 	case profile.TypeGoroutine:
-		return TypeGoroutine, nil
+		return ProfileTypeGoroutine, nil
 	case profile.TypeThreadcreate:
-		return TypeThreadcreate, nil
+		return ProfileTypeThreadcreate, nil
 	case profile.TypeOther:
-		return TypeOther, nil
+		return ProfileTypeOther, nil
 	default:
 		return 0, fmt.Errorf("unsupported profile type %q", ptype)
 	}
@@ -79,19 +79,19 @@ func ProfileTypeToDBModel(ptype profile.ProfileType) (ProfileType, error) {
 
 func ProfileTypeFromDBModel(ptype ProfileType) (profile.ProfileType, error) {
 	switch ptype {
-	case TypeCPU:
+	case ProfileTypeCPU:
 		return profile.TypeCPU, nil
-	case TypeHeap:
+	case ProfileTypeHeap:
 		return profile.TypeHeap, nil
-	case TypeBlock:
+	case ProfileTypeBlock:
 		return profile.TypeBlock, nil
-	case TypeMutex:
+	case ProfileTypeMutex:
 		return profile.TypeMutex, nil
-	case TypeGoroutine:
+	case ProfileTypeGoroutine:
 		return profile.TypeGoroutine, nil
-	case TypeThreadcreate:
+	case ProfileTypeThreadcreate:
 		return profile.TypeThreadcreate, nil
-	case TypeOther:
+	case ProfileTypeOther:
 		return profile.TypeOther, nil
 	default:
 		return profile.TypeUnknown, fmt.Errorf("unsupported profile type %q", ptype)

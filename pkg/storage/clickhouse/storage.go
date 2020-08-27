@@ -52,8 +52,8 @@ func (st *Storage) WriteProfile(ctx context.Context, params *storage.WriteProfil
 		createdAt = time.Now().UTC()
 	}
 
-	createdAt = createdAt.Truncate(time.Second)
 	pk := NewProfileKey(createdAt)
+	createdAt = createdAt.Truncate(time.Second)
 
 	if err := st.writeProfile(ctx, pk, ptype, createdAt, params, pp); err != nil {
 		return profile.Meta{}, fmt.Errorf("could not write profile with pk %v, type %v, service %q: %w", pk, ptype, params.Service, err)
@@ -111,7 +111,7 @@ select
 	sumForEach(values) as values,
 	any(`locations.func_name`) as funcs
 from pprof_samples
-group by digest;
+group by fingerprint;
 
 -- diff profiles
 select
@@ -120,9 +120,9 @@ select
     arrayMap(i -> cpu_vals[i] - cpu_vals[i-1], indexes) as diffs,
     any(funcs) as funcs
 FROM (
-    SELECT digest, values, `locations.func_name` as funcs
+    SELECT fingerprint, values, `locations.func_name` as funcs
     FROM pprof_samples
      ORDER BY profile_key)
-GROUP BY digest;
+GROUP BY fingerprint;
 
 */
