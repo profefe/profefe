@@ -106,7 +106,10 @@ func calcReqSize(r *http.Request) int {
 
 func fixAPIPathLabel(p string) string {
 	p = strings.TrimSuffix(p, "/")
-	// fix ID-based API path making it suitable to use in metrics' labels
+	if p == apiProfilesPath {
+		return p
+	}
+	// fix ID-based API path making it suitable to be used in metrics labels
 	if strings.HasPrefix(p, apiProfilesPath) && p != apiProfilesMergePath {
 		p = apiProfilesPath + "/__pid__"
 	}
