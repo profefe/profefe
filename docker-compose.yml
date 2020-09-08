@@ -1,6 +1,6 @@
 version: '3'
 services:
-  profefe:
+  profefe-dev:
     build:
       context: .
       dockerfile: contrib/docker/Dockerfile
@@ -8,12 +8,9 @@ services:
         VERSION: dev
     image: profefe/profefe:latest
     command:
-      - /profefe
       - -addr=:10100
-      - -storage-type=${PROFEFE_STORAGE_TYPE:-badger}
-    depends_on:
-      - minio
-      - clickhouse
+      - -storage-type=badger
+      - -badger.dir=/data
     ports:
       - 10100:10100
 
