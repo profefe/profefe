@@ -40,7 +40,7 @@ const (
 			values_unit,
 			labels.key,
 			labels.value
-		) 
+		)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 )
 
@@ -333,7 +333,7 @@ func (p *pooledSamplesWriter) Close() error {
 
 	close(p.jobs)
 
-	p.logger.Info("pooledSamplesWriter: waiting jobs to finish")
+	p.logger.Infow("pooledSamplesWriter: waiting jobs to finish")
 	p.wg.Wait()
 
 	return nil

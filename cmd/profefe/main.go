@@ -42,7 +42,7 @@ func main() {
 	}
 
 	if err := run(context.Background(), logger, conf, os.Stdout); err != nil {
-		logger.Error(err)
+		logger.Errorw(err.Error())
 	}
 }
 
@@ -86,9 +86,9 @@ func run(ctx context.Context, logger *log.Logger, conf config.Config, stdout io.
 
 	select {
 	case <-sigs:
-		logger.Info("exiting")
+		logger.Infow("exiting")
 	case <-ctx.Done():
-		logger.Info("exiting", zap.Error(ctx.Err()))
+		logger.Infow("exiting", zap.Error(ctx.Err()))
 	case err := <-errc:
 		if err != http.ErrServerClosed {
 			return fmt.Errorf("terminated: %w", err)
@@ -119,7 +119,7 @@ func initProfefe(
 	}
 
 	if len(stypes) > 1 {
-		logger.Infof("WARNING: several storage types specified: %s. Only first one %q is used for querying", stypes, stypes[0])
+		logger.Infow("WARNING: several storage types specified. Only first one is used for querying", "types", stypes, "quering type", stypes[0])
 	}
 
 	var (
@@ -175,7 +175,7 @@ func initProfefe(
 	closer = func() {
 		for _, closer := range closers {
 			if err := closer.Close(); err != nil {
-				logger.Error(err)
+				logger.Errorw("close closer", zap.Error(err))
 			}
 		}
 	}
