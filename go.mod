@@ -17,7 +17,7 @@ require (
 	github.com/prometheus/procfs v0.0.9 // indirect
 	github.com/rs/xid v1.2.2-0.20200205151950-d13a6085d55c
 	github.com/stretchr/testify v1.5.1
-	go.uber.org/zap v1.14.1
+	go.uber.org/zap v1.16.0
 	golang.org/x/text v0.3.2 // indirect
 	golang.org/x/tools v0.0.0-20200220224806-8a925fa4c0df // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
