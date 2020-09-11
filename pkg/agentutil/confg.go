@@ -3,6 +3,7 @@ package agentutil
 import (
 	"context"
 	"flag"
+	"fmt"
 	"time"
 
 	"github.com/profefe/profefe/agent"
@@ -58,7 +59,7 @@ func (conf *Config) Start(ctx context.Context, logger *log.Logger) error {
 	opts := conf.options()
 
 	opts = append(opts, agent.WithLogger(func(s string, v ...interface{}) {
-		logger.Infof(s, v...)
+		logger.Infow(fmt.Sprintf(s, v...))
 	}))
 
 	pffAgent, err := agent.Start(conf.CollectorAddr, conf.Service, opts...)
