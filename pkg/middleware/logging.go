@@ -3,45 +3,27 @@ package middleware
 import (
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"time"
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 const headerRequestID = "X-Request-Id"
 
-func newRequestID() string {
-	return fmt.Sprintf("%08x%08x", rand.Uint32(), rand.Uint32())
-}
-
-type responseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func (r *responseWriter) WriteHeader(statusCode int) {
-	r.ResponseWriter.WriteHeader(statusCode)
-	r.statusCode = statusCode
-}
-
-func LoggingHandler(out io.Writer, next http.Handler) http.Handler {
-	h := func(w http.ResponseWriter, r *http.Request) {
+func LoggingHandler(out io.Writer, handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ts := time.Now().UTC()
 
 		resp := &responseWriter{w, http.StatusOK}
 
-		rid := r.Header.Get(headerRequestID)
-		if rid == "" {
-			rid = newRequestID()
-			r.Header.Set(headerRequestID, rid)
+		id := r.Header.Get(headerRequestID)
+		if id == "" {
+			id = nextRequestID()
+			r = r.WithContext(ContextWithRequestID(r.Context(), id))
+			r.Header.Set(headerRequestID, id)
 		}
 
-		next.ServeHTTP(resp, r)
+		handler.ServeHTTP(resp, r)
 
 		rtime := time.Now().UTC().Sub(ts)
 
@@ -58,7 +40,7 @@ func LoggingHandler(out io.Writer, next http.Handler) http.Handler {
 		fmt.Fprintf(
 			out,
 			"rid=%s ts=%s method=%s uri=%s code=%v host=%s ip=%s rtime=%s\n",
-			rid,
+			id,
 			ts.Format(time.RFC3339),
 			r.Method,
 			r.RequestURI,
@@ -67,6 +49,15 @@ func LoggingHandler(out io.Writer, next http.Handler) http.Handler {
 			remoteAddr,
 			rtime,
 		)
-	}
-	return http.HandlerFunc(h)
+	})
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (r *responseWriter) WriteHeader(statusCode int) {
+	r.ResponseWriter.WriteHeader(statusCode)
+	r.statusCode = statusCode
 }
