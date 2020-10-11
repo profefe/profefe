@@ -65,9 +65,9 @@ func run(ctx context.Context, logger *log.Logger, conf config.Config, stdout io.
 
 	setupDebugRoutes(mux)
 
-	// TODO(narqo) hardcoded stdout when setup logging middleware
+	// TODO(narqo) hardcoded stdout when setup request logging middleware
 	h := middleware.LoggingHandler(stdout, mux)
-	h = middleware.RecoveryHandler(h)
+	h = middleware.RecoveryHandler(logger, h)
 
 	server := http.Server{
 		Addr:    conf.Addr,

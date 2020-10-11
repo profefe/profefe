@@ -1,23 +1,18 @@
 package middleware
 
-import "net/http"
+import (
+	"net/http"
 
-type recoveryHandler struct {
-	handler http.Handler
-	log     func(_ ...interface{}) // TODO(narqo) add logging
-}
+	"github.com/profefe/profefe/pkg/log"
+)
 
-func RecoveryHandler(next http.Handler) http.Handler {
-	return &recoveryHandler{handler: next}
-}
-
-func (h *recoveryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	defer func() {
-		if err := recover(); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			h.log(err)
-		}
-	}()
-
-	h.handler.ServeHTTP(w, req)
+func RecoveryHandler(logger *log.Logger, handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				logger.Errorw("panic serving request", "rid", RequestIDFromContext(req.Context()), "uri", req.RequestURI, "panic", err)
+			}
+		}()
+		handler.ServeHTTP(w, req)
+	})
 }
