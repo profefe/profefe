@@ -1,4 +1,4 @@
-dist: bionic
+dist: focal
 
 language: go
 go:
@@ -33,14 +33,14 @@ jobs:
         - export BUILDKIT_HOST="docker-container://buildkitd"
       script:
         - export VERSION=git-$(echo $GITSHA | cut -c 1-7)
+      before_deploy:
+        - echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USERNAME" --password-stdin
       deploy:
         - provider: script
           script: bash ./scripts/ci_build_image.sh --push $TRAVIS_REPO_SLUG $VERSION latest
           on:
             repo: profefe/profefe
             branch: master
-      before_deploy:
-        - echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USERNAME" --password-stdin
       after_failure:
         - buildctl debug workers ls
         - docker container logs buildkitd
