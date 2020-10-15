@@ -27,9 +27,9 @@ See [Design Docs](DESIGN.md) documentation.
 
 To build and start *profefe collector*, run:
 
-```
-> make
-> ./BUILD/profefe -addr=locahost:10100 -storage-type=badger -badger.dir=/tmp/profefe-data
+```shell-session
+$ make
+$ ./BUILD/profefe -addr=locahost:10100 -storage-type=badger -badger.dir=/tmp/profefe-data
 
 2019-06-06T00:07:58.499+0200    info    profefe/main.go:86    server is running    {"addr": ":10100"}
 ```
@@ -44,13 +44,13 @@ profefe ships with a fork of [Google Stackdriver Profiler's example application]
 
 To start the example application run the following command in a separate terminal window:
 
-```
-> go run ./examples/hotapp/main.go
+```shell-session
+$ go run ./examples/hotapp/main.go
 ```
 
 After a brief period, the application will start sending CPU profiles to profefe collector. 
 
-```
+```shell-session
 send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&labels=version=1.0.0&type=cpu
 send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&labels=version=1.0.0&type=cpu
 send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&labels=version=1.0.0&type=cpu
@@ -58,8 +58,8 @@ send profile: http://localhost:10100/api/0/profiles?service=hotapp-service&label
 
 With profiling data persisted, query the profiles from the collector using its HTTP API (_refer to [documentation for collector's HTTP API](#http-api) below_). As an example, request all profiling data associated with the given meta-information (service name and a time frame), as a single *merged* profile:
 
-```
-> go tool pprof 'http://localhost:10100/api/0/profiles/merge?service=hotapp-service&type=cpu&from=2019-05-30T11:49:00&to=2019-05-30T12:49:00&labels=version=1.0.0'
+```shell-session
+$ go tool pprof 'http://localhost:10100/api/0/profiles/merge?service=hotapp-service&type=cpu&from=2019-05-30T11:49:00&to=2019-05-30T12:49:00&labels=version=1.0.0'
 
 Fetching profile over HTTP from http://localhost:10100/api/0/profiles...
 Saved profile in /Users/varankinv/pprof/pprof.samples.cpu.001.pb.gz
@@ -84,8 +84,8 @@ Showing top 10 nodes out of 12
 
 profefe includes a tool, that allows importing existing pprof data into the collector. While *profefe collector* is still running, run the following:
 
-```
-> ./scripts/pprof_import.sh --service service1 --label region=europe-west3 --label host=backend1 --type cpu -- path/to/cpu.prof
+```shell-session
+$ ./scripts/pprof_import.sh --service service1 --label region=europe-west3 --label host=backend1 --type cpu -- path/to/cpu.prof
 
 uploading service1-cpu-backend1-20190313-0948Z.prof...OK
 ```
@@ -94,8 +94,8 @@ uploading service1-cpu-backend1-20190313-0948Z.prof...OK
 
 You can build a docker image with profefe collector, by running the command:
 
-```
-> make docker-image
+```shell-session
+$ make docker-image
 ```
 
 The documentation about running profefe in docker is in [contrib/docker/README.md](./contrib/docker/README.md).
@@ -108,7 +108,8 @@ The documentation about running profefe in docker is in [contrib/docker/README.m
 POST /api/0/profiles?service=<service>&type=[cpu|heap|...]&labels=<key=value,key=value>
 body pprof.pb.gz
 
-< 200 OK
+< HTTP/1.1 200 OK
+< Content-Type: application/json
 <
 {
   "code": 200,
@@ -126,8 +127,8 @@ body pprof.pb.gz
 
 **Example**
 
-```
-curl -XPOST \
+```shell-session
+$ curl -XPOST \
   "http://<profefe>/api/0/profiles?service=api-backend&type=cpu&labels=region=europe-west3,dc=fra" \
   --data-binary "@$HOME/pprof/api-backend-cpu.prof"
 ```
@@ -144,7 +145,8 @@ this information via `created_at` parameter, see below.
 POST /api/0/profiles?service=<service>&type=trace&created_at=<created_at>&labels=<key=value,key=value>
 body trace.out
 
-< 200 OK
+< HTTP/1.1 200 OK
+< Content-Type: application/json
 <
 {
   "code": 200,
@@ -164,8 +166,8 @@ body trace.out
 
 **Example**
 
-```
-curl -XPOST \
+```shell-session
+$ curl -XPOST \
   "http://<profefe>/api/0/profiles?service=api-backend&type=trace&created_at=2019-05-01T18:45:00&labels=region=europe-west3,dc=fra" \
   --data-binary "@$HOME/pprof/api-backend-trace.out"
 ```
@@ -175,7 +177,8 @@ curl -XPOST \
 ```
 GET /api/0/profiles?service=<service>&type=<type>&from=<created_from>&to=<created_to>&labels=<key=value,key=value>
 
-< 200 OK
+< HTTP/1.1 200 OK
+< Content-Type: application/json
 <
 {
   "code": 200,
@@ -196,8 +199,8 @@ GET /api/0/profiles?service=<service>&type=<type>&from=<created_from>&to=<create
 
 **Example**
 
-```
-curl "http://<profefe>/api/0/profiles?service=api-backend&type=cpu&from=2019-05-01T17:00:00&to=2019-05-25T00:00:00"
+```shell-session
+$ curl "http://<profefe>/api/0/profiles?service=api-backend&type=cpu&from=2019-05-01T17:00:00&to=2019-05-25T00:00:00"
 ```
 
 ### Query saved profiling data returning it as a single merged profile
@@ -205,8 +208,11 @@ curl "http://<profefe>/api/0/profiles?service=api-backend&type=cpu&from=2019-05-
 ```
 GET /api/0/profiles/merge?service=<service>&type=<type>&from=<created_from>&to=<created_to>&labels=<key=value,key=value>
 
-< 200 OK
-< pprof.pb.gz
+< HTTP/1.1 200 OK
+< Content-Type: application/octet-stream
+< Content-Disposition: attachment; filename="pprof.pb.gz"
+<
+pprof.pb.gz
 ```
 
 Request parameters are the same as for querying meta information.
@@ -218,8 +224,11 @@ Request parameters are the same as for querying meta information.
 ```
 GET /api/0/profiles/<id>
 
-< 200 OK
-< pprof.pb.gz
+< HTTP/1.1 200 OK
+< Content-Type: application/octet-stream
+< Content-Disposition: attachment; filename="pprof.pb.gz"
+<
+pprof.pb.gz
 ```
 
 - `id` - id of stored profile, returned with the request for meta information above
@@ -229,8 +238,11 @@ GET /api/0/profiles/<id>
 ```
 GET /api/0/profiles/<id1>+<id2>+...
 
-< 200 OK
-< pprof.pb.gz
+< HTTP/1.1 200 OK
+< Content-Type: application/octet-stream
+< Content-Disposition: attachment; filename="pprof.pb.gz"
+<
+pprof.pb.gz
 ```
 
 - `id1`, `id2` - ids of stored profiles
@@ -242,7 +254,8 @@ GET /api/0/profiles/<id1>+<id2>+...
 ```
 GET /api/0/services
 
-< 200 OK
+< HTTP/1.1 200 OK
+< Content-Type: application/json
 <
 {
   "code": 200,
@@ -258,7 +271,8 @@ GET /api/0/services
 ```
 GET /api/0/version
 
-< 200 OK
+< HTTP/1.1 200 OK
+< Content-Type: application/json
 <
 {
   "code": 200,
