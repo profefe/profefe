@@ -31,3 +31,12 @@ services:
       - 127.0.0.1:29009:9009
     volumes:
       - ./pkg/storage/clickhouse/schema/profefe.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  fake-gcs-server:
+    image: fsouza/fake-gcs-server
+    command:
+      - -scheme=http
+      - -port=4443
+      - -public-host=127.0.0.1
+    ports:
+      - 4443:4443

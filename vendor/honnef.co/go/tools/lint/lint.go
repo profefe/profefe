@@ -64,7 +64,7 @@ type LineIgnore struct {
 	Line    int
 	Checks  []string
 	Matched bool
-	Pos     token.Pos
+	Pos     token.Position
 }
 
 func (li *LineIgnore) Match(p Problem) bool {
@@ -325,8 +325,23 @@ func (l *Linter) Lint(cfg *packages.Config, patterns []string) ([]Problem, error
 	}
 
 	var problems []Problem
+	// Deduplicate line ignores. When U1000 processes a package and
+	// its test variant, it will only emit a single problem for an
+	// unused object, not two problems. We will, however, have two
+	// line ignores, one per package. Without deduplication, one line
+	// ignore will be marked as matched, while the other one won't,
+	// subsequently reporting a "this linter directive didn't match
+	// anything" error.
+	ignores := map[token.Position]Ignore{}
 	for _, pkg := range pkgs {
 		for _, ig := range pkg.ignores {
+			if lig, ok := ig.(*LineIgnore); ok {
+				ig = ignores[lig.Pos]
+				if ig == nil {
+					ignores[lig.Pos] = lig
+					ig = lig
+				}
+			}
 			for i := range pkg.problems {
 				p := &pkg.problems[i]
 				if ig.Match(*p) {
@@ -354,6 +369,7 @@ func (l *Linter) Lint(cfg *packages.Config, patterns []string) ([]Problem, error
 			if !ok {
 				continue
 			}
+			ig = ignores[ig.Pos].(*LineIgnore)
 			if ig.Matched {
 				continue
 			}
@@ -374,7 +390,7 @@ func (l *Linter) Lint(cfg *packages.Config, patterns []string) ([]Problem, error
 				continue
 			}
 			p := Problem{
-				Pos:     DisplayPosition(pkg.Fset, ig.Pos),
+				Pos:     ig.Pos,
 				Message: "this linter directive didn't match anything; should it be removed?",
 				Check:   "",
 			}

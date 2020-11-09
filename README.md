@@ -34,7 +34,7 @@ $ ./BUILD/profefe -addr=locahost:10100 -storage-type=badger -badger.dir=/tmp/pro
 2019-06-06T00:07:58.499+0200    info    profefe/main.go:86    server is running    {"addr": ":10100"}
 ```
 
-The command above starts *profefe collector* backed by [BadgerDB](https://github.com/dgraph-io/badger) as a storage for profiles. profefe supports other storage types: S3 and [ClickHouse](https://clickhouse.tech/).
+The command above starts *profefe collector* backed by [BadgerDB](https://github.com/dgraph-io/badger) as a storage for profiles. profefe supports other storage types: S3, Google Cloud Storage and [ClickHouse](https://clickhouse.tech/).
 
 Run `./BUILD/profefe -help` to show the list of all available options.
 
