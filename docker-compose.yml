@@ -24,7 +24,7 @@ services:
       MINIO_SECRET_KEY: minioadmin123
 
   clickhouse:
-    image: yandex/clickhouse-server
+    image: yandex/clickhouse-server:20.8
     ports:
       - 127.0.0.1:28123:8123
       - 127.0.0.1:29000:9000
