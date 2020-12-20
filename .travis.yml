@@ -12,7 +12,7 @@ jobs:
         - MINIO_ENDPOINT_URL=http://127.0.0.1:19000
         - CLICKHOUSE_DSN='tcp://127.0.0.1:29000'
       install:
-        - docker-compose up -V -d minio clickhouse
+        - docker-compose up -d --renew-anon-volumes --remove-orphans minio clickhouse
       script: make test TESTFLAGS=-v
 
     - stage: code check
