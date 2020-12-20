@@ -10,6 +10,7 @@ import (
 	"github.com/profefe/profefe/pkg/log"
 	storageBadger "github.com/profefe/profefe/pkg/storage/badger"
 	storageCH "github.com/profefe/profefe/pkg/storage/clickhouse"
+	storageGCS "github.com/profefe/profefe/pkg/storage/gcs"
 	storageS3 "github.com/profefe/profefe/pkg/storage/s3"
 )
 
@@ -21,9 +22,10 @@ const (
 	StorageTypeBadger  = "badger"
 	StorageTypeS3      = "s3"
 	StorageTypeCH      = "clickhouse"
+	StorageTypeGCS     = "gcs"
 )
 
-var storageTypes = []string{StorageTypeBadger, StorageTypeCH, StorageTypeS3}
+var storageTypes = []string{StorageTypeBadger, StorageTypeCH, StorageTypeS3, StorageTypeGCS}
 
 type Config struct {
 	Addr        string
@@ -35,6 +37,7 @@ type Config struct {
 	Badger      storageBadger.Config
 	ClickHouse  storageCH.Config
 	S3          storageS3.Config
+	GCS         storageGCS.Config
 }
 
 func (conf *Config) RegisterFlags(f *flag.FlagSet) {
@@ -49,6 +52,7 @@ func (conf *Config) RegisterFlags(f *flag.FlagSet) {
 	conf.Badger.RegisterFlags(f)
 	conf.ClickHouse.RegisterFlags(f)
 	conf.S3.RegisterFlags(f)
+	conf.GCS.RegisterFlags(f)
 }
 
 func (conf *Config) StorageType() ([]string, error) {

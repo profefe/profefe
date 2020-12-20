@@ -11,8 +11,9 @@ jobs:
       env:
         - MINIO_ENDPOINT_URL=http://127.0.0.1:19000
         - CLICKHOUSE_DSN='tcp://127.0.0.1:29000'
+        - GCS_EMULATOR_ENDPOINT_URL=http://127.0.0.1:4443
       install:
-        - docker-compose up -d --renew-anon-volumes --remove-orphans minio clickhouse
+        - docker-compose up -d --renew-anon-volumes --remove-orphans minio clickhouse fake-gcs-server
       script: make test TESTFLAGS=-v
 
     - stage: code check

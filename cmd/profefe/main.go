@@ -161,6 +161,12 @@ func initProfefe(
 				assembleStorage(st, st, closer)
 			}
 			return err
+		case config.StorageTypeGCS:
+			st, err := conf.GCS.CreateStorage(logger)
+			if err == nil {
+				assembleStorage(st, st, nil)
+			}
+			return err
 		default:
 			return fmt.Errorf("unknown storage type %q, config %v", stype, conf)
 		}
