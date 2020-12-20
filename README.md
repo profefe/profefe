@@ -1,6 +1,6 @@
 # profefe
 
-[![Build Status](https://travis-ci.org/profefe/profefe.svg?branch=master)](https://travis-ci.org/profefe/profefe)
+[![Build Status](https://travis-ci.com/profefe/profefe.svg?branch=master)](https://travis-ci.com/profefe/profefe)
 [![Go Report Card](https://goreportcard.com/badge/github.com/profefe/profefe)](https://goreportcard.com/report/github.com/profefe/profefe)
 [![Docker Pulls](https://img.shields.io/docker/pulls/profefe/profefe.svg)][hub.docker]
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/profefe/profefe/master/LICENSE)
