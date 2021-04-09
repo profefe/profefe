@@ -29,7 +29,7 @@ To build and start *profefe collector*, run:
 
 ```shell-session
 $ make
-$ ./BUILD/profefe -addr=locahost:10100 -storage-type=badger -badger.dir=/tmp/profefe-data
+$ ./BUILD/profefe -addr=localhost:10100 -storage-type=badger -badger.dir=/tmp/profefe-data
 
 2019-06-06T00:07:58.499+0200    info    profefe/main.go:86    server is running    {"addr": ":10100"}
 ```
