@@ -5,7 +5,7 @@ go 1.14
 require (
 	cloud.google.com/go/storage v1.12.0
 	github.com/ClickHouse/clickhouse-go v1.4.0
-	github.com/aws/aws-sdk-go v1.29.9
+	github.com/aws/aws-sdk-go v1.33.0
 	github.com/cespare/xxhash/v2 v2.1.1
 	github.com/dgraph-io/badger v1.6.0
 	github.com/frankban/quicktest v1.7.2 // indirect
