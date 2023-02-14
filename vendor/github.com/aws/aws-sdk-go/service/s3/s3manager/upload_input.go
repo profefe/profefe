@@ -111,7 +111,7 @@ type UploadInput struct {
 	// Specifies the customer-provided encryption key for Amazon S3 to use in encrypting
 	// data. This value is used to store the object and then it is discarded; Amazon
 	// S3 does not store the encryption key. The key must be appropriate for use
-	// with the algorithm specified in the x-amz-server-side​-encryption​-customer-algorithm
+	// with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm
 	// header.
 	SSECustomerKey *string `marshal-as:"blob" location:"header" locationName:"x-amz-server-side-encryption-customer-key" type:"string" sensitive:"true"`
 
@@ -141,8 +141,8 @@ type UploadInput struct {
 	// S3 (for example, AES256, aws:kms).
 	ServerSideEncryption *string `location:"header" locationName:"x-amz-server-side-encryption" type:"string" enum:"ServerSideEncryption"`
 
-	// If you don't specify, Standard is the default storage class. Amazon S3 supports
-	// other storage classes.
+	// If you don't specify, S3 Standard is the default storage class. Amazon S3
+	// supports other storage classes.
 	StorageClass *string `location:"header" locationName:"x-amz-storage-class" type:"string" enum:"StorageClass"`
 
 	// The tag-set for the object. The tag-set must be encoded as URL Query parameters.
